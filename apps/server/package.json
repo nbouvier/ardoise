@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/index.js",
     "migrate": "drizzle-kit migrate",
@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@splitcount/shared": "^1.0.0",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.12.3",
     "fastify-plugin": "^6.0.0",
+    "google-auth-library": "^11.0.2",
+    "jose": "^6.2.12",
     "pg": "^8.23.0",
     "zod": "^4.5.4"
   },

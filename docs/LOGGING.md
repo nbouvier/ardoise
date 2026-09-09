@@ -11,6 +11,17 @@ current setup and state.
 - Fastify logs one line per request automatically. Add explicit logs only for meaningful
   lifecycle or failure events, with stable event names (e.g. `server.start.failed`).
 
+### Auth events
+
+| Event                          | Level | Fields        | Meaning                                        |
+| ------------------------------ | ----- | ------------- | ---------------------------------------------- |
+| `auth.session.issued`          | info  | `userId`      | Sign-in succeeded, a session was created       |
+| `auth.google.verify.failed`    | warn  | `reason`      | Google rejected the ID token (categorised)     |
+| `auth.session.refresh.reused`  | warn  | —             | A revoked refresh token was presented (possible theft) |
+| `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
+
+Never log tokens, ID tokens, authorization headers or the refresh-token hash.
+
 ## Client (`apps/mobile`)
 
 - No structured logger yet. Application code must not use `console.log`.
