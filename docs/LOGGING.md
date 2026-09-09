@@ -24,9 +24,14 @@ Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
 ## Client (`apps/mobile`)
 
-- No structured logger yet. Application code must not use `console.log`.
-- Introduce a small logger module before the first feature that does async work, network
-  I/O or background sync.
+- Structured logger in `src/lib/logger.ts` (`logger.info/warn/error/debug`, plus
+  `errorFields()` for safe error serialisation). Application code logs through it, never
+  `console` directly.
+- Currently writes to the console sink; silent under `NODE_ENV=test`. A remote transport
+  can be added there without touching callers.
+- Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
+  `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`.
+  Never log tokens.
 
 ## Shared rules (both apps)
 

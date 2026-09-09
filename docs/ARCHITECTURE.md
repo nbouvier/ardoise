@@ -23,6 +23,8 @@ apps/
       components/  Shared presentational building blocks. ui/ holds lower-level primitives.
       hooks/       Reusable hooks. Platform variants use .web.ts / .ios.tsx / .android.tsx.
       constants/   Design tokens (colours, spacing, fonts) in theme.ts.
+      features/    One folder per product feature (auth: state, screens, Google, storage).
+      lib/         Cross-feature building blocks: logger, API client (lib/api).
     assets/        Images and fonts.
     metro.config.js  Monorepo-aware Metro config (watches the repo root).
   server/          Node / Fastify / TypeScript API.
@@ -62,10 +64,14 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 ## Client / server contract
 
-- REST over HTTP/JSON. Request and response shapes are validated with Zod on the server.
-- When a type or schema is needed on both sides, it moves into a `packages/*` workspace
+- REST over HTTP/JSON. Request and response shapes are validated with Zod on the server;
+  the schemas live in `@splitcount/shared` and the client validates responses with them.
+- When a type or schema is needed on both sides, it moves into `@splitcount/shared`
   rather than being duplicated.
 - The mobile client treats the server as authoritative: no offline write model yet.
+- Auth: the client sends a Google ID token, the server verifies it and returns a
+  SplitCount session (short access JWT + rotating refresh token). The client stores the
+  refresh token in the OS secure store and refreshes transparently on 401.
 
 ## Conventions
 

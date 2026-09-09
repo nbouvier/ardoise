@@ -56,6 +56,31 @@ Not set up yet — decide if/when we need it and record the outcome here.
 
 ## Environment
 
-The mobile app currently needs no environment configuration. When it starts calling the
-API, the base URL will be read from an Expo config value (documented here and in
-`docs/API.md`).
+Configuration is layered onto `app.json` by `app.config.ts`, driven by `EXPO_PUBLIC_*`
+variables (bundled into the client; none are secret). Copy `.env.example` to `.env`:
+
+| Variable                          | Purpose                                              |
+| --------------------------------- | --------------------------------------------------- |
+| `EXPO_PUBLIC_API_BASE_URL`        | SplitCount API base URL (default `http://localhost:3000`). |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
+
+Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
+`src/features/auth/google.ts`).
+
+## Google sign-in
+
+- Uses `@react-native-google-signin/google-signin` (native SDK) — a development build is
+  required; it does not run in Expo Go. The web target shows the sign-in screen with the
+  action disabled.
+- Config plugins (`expo-secure-store`, `@react-native-google-signin/google-signin`) are in
+  `app.json`; `app.config.ts` adds the iOS URL scheme from the iOS client ID.
+- After changing the Google config or client IDs, regenerate native code:
+  `npm run prebuild --workspace @splitcount/mobile`, then rebuild (`npm run
+  mobile:android` / `mobile:ios`).
+- **Android**: the OAuth Android client is matched by package name
+  (`com.anonymous.splitcount`) + the signing certificate SHA-1. For a debug build, add the
+  debug keystore SHA-1 (`cd android && ./gradlew signingReport`) to the Google Cloud
+  Android client, or sign-in fails silently.
+- Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual
+  prerequisite — see `docs/specs/authentication.md`.
