@@ -1,0 +1,22 @@
+{
+  "name": "splitcount",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "mobile": "npm run start --workspace @splitcount/mobile",
+    "mobile:android": "npm run android --workspace @splitcount/mobile",
+    "mobile:ios": "npm run ios --workspace @splitcount/mobile",
+    "mobile:web": "npm run web --workspace @splitcount/mobile",
+    "server": "npm run dev --workspace @splitcount/server"
+  }
+}
