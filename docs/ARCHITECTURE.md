@@ -32,8 +32,11 @@ apps/
       config/      Typed environment loading (env.ts, Zod-validated).
       routes/      HTTP route registrations, one module per resource.
       db/          Schema and migrations (added with the first persisted entity).
-packages/          Shared, platform-neutral code. Added only when something is genuinely
-                   shared (domain types, API contracts, validation schemas).
+packages/
+  shared/          @splitcount/shared — platform-neutral API contract (Zod schemas +
+                   inferred types) shared by both apps. No React Native, no Node-only
+                   APIs, no secrets. Built to dist/ (ESM); consumers resolve types
+                   straight from src/ so a rebuild is only needed for runtime/bundling.
 docs/              Living documentation (this folder). Transverse, stays at the root.
 docs/specs/        Feature specifications — source of truth for established behavior.
 docs/guidelines/   Authoring conventions.
@@ -47,6 +50,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   Native, no Node-only APIs, no server secrets.
 - A `packages/*` workspace depends on neither app.
 - Adding a workspace requires a justification recorded here.
+
+### Workspaces
+
+| Workspace              | Justification                                                        |
+| ---------------------- | ------------------------------------------------------------------- |
+| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. |
 
 ## Client / server contract
 
@@ -93,13 +102,14 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | Vitest for server tests                                   | Fast, native TS/ESM                         |
 | 2026-09-09 | PostgreSQL + Drizzle chosen; added with the first entity  | SQL-first, strong types, low indirection    |
 | 2026-09-09 | Mobile runs as an Expo development build, not Expo Go     | Native modules + upcoming Google sign-in     |
+| 2026-09-09 | `@splitcount/shared` workspace for the API contract       | First shared client/server contract (auth)   |
+| 2026-09-09 | Auth: Google ID token verified server-side → own session | Google tokens are short-lived; we need persistent, revocable sessions |
+| 2026-09-09 | Session = short JWT access token + rotating DB refresh token | Persistent sign-in + real server-side sign-out / revocation |
 
 ## Open items
 
 - No persistence yet. Introduce PostgreSQL + Drizzle with the first data-bearing feature.
-- No auth yet. Google sign-in is the planned first method (server verifies Google tokens).
 - Backend deployment target: VPS-style host (e.g. AWS EC2). Packaging decided when the
   first deploy happens.
-- `packages/shared` not created yet — expected at the first shared API contract.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).

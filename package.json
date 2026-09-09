@@ -10,8 +10,10 @@
     "node": ">=22"
   },
   "scripts": {
+    "build": "npm run build --workspace @splitcount/shared && npm run build --workspace @splitcount/server",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "pretest": "npm run build --workspace @splitcount/shared",
     "test": "npm run test --workspaces --if-present",
     "mobile": "npm run start --workspace @splitcount/mobile",
     "mobile:android": "npm run android --workspace @splitcount/mobile",
