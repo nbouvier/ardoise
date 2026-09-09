@@ -30,8 +30,11 @@ apps/
       index.ts     Process entrypoint: builds the app and starts listening.
       app.ts       buildApp() factory — a configured Fastify instance, no listener.
       config/      Typed environment loading (env.ts, Zod-validated).
-      routes/      HTTP route registrations, one module per resource.
-      db/          Schema and migrations (added with the first persisted entity).
+      routes/      Cross-cutting HTTP routes (health). Feature routes live under features/.
+      features/    One folder per product feature: routes, services, repository, tests.
+      db/          Drizzle schema (schema.ts), client/driver selection (client.ts),
+                   Fastify plugin (plugin.ts). SQL migrations in server/drizzle/.
+      test/        Test helpers (in-memory DB, ready app).
 packages/
   shared/          @splitcount/shared — platform-neutral API contract (Zod schemas +
                    inferred types) shared by both apps. No React Native, no Node-only
@@ -88,7 +91,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | Mobile lint        | `eslint-config-expo` (flat)               |
 | Server lint        | `typescript-eslint` (flat)                |
 | Server logging     | Fastify / pino                            |
-| Database (planned) | PostgreSQL + Drizzle ORM (drizzle-kit migrations) |
+| Database           | PostgreSQL + Drizzle ORM (drizzle-kit migrations); PGlite embedded in dev/test |
 
 ## Key decisions
 
@@ -100,7 +103,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | Server is the source of truth; no offline write model    | Simpler data model to start                 |
 | 2026-09-09 | Fastify + Zod + REST for the API                          | Light, TS-first, framework-agnostic contract |
 | 2026-09-09 | Vitest for server tests                                   | Fast, native TS/ESM                         |
-| 2026-09-09 | PostgreSQL + Drizzle chosen; added with the first entity  | SQL-first, strong types, low indirection    |
+| 2026-09-09 | PostgreSQL + Drizzle; PGlite embedded in dev/test         | SQL-first, strong types; no external service to run tests |
 | 2026-09-09 | Mobile runs as an Expo development build, not Expo Go     | Native modules + upcoming Google sign-in     |
 | 2026-09-09 | `@splitcount/shared` workspace for the API contract       | First shared client/server contract (auth)   |
 | 2026-09-09 | Auth: Google ID token verified server-side → own session | Google tokens are short-lived; we need persistent, revocable sessions |
@@ -108,8 +111,9 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 ## Open items
 
-- No persistence yet. Introduce PostgreSQL + Drizzle with the first data-bearing feature.
-- Backend deployment target: VPS-style host (e.g. AWS EC2). Packaging decided when the
-  first deploy happens.
+- Backend deployment target: VPS-style host (e.g. AWS EC2). Needs a managed Postgres and
+  `DATABASE_URL` in the environment; `npm run migrate` in the deploy step.
+- Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
+  public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).

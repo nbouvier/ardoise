@@ -6,6 +6,14 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  /**
+   * Postgres connection string. When unset, the server uses an embedded PGlite
+   * database (local development and tests) — same SQL dialect, no external
+   * service.
+   */
+  DATABASE_URL: z.url().optional(),
+  /** Directory for the embedded PGlite database in development. */
+  PGLITE_DATA_DIR: z.string().min(1).default('.pglite'),
 });
 
 export type Env = z.infer<typeof envSchema>;

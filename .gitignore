@@ -7,6 +7,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Embedded PGlite database (local development)
+.pglite/
+
 # Test coverage
 coverage/
 
