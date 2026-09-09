@@ -20,12 +20,15 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 
 ## Current capabilities
 
-None shipped yet. The project is at initial scaffold stage: monorepo, mobile skeleton,
-a minimal API (`/health`), tooling and documentation.
+- **Authentication** — Google sign-in. Users sign in with their Google account and stay
+  signed in across app launches (rotating refresh-token session); the server verifies
+  every Google token before trusting an identity. See `docs/specs/authentication.md`.
+
+Otherwise the project is still at an early stage: monorepo, mobile skeleton, an API with
+`/health` and the auth endpoints, tooling and documentation.
 
 ## Planned direction
 
-- **Authentication** — Google sign-in first. The server verifies Google-issued tokens.
 - Groups / "counts" bundling participants and expenses.
 - Expense entry with flexible splitting between participants.
 - Running balances and settle-up suggestions.
