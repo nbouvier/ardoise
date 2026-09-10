@@ -1,9 +1,11 @@
 import type { FriendSummary } from '@splitcount/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
 import { fetchFriends, removeFriend } from '@/lib/api/friends';
 import { errorFields, logger } from '@/lib/logger';
+
+import { friendsChanged } from './friends-changed';
 
 export type FriendsStatus = 'loading' | 'ready' | 'error';
 
@@ -23,6 +25,13 @@ export function useFriends(): UseFriendsResult {
   const { authorizedFetch } = useAuth();
   const [state, setState] = useState<FriendsState>({ status: 'loading', friends: [] });
   const [reloadToken, setReloadToken] = useState(0);
+  // Reload when a friendship is created outside this screen (the invitation
+  // confirmation modal lives above the tabs).
+  const externalVersion = useSyncExternalStore(
+    friendsChanged.subscribe,
+    friendsChanged.getSnapshot,
+    friendsChanged.getSnapshot,
+  );
 
   useEffect(() => {
     let active = true;
@@ -44,7 +53,7 @@ export function useFriends(): UseFriendsResult {
     return () => {
       active = false;
     };
-  }, [authorizedFetch, reloadToken]);
+  }, [authorizedFetch, reloadToken, externalVersion]);
 
   const refresh = useCallback(() => {
     setState((current) => ({ ...current, status: 'loading' }));

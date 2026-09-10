@@ -23,7 +23,8 @@ apps/
       components/  Shared presentational building blocks. ui/ holds lower-level primitives.
       hooks/       Reusable hooks. Platform variants use .web.ts / .ios.tsx / .android.tsx.
       constants/   Design tokens (colours, spacing, fonts) in theme.ts.
-      features/    One folder per product feature (auth: state, screens, Google, storage).
+      features/    One folder per product feature (auth: state, screens, Google, storage;
+                   friends: list, invitations, deep-link capture).
       lib/         Cross-feature building blocks: logger, API client (lib/api).
     assets/        Images and fonts.
     metro.config.js  Monorepo-aware Metro config (watches the repo root).
@@ -60,7 +61,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. |
+| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, `FriendInvite`, invitation responses). |
 
 ## Client / server contract
 
@@ -72,6 +73,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - Auth: the client sends a Google ID token, the server verifies it and returns a
   SplitCount session (short access JWT + rotating refresh token). The client stores the
   refresh token in the OS secure store and refreshes transparently on 401.
+- The API is JSON everywhere except `GET /i/:code`, the public invitation landing page,
+  which is HTML because a browser opens it before the app is involved.
+- Almost every route is authenticated; `GET /friends/invites/:code` is deliberately not,
+  so an invited person can see who is inviting them before signing in.
 
 ## Conventions
 
@@ -114,6 +119,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | `@splitcount/shared` workspace for the API contract       | First shared client/server contract (auth)   |
 | 2026-09-09 | Auth: Google ID token verified server-side → own session | Google tokens are short-lived; we need persistent, revocable sessions |
 | 2026-09-09 | Session = short JWT access token + rotating DB refresh token | Persistent sign-in + real server-side sign-out / revocation |
+| 2026-09-10 | Invitation links hosted by the API (`GET /i/:code`) + `splitcount://` scheme | No domain or store presence yet; Universal/App Links slot in later without changing the contract |
+| 2026-09-10 | No deferred deep linking: the landing page shows a code to type in | A third-party attribution SDK (Branch, AppsFlyer) is not worth it before the app is in stores |
+| 2026-09-10 | Friendships stored once per pair, in a canonical order | The unique constraint alone rules out duplicates, including under concurrent acceptance |
+| 2026-09-10 | `FriendSummary` (no email) is how another user is exposed | A public invitation preview must not leak the inviter's email address |
 
 ## Open items
 
@@ -123,3 +132,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).
+- `users` is shared domain data: the auth feature owns the writes, and other features read
+  it through their own repository rather than importing auth's. If a third feature needs
+  it, extract a `users` module.
+- Invitation lifetime (7 days) is a first guess; tune with real usage.

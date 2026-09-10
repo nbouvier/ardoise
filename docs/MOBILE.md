@@ -87,6 +87,33 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
 `src/features/auth/google.ts`).
 
+## Deep links
+
+The app registers the `splitcount` URL scheme (`scheme` in `app.json`). Friend invitations
+use it: the link a user shares points at the API (`/i/<code>`), and that page tries to open
+`splitcount://invite/<code>`.
+
+The code is captured by `InviteLinkHandler`, which sits **above** the auth gate — someone
+following a link may not have an account yet — and parked in `pendingInvite` until a
+session exists.
+
+Testing a deep link without the web page:
+
+```bash
+npx uri-scheme open splitcount://invite/<code> --android
+```
+
+(`--ios` on macOS.) The landing-page URL form is recognised too, so
+`https://<host>/i/<code>` works once App Links / Universal Links are configured.
+
+Universal Links / App Links (real `https://` links opening the app natively) need a domain,
+`apple-app-site-association` + `assetlinks.json`, and a store presence. Not set up yet: the
+landing page shows the code for manual entry in the meantime, since there is no deferred
+deep linking.
+
+For local testing, `PUBLIC_BASE_URL` on the server must be an address the device can reach
+— with a USB device, keep `http://localhost:3000` and run `adb reverse tcp:3000 tcp:3000`.
+
 ## Google sign-in
 
 - Uses `@react-native-google-signin/google-signin` (native SDK) — a development build is

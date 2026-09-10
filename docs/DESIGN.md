@@ -22,7 +22,9 @@ Defined in `apps/mobile/src/constants/theme.ts`:
 
 - `ThemedText` — typography variants (`title`, `code`, `small`, ...).
 - `ThemedView` — themed surfaces, incl. `type="backgroundElement"`.
-- `AppTabs` — bottom tab navigation (Home, Explore, Account).
+- `Button` — the action button: `primary` (filled) or `secondary` (outlined), with a busy
+  state. The auth screens predate it and still style their own pressables.
+- `AppTabs` — bottom tab navigation (Home, Friends, Account).
 
 ## Screens
 
@@ -47,6 +49,27 @@ Google" button (filled with the theme text colour). Inline red error text on fai
 
 Google avatar (or initial fallback), name, email, and an outlined "Sign out" button.
 
+### Friends (`src/features/friends/friends-screen.tsx`, tab `app/friends.tsx`)
+
+List of avatar + name rows with a per-row "Remove" (confirmed by an `Alert`). Empty state:
+"No friends yet". A footer holds the primary "Invite a friend" action and an "Got an
+invitation code?" field — the manual fallback for someone who installed the app after
+following a link.
+
+### Invite (`src/features/friends/invite-screen.tsx`)
+
+Opened as a sheet from the Friends tab. The link is shown in a `backgroundElement` box and
+is **selectable**, so a failed clipboard write is not a dead end. Primary "Share" (OS share
+sheet), secondary "Copy link" (flips to "Copied"), the expiry in words, and a bottom
+"Generate a new link" with a caption warning that the previous link stops working.
+
+### Invitation confirmation (`src/features/friends/invite-prompt.tsx`)
+
+A full-screen modal, not a route: it must appear identically whether the code arrived from
+a deep link or was typed by hand, and it is mounted above the tabs. Centred avatar + "X
+wants to add you as a friend" + Accept / Not now. Terminal states: friends now, already
+friends, link no longer valid, your own link, and a retryable connection error.
+
 ## Principles
 
 - Prefer the smallest structural fix over a visual workaround.
@@ -55,5 +78,6 @@ Google avatar (or initial fallback), name, email, and an outlined "Sign out" but
 
 ## Current state
 
-Auth screens (sign-in, account, gate) are real. The Home and Explore tabs are still the
-Expo starter content — replace them as features are specified.
+Auth screens (sign-in, account, gate) and the friends screens are real. The Home tab is
+still the Expo starter content — replace it as features are specified. The Explore tab was
+replaced by Friends.
