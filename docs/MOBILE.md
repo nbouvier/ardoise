@@ -23,9 +23,28 @@ development build, or the web target.
 | Web               | `npm run mobile:web`    | Runs in any browser, no native build needed. |
 | Android dev build | `npm run mobile:android`| Builds + installs the native app, then serves. |
 | iOS dev build     | `npm run mobile:ios`    | macOS + Xcode only.                          |
-| Dev server        | `npm run mobile`        | `expo start --dev-client`; use once a dev build is installed. |
+| Dev server        | `npm run mobile`        | `expo start --dev-client --tunnel`; use once a dev build is installed. |
 
 `npm run mobile:*` map to `expo run:*` / `expo start --web` inside the workspace.
+
+### Connecting the device to Metro and the API
+
+`npm run mobile` uses `--tunnel` (Metro via Expo's relay) so the JS bundle reaches the
+device even when the local network blocks it (Windows Firewall, AP isolation). It needs
+`@expo/ngrok` (installed) and internet. Drop `--tunnel` when plain LAN works — it is
+faster.
+
+The **API is not tunnelled** — the app calls `EXPO_PUBLIC_API_BASE_URL` directly. For a
+USB device or emulator, keep `http://localhost:3000` in `apps/mobile/.env` and forward the
+port over the cable (re-run after each reconnect):
+
+```bash
+adb reverse tcp:3000 tcp:3000
+```
+
+For a Wi-Fi device on the same network as the computer, use the computer's LAN IP instead
+(`http://192.168.x.x:3000`). `EXPO_PUBLIC_*` is baked into the bundle, so restart
+`npm run mobile` after changing `.env`.
 
 ## First run (local native build)
 
