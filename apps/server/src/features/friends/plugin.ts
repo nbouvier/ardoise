@@ -3,7 +3,14 @@ import type { FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { env } from '../../config/env.js';
+
 import { InviteError, type InviteErrorReason } from './invites.js';
+import {
+  renderExpiredPage,
+  renderInvitePage,
+  type LandingLinks,
+} from './landing.js';
 import { createFriendsRepository } from './repository.js';
 import { createFriendsService, type FriendsService } from './service.js';
 
@@ -20,6 +27,8 @@ export interface FriendsPluginOptions {
   now?: (() => Date) | undefined;
   /** Override the base URL invitation links are built from (tests). */
   publicBaseUrl?: string | undefined;
+  /** Override the store links shown on the landing page (tests). */
+  storeLinks?: LandingLinks | undefined;
 }
 
 const codeParamsSchema = z.object({ code: inviteCodeSchema });
@@ -48,7 +57,39 @@ export const friendsPlugin = fp<FriendsPluginOptions>(
       now: opts.now,
     });
 
+    const storeLinks: LandingLinks = opts.storeLinks ?? {
+      appStoreUrl: env.APP_STORE_URL,
+      playStoreUrl: env.PLAY_STORE_URL,
+    };
+
     app.decorate('friends', friends);
+
+    // The public page an invitation link points to. HTML, not JSON: it is what
+    // the recipient's browser opens before the app is involved.
+    app.get('/i/:code', async (request, reply) => {
+      const params = codeParamsSchema.safeParse(request.params);
+      // The code is a capability: never let a proxy or the browser keep it.
+      reply.header('cache-control', 'no-store').type('text/html; charset=utf-8');
+
+      if (params.success) {
+        try {
+          const inviter = await friends.previewInvite(params.data.code);
+          return reply.send(
+            renderInvitePage({
+              inviterName: inviter.name,
+              code: params.data.code,
+              ...storeLinks,
+            }),
+          );
+        } catch (error) {
+          if (!(error instanceof InviteError)) {
+            throw error;
+          }
+        }
+      }
+
+      return reply.code(404).send(renderExpiredPage(storeLinks));
+    });
 
     app.post('/friends/invite', { preHandler: app.authenticate }, async (request, reply) => {
       const invite = await friends.getOrCreateInvite(request.userId!);
