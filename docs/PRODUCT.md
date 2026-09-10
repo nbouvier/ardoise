@@ -23,13 +23,17 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 - **Authentication** — Google sign-in. Users sign in with their Google account and stay
   signed in across app launches (rotating refresh-token session); the server verifies
   every Google token before trusting an identity. See `docs/specs/authentication.md`.
+- **Friends and invitations** — each user keeps a friend list, built by sharing an
+  invitation link (copy or OS share sheet: SMS, mail, WhatsApp…). The link opens the app,
+  prompts for Google sign-in if needed, and connects both people after an explicit
+  confirmation. See `docs/specs/friends-and-invitations.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile skeleton, an API with
-`/health` and the auth endpoints, tooling and documentation.
+`/health`, the auth endpoints and the friends endpoints, tooling and documentation.
 
 ## Planned direction
 
-- Groups / "counts" bundling participants and expenses.
+- Groups / "counts" bundling participants and expenses, picked from the friend list.
 - Expense entry with flexible splitting between participants.
 - Running balances and settle-up suggestions.
 - Better tracking and organisation than Tricount (categories, history, clarity).
@@ -38,6 +42,8 @@ Otherwise the project is still at an early stage: monorepo, mobile skeleton, an 
 
 - Whether non-authenticated, link-based group access is offered later.
 - Offline support (the current model is online, server-authoritative).
+- Adding friends by email address, alongside invitation links.
+- Notifying the inviter when someone accepts an invitation (needs push notifications).
 
 ## Feature specifications
 
