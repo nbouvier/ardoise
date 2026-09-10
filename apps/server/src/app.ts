@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from './config/env.js';
 import { dbPlugin, type DbPluginOptions } from './db/plugin.js';
 import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
+import { friendsPlugin, type FriendsPluginOptions } from './features/friends/plugin.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -10,6 +11,8 @@ export interface BuildAppOptions {
   db?: DbPluginOptions;
   /** Auth plugin overrides. Tests pass fake Google / token services here. */
   auth?: AuthPluginOptions;
+  /** Friends plugin overrides. Tests pass a fake clock / short invite TTL here. */
+  friends?: FriendsPluginOptions;
 }
 
 /**
@@ -34,6 +37,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(authPlugin, { ...options.auth });
+  app.register(friendsPlugin, { ...options.friends });
 
   registerHealthRoutes(app);
 

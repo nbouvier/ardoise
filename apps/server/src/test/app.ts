@@ -8,10 +8,14 @@ import { createTestDatabase } from './database.js';
  * `await app.close()` (which also closes the database) in an `afterAll`.
  */
 export async function createTestApp(
-  options: Pick<BuildAppOptions, 'auth'> = {},
+  options: Pick<BuildAppOptions, 'auth' | 'friends'> = {},
 ): Promise<FastifyInstance> {
   const handle = await createTestDatabase();
-  const app = buildApp({ db: { handle, runMigrations: false }, auth: options.auth });
+  const app = buildApp({
+    db: { handle, runMigrations: false },
+    auth: options.auth,
+    friends: options.friends,
+  });
   app.addHook('onClose', () => handle.close());
   await app.ready();
   return app;
