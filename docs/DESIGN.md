@@ -22,7 +22,30 @@ Defined in `apps/mobile/src/constants/theme.ts`:
 
 - `ThemedText` — typography variants (`title`, `code`, `small`, ...).
 - `ThemedView` — themed surfaces, incl. `type="backgroundElement"`.
-- `AppTabs` — bottom tab navigation.
+- `AppTabs` — bottom tab navigation (Home, Explore, Account).
+
+## Screens
+
+### Auth gate (`src/features/auth/auth-gate.tsx`)
+
+Wraps the app. States:
+
+- **loading** — centered `ActivityIndicator` while the session is restored (the animated
+  splash overlay covers the first frames).
+- **error** — "Can't connect" with a "Try again" button, when the server was unreachable
+  on launch (the stored session is kept).
+- **signedOut** — the sign-in screen.
+- **signedIn** — the app (tabs).
+
+### Sign-in (`src/features/auth/sign-in-screen.tsx`)
+
+Full-screen, centered. Logo + "SplitCount" + tagline; a single primary "Continue with
+Google" button (filled with the theme text colour). Inline red error text on failure
+(not on user cancellation). On web the button is disabled with a "coming soon" caption.
+
+### Account (`src/features/auth/account-screen.tsx`, tab `app/account.tsx`)
+
+Google avatar (or initial fallback), name, email, and an outlined "Sign out" button.
 
 ## Principles
 
@@ -32,5 +55,5 @@ Defined in `apps/mobile/src/constants/theme.ts`:
 
 ## Current state
 
-Screens are still the Expo starter content. Replace with real SplitCount screens as
-features are specified.
+Auth screens (sign-in, account, gate) are real. The Home and Explore tabs are still the
+Expo starter content — replace them as features are specified.

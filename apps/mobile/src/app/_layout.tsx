@@ -4,15 +4,21 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { AuthProvider } from '@/features/auth/auth-context';
+import { AuthGate } from '@/features/auth/auth-gate';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <AuthProvider>
+        <AnimatedSplashOverlay />
+        <AuthGate>
+          <AppTabs />
+        </AuthGate>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

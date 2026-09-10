@@ -31,13 +31,29 @@ Prefer integration tests that build the Fastify app via `buildApp()` and drive i
 `NODE_ENV=test` and a silent logger. Unit-test isolated logic (calculations,
 authorization rules) directly.
 
+Database-backed tests use an in-memory **PGlite** instance (real Postgres SQL, no
+external service), migrated per test file:
+
+- `createTestDatabase()` (`src/test/database.ts`) — a fresh, migrated handle.
+- `createTestApp()` (`src/test/app.ts`) — a ready Fastify instance wired to one.
+
+Close it in `afterAll` (`app.close()` / `handle.close()`). External boundaries such as
+Google token verification are mocked, never contacted.
+
+The root `npm test` runs `pretest` first, which builds `@splitcount/shared` so both apps
+resolve its compiled output.
+
 ## Client tests
 
-`jest-expo` is configured. `react-test-renderer` is deprecated under React 19; use
-`@testing-library/react-native` for component tests (add it with the first one).
+`jest-expo` is configured. Import test globals explicitly from `@jest/globals` (ambient
+`@types/jest` is not wired). Use `@testing-library/react-native` for component tests.
+`transformIgnorePatterns` also transforms `@splitcount/shared`; native modules are mocked
+(`__mocks__/`), and injected fakes (`GoogleModule`, `TokenStore`) keep native code out of
+`AuthClient` tests.
 
 ## Current state
 
-- `apps/server`: one integration test covering `GET /health`.
-- `apps/mobile`: no tests yet (`jest --passWithNoTests`); real suites arrive with the
-  first feature.
+- `apps/server`: `GET /health` integration test; database migration tests
+  (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`).
+- `apps/mobile`: API endpoints (`src/lib/api/`), auth state machine
+  (`src/features/auth/auth-client.test.ts`), and auth screens.

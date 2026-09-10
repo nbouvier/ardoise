@@ -11,11 +11,27 @@ current setup and state.
 - Fastify logs one line per request automatically. Add explicit logs only for meaningful
   lifecycle or failure events, with stable event names (e.g. `server.start.failed`).
 
+### Auth events
+
+| Event                          | Level | Fields        | Meaning                                        |
+| ------------------------------ | ----- | ------------- | ---------------------------------------------- |
+| `auth.session.issued`          | info  | `userId`      | Sign-in succeeded, a session was created       |
+| `auth.google.verify.failed`    | warn  | `reason`      | Google rejected the ID token (categorised)     |
+| `auth.session.refresh.reused`  | warn  | —             | A revoked refresh token was presented (possible theft) |
+| `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
+
+Never log tokens, ID tokens, authorization headers or the refresh-token hash.
+
 ## Client (`apps/mobile`)
 
-- No structured logger yet. Application code must not use `console.log`.
-- Introduce a small logger module before the first feature that does async work, network
-  I/O or background sync.
+- Structured logger in `src/lib/logger.ts` (`logger.info/warn/error/debug`, plus
+  `errorFields()` for safe error serialisation). Application code logs through it, never
+  `console` directly.
+- Currently writes to the console sink; silent under `NODE_ENV=test`. A remote transport
+  can be added there without touching callers.
+- Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
+  `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`.
+  Never log tokens.
 
 ## Shared rules (both apps)
 
