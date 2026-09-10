@@ -13,6 +13,26 @@ export class ApiError extends Error {
   }
 }
 
+/** The server's `error` field, when the body carries one. */
+export async function readErrorCode(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+      return body.error;
+    }
+  } catch {
+    // no / non-JSON body
+  }
+  return null;
+}
+
+/** Throw an `ApiError` carrying the server's error code unless the response is 2xx. */
+export async function expectOk(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorCode(response));
+  }
+}
+
 /** A request that never reached the server (offline, DNS, timeout). */
 export class NetworkError extends Error {
   constructor(cause?: unknown) {

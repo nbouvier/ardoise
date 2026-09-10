@@ -5,7 +5,7 @@ import {
   type MeResponse,
 } from '@splitcount/shared';
 
-import { ApiError, NetworkError } from './errors';
+import { ApiError, expectOk, NetworkError, readErrorCode } from './errors';
 
 const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 
@@ -34,24 +34,6 @@ export async function apiRequest(baseUrl: string, options: RequestOptions): Prom
     });
   } catch (error) {
     throw new NetworkError(error);
-  }
-}
-
-async function readErrorCode(response: Response): Promise<string | null> {
-  try {
-    const body: unknown = await response.json();
-    if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
-      return body.error;
-    }
-  } catch {
-    // no / non-JSON body
-  }
-  return null;
-}
-
-async function expectOk(response: Response): Promise<void> {
-  if (!response.ok) {
-    throw new ApiError(response.status, await readErrorCode(response));
   }
 }
 
