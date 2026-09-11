@@ -15,6 +15,7 @@ export type GroupAccessReason =
   | 'pair_immutable'
   | 'archived'
   | 'owner_cannot_leave'
+  | 'cannot_remove_owner'
   | 'not_friends';
 
 export class GroupAccessError extends Error {
@@ -57,5 +58,15 @@ export function assertOwner(role: GroupRole): void {
 export function assertCanLeave(role: GroupRole, memberCount: number): void {
   if (role === 'owner' && memberCount > 1) {
     throw new GroupAccessError('owner_cannot_leave');
+  }
+}
+
+/**
+ * Members may remove each other, but not the owner: that would leave a group
+ * nobody is allowed to delete. The owner leaves on their own terms.
+ */
+export function assertRemovable(targetRole: GroupRole): void {
+  if (targetRole === 'owner') {
+    throw new GroupAccessError('cannot_remove_owner');
   }
 }

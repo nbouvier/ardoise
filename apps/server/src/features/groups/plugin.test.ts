@@ -427,6 +427,41 @@ describe('groups routes', () => {
       expect(response.json()).toEqual({ error: 'owner_cannot_leave' });
     });
 
+    it('refuses to let a member remove the owner, who alone can delete', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/groups/${group.id}/members/${ada.userId}`,
+        headers: grace.headers,
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'cannot_remove_owner' });
+      expect((await getGroup(ada, group.id)).json().group.memberCount).toBe(2);
+    });
+
+    it('treats removing someone who already left as a no-op', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+
+      const remove = () =>
+        app.inject({
+          method: 'DELETE',
+          url: `/groups/${group.id}/members/${grace.userId}`,
+          headers: ada.headers,
+        });
+
+      expect((await remove()).statusCode).toBe(204);
+      expect((await remove()).statusCode).toBe(204);
+      expect((await getGroup(ada, group.id)).json().group.memberCount).toBe(1);
+    });
+
     it('deletes the group when its last member leaves', async () => {
       const ada = await signIn('ada');
       const group = await createdGroup(ada, 'Trip');

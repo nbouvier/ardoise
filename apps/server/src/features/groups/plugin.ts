@@ -40,6 +40,7 @@ const accessFailures: Record<GroupAccessReason, { status: number; error: string 
   pair_immutable: { status: 409, error: 'pair_group_immutable' },
   archived: { status: 409, error: 'group_archived' },
   owner_cannot_leave: { status: 409, error: 'owner_cannot_leave' },
+  cannot_remove_owner: { status: 409, error: 'cannot_remove_owner' },
   not_friends: { status: 400, error: 'not_friends' },
 };
 

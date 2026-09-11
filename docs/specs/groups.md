@@ -128,6 +128,9 @@ was a mistake**, so that **my list stays about what is still going on**.
 - **A non-member requesting a group**: answered as **not found**, never as "forbidden" —
   group existence is not disclosed.
 - **The owner trying to leave** with other members present: refused with an explanation.
+- **A member trying to remove the owner**: refused. Otherwise the group would be left with
+  nobody allowed to delete it.
+- **Removing someone who already left**: a no-op, not an error.
 - **The last member leaving**: the group is deleted with its contents.
 - **Any membership change on a pair group** (add, remove, invite, rename, archive,
   delete): refused; the pair group is immutable by construction.
@@ -161,7 +164,8 @@ was a mistake**, so that **my list stays about what is still going on**.
 - [ ] Accepting a group link twice does not duplicate the membership and reports that they
       are already a member.
 - [ ] A group link for an archived or deleted group is refused as no longer valid.
-- [ ] A member can leave a group; the owner cannot while other members remain.
+- [ ] A member can leave a group; the owner cannot while other members remain, and no
+      member can remove the owner.
 - [ ] A user who is not a member gets a "not found" answer for a group, never a hint that
       it exists.
 - [ ] Tapping a friend in the friend list opens the group shared with that friend, showing

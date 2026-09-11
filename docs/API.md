@@ -210,6 +210,7 @@ Shared error codes:
 | `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
 | `409`  | `group_archived`       | An archived group takes no new members and issues no links  |
 | `409`  | `owner_cannot_leave`   | The owner cannot leave while other members remain           |
+| `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 
 `GroupSummary` is `{ id, kind, name, memberCount, archivedAt, createdAt }`, with `kind`
@@ -255,8 +256,12 @@ Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetai
 
 ### `DELETE /groups/:groupId/members/:userId`
 
-Remove a member, or leave when `userId` is the caller. Response `204`. When the last
-member leaves, the group is deleted with its contents.
+Remove a member, or leave when `userId` is the caller. Response `204`, and removing
+someone who already left is a no-op. When the last member leaves, the group is deleted
+with its contents.
+
+The **owner cannot be removed** by another member: that would leave a group nobody is
+allowed to delete. They leave on their own terms, or delete it.
 
 ### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
 

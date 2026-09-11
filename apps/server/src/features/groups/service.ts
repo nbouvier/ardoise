@@ -18,6 +18,7 @@ import {
   assertCanLeave,
   assertNotPairGroup,
   assertOwner,
+  assertRemovable,
   GroupAccessError,
 } from './membership.js';
 import type { GroupsRepository, MemberWithUser } from './repository.js';
@@ -206,6 +207,12 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       } else {
         // Removing someone else is a management action; leaving is not.
         assertActive(group);
+        const target = await repository.findMembership(groupId, targetId);
+        if (!target) {
+          // Already out — nothing to do, and nothing to disclose.
+          return { groupDeleted: false };
+        }
+        assertRemovable(target.role as GroupRole);
       }
 
       await repository.removeMember(groupId, targetId);
