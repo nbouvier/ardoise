@@ -36,10 +36,69 @@ export function computeBalances(
   };
 
   for (const transaction of transactions) {
-    const sign = transaction.kind === 'income' ? -1 : 1;
+    const sign = signOf(transaction);
     add(transaction.payerId, sign * transaction.amountCents);
     for (const participant of participantsByTransactionId.get(transaction.id) ?? []) {
       add(participant.userId, -sign * participant.shareCents);
+    }
+  }
+
+  return balances;
+}
+
+/** An income moves money the other way; an expense and a transfer do not. */
+function signOf(transaction: TransactionRow): 1 | -1 {
+  return transaction.kind === 'income' ? -1 : 1;
+}
+
+/**
+ * Net balance between `userId` and every other person they share a transaction
+ * with. Positive: that person owes `userId`. Negative: `userId` owes them.
+ *
+ * A group balance is a net against the *group* — it cannot say who owes whom.
+ * This attributes the very same rule to the pair instead: what `userId` paid,
+ * each other participant owes them their share of; what someone else paid,
+ * `userId` owes that payer their own share of. An income reverses both, and a
+ * transfer needs no special case — reimbursing someone is simply a transaction
+ * where they are the single participant, so it cancels the debt by its amount.
+ *
+ * A transaction only ever involves people who shared its group, so the caller
+ * does not have to filter by group: doing so on *current* membership would
+ * wrongly drop what someone who has since left still owes.
+ *
+ * Summing the result over everyone gives back `computeBalances`'s entry for
+ * `userId` — see `docs/specs/balances.md`. This is the readable statement of
+ * the rule and the oracle the cross-group SQL aggregate in
+ * `repository.ts` is tested against; the two must never disagree.
+ */
+export function computePairwiseBalances(
+  userId: string,
+  transactions: readonly TransactionRow[],
+  participantsByTransactionId: ReadonlyMap<string, readonly TransactionParticipantRow[]>,
+): Map<string, number> {
+  const balances = new Map<string, number>();
+  const add = (otherId: string, deltaCents: number) => {
+    balances.set(otherId, (balances.get(otherId) ?? 0) + deltaCents);
+  };
+
+  for (const transaction of transactions) {
+    const sign = signOf(transaction);
+    const participants = participantsByTransactionId.get(transaction.id) ?? [];
+
+    if (transaction.payerId === userId) {
+      for (const participant of participants) {
+        // Paying for oneself is not a debt to oneself; it nets out.
+        if (participant.userId !== userId) {
+          add(participant.userId, sign * participant.shareCents);
+        }
+      }
+      continue;
+    }
+
+    for (const participant of participants) {
+      if (participant.userId === userId) {
+        add(transaction.payerId, -sign * participant.shareCents);
+      }
     }
   }
 
