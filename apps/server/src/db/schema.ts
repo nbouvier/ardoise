@@ -49,30 +49,6 @@ export const sessions = pgTable(
 );
 
 /**
- * A shareable invitation to become someone's friend. One active row per
- * inviter: rotating an invite revokes the previous one. Unlike a refresh token
- * the code is stored in clear — it must be redisplayable ("copy my link again")
- * and only grants a narrow, expiring, revocable capability that still requires
- * the recipient to accept. See `docs/specs/friends-and-invitations.md`.
- */
-export const friendInvites = pgTable(
-  'friend_invites',
-  {
-    id: uuid('id')
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    inviterId: uuid('inviter_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    code: text('code').notNull().unique(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  },
-  (table) => [index('friend_invites_inviter_id_idx').on(table.inviterId)],
-);
-
-/**
  * A symmetric friendship, stored once per pair. The two columns always hold the
  * pair in a canonical order (`user_a_id` < `user_b_id`), so the unique
  * constraint alone makes a duplicate — including under concurrent acceptance —
@@ -99,11 +75,119 @@ export const friendships = pgTable(
   ],
 );
 
+/**
+ * A space shared by a set of people, and later the expenses they record in it.
+ *
+ * `kind = 'standard'` is a group someone created and named. `kind = 'pair'` is
+ * the implicit group two friends share: it carries no name (the API returns the
+ * other member's name), it is never listed, and it is keyed by the friendship
+ * itself — so the database guarantees exactly one per pair and takes it away
+ * with the friendship. See `docs/specs/groups.md`.
+ */
+export const groups = pgTable(
+  'groups',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    kind: text('kind').notNull().default('standard'),
+    name: text('name'),
+    friendshipId: uuid('friendship_id')
+      .unique()
+      .references(() => friendships.id, { onDelete: 'cascade' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('groups_kind_valid', sql`${table.kind} in ('standard', 'pair')`),
+    // The two shapes are exclusive: a pair group is the one keyed by a
+    // friendship, and only a standard group carries a name.
+    check(
+      'groups_pair_shape',
+      sql`(${table.kind} = 'pair') = (${table.friendshipId} is not null)`,
+    ),
+    check(
+      'groups_standard_named',
+      sql`(${table.kind} = 'standard') = (${table.name} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * Who belongs to a group, and with which rights. A membership row is the *only*
+ * thing that grants access to a group: every route resolves it before anything
+ * else. The creator is the `owner`; only an owner may delete the group.
+ */
+export const groupMembers = pgTable(
+  'group_members',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('member'),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('group_members_unique').on(table.groupId, table.userId),
+    check('group_members_role_valid', sql`${table.role} in ('owner', 'member')`),
+    index('group_members_user_id_idx').on(table.userId),
+  ],
+);
+
+/**
+ * A shareable invitation. One table for every kind of invitation on purpose:
+ * the code space is shared, so a single link format, a single landing page and
+ * a single pair of public routes serve friendships and groups alike.
+ *
+ * `kind = 'friend'` invites into a friendship with `inviter_id`; `kind =
+ * 'group'` invites into `group_id`. Unlike a refresh token the code is stored
+ * in clear — it must be redisplayable ("copy my link again") and only grants a
+ * narrow, expiring, revocable capability that still requires the recipient to
+ * accept. See `docs/specs/friends-and-invitations.md`.
+ */
+export const invites = pgTable(
+  'invites',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    kind: text('kind').notNull(),
+    inviterId: uuid('inviter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id').references(() => groups.id, { onDelete: 'cascade' }),
+    code: text('code').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('invites_kind_valid', sql`${table.kind} in ('friend', 'group')`),
+    check(
+      'invites_target_shape',
+      sql`(${table.kind} = 'group') = (${table.groupId} is not null)`,
+    ),
+    index('invites_inviter_id_idx').on(table.inviterId),
+    index('invites_group_id_idx').on(table.groupId),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
-export type FriendInviteRow = typeof friendInvites.$inferSelect;
-export type NewFriendInviteRow = typeof friendInvites.$inferInsert;
 export type FriendshipRow = typeof friendships.$inferSelect;
 export type NewFriendshipRow = typeof friendships.$inferInsert;
+export type GroupRow = typeof groups.$inferSelect;
+export type NewGroupRow = typeof groups.$inferInsert;
+export type GroupMemberRow = typeof groupMembers.$inferSelect;
+export type NewGroupMemberRow = typeof groupMembers.$inferInsert;
+export type InviteRow = typeof invites.$inferSelect;
+export type NewInviteRow = typeof invites.$inferInsert;

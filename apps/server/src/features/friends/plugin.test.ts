@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { friendships } from '../../db/schema.js';
-import { createTestApp } from '../../test/app.js';
+import { createTestContext } from '../../test/app.js';
+import { signInAs } from '../../test/auth.js';
 import { fakeGoogleVerifier } from '../../test/google.js';
 
 const google = fakeGoogleVerifier({
@@ -17,41 +18,35 @@ let clock = new Date('2026-09-10T12:00:00.000Z');
 describe('friends routes', () => {
   let app: FastifyInstance;
 
-  beforeEach(async () => {
-    clock = new Date('2026-09-10T12:00:00.000Z');
-    app = await createTestApp({
+  let reset: () => Promise<void>;
+
+  beforeAll(async () => {
+    ({ app, reset } = await createTestContext({
       auth: { googleVerifier: google },
-      friends: {
+      invites: {
         now: () => clock,
         inviteTtlSeconds: 3600,
         publicBaseUrl: 'https://splitcount.test',
       },
-    });
+    }));
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await app.close();
   });
 
-  async function signIn(idToken: string) {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/auth/google',
-      payload: { idToken },
-    });
-    const body = response.json();
-    return {
-      userId: body.user.id as string,
-      name: body.user.name as string,
-      headers: { authorization: `Bearer ${body.accessToken}` },
-    };
-  }
+  beforeEach(async () => {
+    clock = new Date('2026-09-10T12:00:00.000Z');
+    await reset();
+  });
+
+  const signIn = (idToken: string) => signInAs(app, idToken);
 
   const createInvite = (headers: Record<string, string>) =>
     app.inject({ method: 'POST', url: '/friends/invite', headers });
 
   const accept = (code: string, headers: Record<string, string>) =>
-    app.inject({ method: 'POST', url: `/friends/invites/${code}/accept`, headers });
+    app.inject({ method: 'POST', url: `/invites/${code}/accept`, headers });
 
   const listFriends = (headers: Record<string, string>) =>
     app.inject({ method: 'GET', url: '/friends', headers });
@@ -131,36 +126,21 @@ describe('friends routes', () => {
     });
   });
 
-  describe('GET /friends/invites/:code', () => {
+  describe('GET /invites/:code for a friend invitation', () => {
     it('tells an anonymous visitor who is inviting, without the email', async () => {
       const ada = await signIn('ada');
       const { invite } = (await createInvite(ada.headers)).json();
 
-      const response = await app.inject({
-        method: 'GET',
-        url: `/friends/invites/${invite.code}`,
-      });
+      const response = await app.inject({ method: 'GET', url: `/invites/${invite.code}` });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        inviter: { id: ada.userId, name: 'Ada Lovelace', picture: null },
+        invite: {
+          kind: 'friend',
+          inviter: { id: ada.userId, name: 'Ada Lovelace', picture: null },
+        },
       });
       expect(response.body).not.toContain('ada@example.com');
-    });
-
-    it('reports an unknown code as not found', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/friends/invites/AAAAAAAAAAAAAAAAAAAAAA',
-      });
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: 'invite_not_found' });
-    });
-
-    it('does not leak whether a malformed code ever existed', async () => {
-      const response = await app.inject({ method: 'GET', url: '/friends/invites/short' });
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: 'invite_not_found' });
     });
 
     it('reports an expired code as gone', async () => {
@@ -169,16 +149,13 @@ describe('friends routes', () => {
 
       clock = new Date(clock.getTime() + 3600_001);
 
-      const response = await app.inject({
-        method: 'GET',
-        url: `/friends/invites/${invite.code}`,
-      });
+      const response = await app.inject({ method: 'GET', url: `/invites/${invite.code}` });
       expect(response.statusCode).toBe(410);
       expect(response.json()).toEqual({ error: 'invite_expired' });
     });
   });
 
-  describe('POST /friends/invites/:code/accept', () => {
+  describe('POST /invites/:code/accept for a friend invitation', () => {
     it('connects both users symmetrically', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
@@ -188,8 +165,11 @@ describe('friends routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        friend: { id: ada.userId, name: 'Ada Lovelace', picture: null },
-        alreadyFriends: false,
+        result: {
+          kind: 'friend',
+          friend: { id: ada.userId, name: 'Ada Lovelace', picture: null },
+          alreadyFriends: false,
+        },
       });
 
       expect((await listFriends(ada.headers)).json()).toEqual({
@@ -209,7 +189,7 @@ describe('friends routes', () => {
       const second = await accept(invite.code, grace.headers);
 
       expect(second.statusCode).toBe(200);
-      expect(second.json().alreadyFriends).toBe(true);
+      expect(second.json().result.alreadyFriends).toBe(true);
       expect(await app.db.select().from(friendships)).toHaveLength(1);
     });
 
@@ -260,7 +240,7 @@ describe('friends routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/friends/invites/${invite.code}/accept`,
+        url: `/invites/${invite.code}/accept`,
       });
 
       expect(response.statusCode).toBe(401);

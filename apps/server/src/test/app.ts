@@ -1,22 +1,46 @@
 import type { FastifyInstance } from 'fastify';
 
 import { buildApp, type BuildAppOptions } from '../app.js';
-import { createTestDatabase } from './database.js';
+import { createTestDatabase, resetDatabase } from './database.js';
+
+export type TestAppOptions = Pick<BuildAppOptions, 'auth' | 'invites' | 'groups'>;
+
+export interface TestContext {
+  app: FastifyInstance;
+  /** Empty every table, so the next test starts from nothing. */
+  reset: () => Promise<void>;
+}
+
+/**
+ * A ready Fastify instance backed by a fresh in-memory database, plus the reset
+ * that isolates one test from the next.
+ *
+ * Build it once per test file in a `beforeAll` and `reset()` in a `beforeEach`:
+ * migrating a PGlite database costs a second or two, which a per-test instance
+ * pays over and over.
+ */
+export async function createTestContext(
+  options: TestAppOptions = {},
+): Promise<TestContext> {
+  const handle = await createTestDatabase();
+  const app = buildApp({
+    db: { handle, runMigrations: false },
+    auth: options.auth,
+    invites: options.invites,
+    groups: options.groups,
+  });
+  app.addHook('onClose', () => handle.close());
+  await app.ready();
+
+  return { app, reset: () => resetDatabase(handle) };
+}
 
 /**
  * A ready Fastify instance backed by a fresh in-memory database. Close it with
  * `await app.close()` (which also closes the database) in an `afterAll`.
  */
 export async function createTestApp(
-  options: Pick<BuildAppOptions, 'auth' | 'friends'> = {},
+  options: TestAppOptions = {},
 ): Promise<FastifyInstance> {
-  const handle = await createTestDatabase();
-  const app = buildApp({
-    db: { handle, runMigrations: false },
-    auth: options.auth,
-    friends: options.friends,
-  });
-  app.addHook('onClose', () => handle.close());
-  await app.ready();
-  return app;
+  return (await createTestContext(options)).app;
 }

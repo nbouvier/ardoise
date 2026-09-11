@@ -24,7 +24,8 @@ apps/
       hooks/       Reusable hooks. Platform variants use .web.ts / .ios.tsx / .android.tsx.
       constants/   Design tokens (colours, spacing, fonts) in theme.ts.
       features/    One folder per product feature (auth: state, screens, Google, storage;
-                   friends: list, invitations, deep-link capture).
+                   friends: list, invitations, deep-link capture; groups: list,
+                   creation, detail, membership).
       lib/         Cross-feature building blocks: logger, API client (lib/api).
     assets/        Images and fonts.
     metro.config.js  Monorepo-aware Metro config (watches the repo root).
@@ -61,7 +62,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, `FriendInvite`, invitation responses). |
+| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, invitation responses), and 2026-09-11 with the groups contract and the generalised invitation contract — `auth.ts`, `friends.ts`, `groups.ts`, `invites.ts`. |
 
 ## Client / server contract
 
@@ -75,8 +76,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   refresh token in the OS secure store and refreshes transparently on 401.
 - The API is JSON everywhere except `GET /i/:code`, the public invitation landing page,
   which is HTML because a browser opens it before the app is involved.
-- Almost every route is authenticated; `GET /friends/invites/:code` is deliberately not,
-  so an invited person can see who is inviting them before signing in.
+- Almost every route is authenticated; `GET /invites/:code` is deliberately not, so an
+  invited person can see who is inviting them — and into what — before signing in.
 
 ## Conventions
 
@@ -123,6 +124,13 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-10 | No deferred deep linking: the landing page shows a code to type in | A third-party attribution SDK (Branch, AppsFlyer) is not worth it before the app is in stores |
 | 2026-09-10 | Friendships stored once per pair, in a canonical order | The unique constraint alone rules out duplicates, including under concurrent acceptance |
 | 2026-09-10 | `FriendSummary` (no email) is how another user is exposed | A public invitation preview must not leak the inviter's email address |
+| 2026-09-11 | One `invites` table and one code space for every kind of invitation | The client captures a code before it can know what it leads to; one link format, one landing page, one preview route |
+| 2026-09-11 | `friends` and `groups` register an `InviteHandler` rather than `invites` knowing them | Keeps the two features independent of each other while sharing the code lifecycle |
+| 2026-09-11 | A `users` read module shared by `friends`, `groups` and `invites` | The open item below came due: a third feature needed `users` |
+| 2026-09-11 | The pair group is keyed by the friendship (`groups.friendship_id`, unique) | "One group per pair, gone with the friendship" becomes a database guarantee, not application logic |
+| 2026-09-11 | Pair groups are created lazily, on first access | No backfill for existing friendships, and `friends` needs no write dependency on `groups` |
+| 2026-09-11 | A non-member gets `404` for a group, never `403` | A `403` would confirm the group exists |
+| 2026-09-11 | One migrated PGlite per *test file*, truncated between tests | A database per test cost seconds each; same isolation, suite down from 92s to 17s |
 
 ## Open items
 
@@ -132,7 +140,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).
-- `users` is shared domain data: the auth feature owns the writes, and other features read
-  it through their own repository rather than importing auth's. If a third feature needs
-  it, extract a `users` module.
+- `users` is shared domain data: the auth feature owns the writes, everyone else reads
+  through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
+  third reader). `friendships` is now in the same position — `groups` reads it directly
+  for the pair group and for "is this person a friend of the caller?", and imports only
+  the pure `orderPair` helper from `friends`. If a third reader appears, extract it the
+  same way.
 - Invitation lifetime (7 days) is a first guess; tune with real usage.
+- Group ownership cannot be transferred, so an inactive owner strands a group nobody can
+  delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).
