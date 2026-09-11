@@ -80,10 +80,15 @@ resolve its compiled output.
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation
   flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
-  invite sharing and opening the group shared with a friend, and the groups feature
+  invite sharing and opening the group shared with a friend, the groups feature
   (`src/features/groups/`): list with the archived toggle, creation with friend selection,
-  and the detail screen including the pair-group variant where every management action is
-  absent.
+  and the detail screen — now transaction-first, with group management behind the
+  "Details" sheet, including the pair-group variant where every management action is
+  absent **but "Add a transaction" is present**, and the transactions feature
+  (`src/features/transactions/`): the split editor (selection, weight stepper, live
+  preview, mode switching, the allocation indicator), the add/edit form (defaults, request
+  shape for each kind, full-replace edit, transfer validation), and the transaction row's
+  "my share" calculation.
 
 ### Gotchas
 

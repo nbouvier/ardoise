@@ -1,12 +1,12 @@
-import type { GroupDetail, GroupMember } from '@splitcount/shared';
+import type { GroupDetail, GroupMember, Transaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
 } from 'react-native';
@@ -18,6 +18,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { GroupBalances } from '@/features/transactions/group-balances';
+import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
+import { TransactionRow } from '@/features/transactions/transaction-row';
+import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 import {
   addGroupMembers,
@@ -32,7 +36,13 @@ import { GroupInviteScreen } from './group-invite-screen';
 import { groupsChanged } from './groups-changed';
 import { useGroup } from './use-group';
 
-type Sheet = 'invite' | 'members' | 'rename' | null;
+/**
+ * `details` is the group-management sheet (members, balances, rename,
+ * archive, invite, leave, delete) — everything that used to sit directly on
+ * this screen before transactions became its primary content. `invite`,
+ * `members` and `rename` are launched from inside it and return to it.
+ */
+type Sheet = 'details' | 'invite' | 'members' | 'rename' | 'transaction' | null;
 
 export function GroupScreen({ groupId }: { groupId: string }) {
   const { status, group, refresh, set } = useGroup(groupId);
@@ -41,7 +51,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   const router = useRouter();
   const theme = useTheme();
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
+  const transactionsResult = useTransactions(groupId);
 
   /**
    * Run a change, keep the screen in sync, and surface a failure plainly.
@@ -109,7 +121,8 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   // A pair group belongs to a friendship: nobody can be added, and it cannot be
   // renamed, archived or deleted. Those actions are absent rather than
-  // disabled — they can never apply.
+  // disabled — they can never apply. Transactions are the exception: they work
+  // exactly like a standard group.
   const managed = group.kind === 'standard';
   const archived = group.archivedAt !== null;
   const isOwner = group.viewerRole === 'owner';
@@ -163,97 +176,54 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     );
   }
 
+  function openNewTransaction() {
+    setEditingTransaction(null);
+    setSheet('transaction');
+  }
+
+  function openTransaction(transaction: Transaction) {
+    setEditingTransaction(transaction);
+    setSheet('transaction');
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ThemedView style={styles.content}>
         <ThemedView style={styles.header}>
-          <ThemedText type="subtitle">{group.name}</ThemedText>
+          <ThemedView style={styles.headerRow}>
+            <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
+              {group.name}
+            </ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Group details"
+              onPress={() => setSheet('details')}
+              style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Details
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
           {archived ? (
             <ThemedText type="small" themeColor="textSecondary">
-              Archived — nothing is lost, and you can reopen it below.
+              Archived — read-only until it’s reopened.
             </ThemedText>
           ) : null}
         </ThemedView>
 
-        <ThemedView type="backgroundElement" style={styles.placeholder}>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            Expenses are coming. For now this is where you and{' '}
-            {group.memberCount === 1 ? 'whoever joins' : 'the others'} will track what you
-            share.
-          </ThemedText>
-        </ThemedView>
+        <TransactionList
+          result={transactionsResult}
+          viewerId={viewerId}
+          archived={archived}
+          onOpen={openTransaction}
+        />
 
-        <ThemedText type="smallBold">
-          {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-        </ThemedText>
-
-        <ThemedView style={styles.members}>
-          {group.members.map((member) => (
-            <MemberRow key={member.id} member={member} />
-          ))}
-        </ThemedView>
-
-        {managed ? (
-          <ThemedView style={styles.actions}>
-            {archived ? null : (
-              <>
-                <Button
-                  label="Add friends"
-                  variant="secondary"
-                  disabled={busy}
-                  onPress={() => setSheet('members')}
-                />
-                <Button
-                  label="Share an invitation link"
-                  variant="secondary"
-                  disabled={busy}
-                  onPress={() => setSheet('invite')}
-                />
-                <Button
-                  label="Rename"
-                  variant="secondary"
-                  disabled={busy}
-                  onPress={() => setSheet('rename')}
-                />
-              </>
-            )}
-
-            <Button
-              label={archived ? 'Reopen group' : 'Archive group'}
-              variant="secondary"
-              busy={busy}
-              onPress={confirmArchive}
-            />
-
-            {/* The owner cannot strand the others; alone, leaving is deleting. */}
-            {!isOwner || alone ? (
-              <Button
-                label="Leave group"
-                variant="secondary"
-                disabled={busy}
-                onPress={confirmLeave}
-              />
-            ) : null}
-
-            {isOwner ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={confirmDelete}
-                style={({ pressed }) => [styles.delete, pressed && styles.pressed]}>
-                <ThemedText type="small" style={styles.deleteLabel}>
-                  Delete this group
-                </ThemedText>
-              </Pressable>
-            ) : null}
+        {archived ? null : (
+          <ThemedView style={styles.footer}>
+            <Button label="Add a transaction" onPress={openNewTransaction} />
           </ThemedView>
-        ) : (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.centeredText}>
-            This is the space you share with {group.name}. It’s just the two of you — to
-            include other people, create a group.
-          </ThemedText>
         )}
-      </ScrollView>
+      </ThemedView>
 
       <Modal
         visible={sheet !== null}
@@ -262,11 +232,29 @@ export function GroupScreen({ groupId }: { groupId: string }) {
         onRequestClose={() => setSheet(null)}>
         <ThemedView style={styles.container}>
           <SafeAreaView style={styles.container}>
+            {sheet === 'details' ? (
+              <DetailsSheet
+                group={group}
+                managed={managed}
+                archived={archived}
+                isOwner={isOwner}
+                alone={alone}
+                busy={busy}
+                onClose={() => setSheet(null)}
+                onAddFriends={() => setSheet('members')}
+                onInvite={() => setSheet('invite')}
+                onRename={() => setSheet('rename')}
+                onArchiveToggle={confirmArchive}
+                onLeave={confirmLeave}
+                onDelete={confirmDelete}
+              />
+            ) : null}
+
             {sheet === 'invite' ? (
               <>
                 <GroupInviteScreen groupId={groupId} groupName={group.name} />
                 <ThemedView style={styles.sheetFooter}>
-                  <Button label="Done" variant="secondary" onPress={() => setSheet(null)} />
+                  <Button label="Done" variant="secondary" onPress={() => setSheet('details')} />
                 </ThemedView>
               </>
             ) : null}
@@ -275,9 +263,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               <AddMembersSheet
                 group={group}
                 busy={busy}
-                onCancel={() => setSheet(null)}
+                onCancel={() => setSheet('details')}
                 onAdd={(memberIds) => {
-                  setSheet(null);
+                  setSheet('details');
                   void run('members.add', () =>
                     addGroupMembers(authorizedFetch, groupId, memberIds),
                   );
@@ -289,16 +277,198 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               <RenameSheet
                 current={group.name}
                 busy={busy}
-                onCancel={() => setSheet(null)}
+                onCancel={() => setSheet('details')}
                 onRename={(name) => {
-                  setSheet(null);
+                  setSheet('details');
                   void run('rename', () => updateGroup(authorizedFetch, groupId, { name }));
                 }}
+              />
+            ) : null}
+
+            {sheet === 'transaction' && viewerId ? (
+              <TransactionFormScreen
+                group={group}
+                viewerId={viewerId}
+                initial={editingTransaction ?? undefined}
+                onSaved={(transaction) => {
+                  transactionsResult.upsert(transaction);
+                  setSheet(null);
+                }}
+                onDeleted={() => {
+                  if (editingTransaction) {
+                    transactionsResult.remove(editingTransaction.id);
+                  }
+                  setSheet(null);
+                }}
+                onCancel={() => setSheet(null)}
               />
             ) : null}
           </SafeAreaView>
         </ThemedView>
       </Modal>
+    </ThemedView>
+  );
+}
+
+function TransactionList({
+  result,
+  viewerId,
+  archived,
+  onOpen,
+}: {
+  result: ReturnType<typeof useTransactions>;
+  viewerId: string | null;
+  archived: boolean;
+  onOpen: (transaction: Transaction) => void;
+}) {
+  const theme = useTheme();
+  const { status, transactions, refresh } = result;
+
+  if (status === 'loading') {
+    return (
+      <ThemedView style={styles.centeredBody}>
+        <ActivityIndicator testID="transactions-loading" color={theme.text} />
+      </ThemedView>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <ThemedView style={styles.centeredBody}>
+        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+          We couldn’t load the transactions. Check your connection and try again.
+        </ThemedText>
+        <Button label="Try again" variant="secondary" onPress={refresh} />
+      </ThemedView>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <ThemedView style={styles.centeredBody}>
+        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+          {archived
+            ? 'This group has no transactions.'
+            : 'No transactions yet. Add one to start tracking what you share.'}
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  if (!viewerId) {
+    return null;
+  }
+
+  return (
+    <FlatList
+      data={transactions}
+      keyExtractor={(transaction) => transaction.id}
+      contentContainerStyle={styles.list}
+      renderItem={({ item }) => (
+        <TransactionRow
+          transaction={item}
+          viewerId={viewerId}
+          onPress={archived ? undefined : onOpen}
+        />
+      )}
+    />
+  );
+}
+
+function DetailsSheet({
+  group,
+  managed,
+  archived,
+  isOwner,
+  alone,
+  busy,
+  onClose,
+  onAddFriends,
+  onInvite,
+  onRename,
+  onArchiveToggle,
+  onLeave,
+  onDelete,
+}: {
+  group: GroupDetail;
+  managed: boolean;
+  archived: boolean;
+  isOwner: boolean;
+  alone: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onAddFriends: () => void;
+  onInvite: () => void;
+  onRename: () => void;
+  onArchiveToggle: () => void;
+  onLeave: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <ThemedView style={styles.sheet}>
+      <ThemedText type="subtitle">{group.name}</ThemedText>
+
+      <ThemedText type="smallBold">
+        {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
+      </ThemedText>
+      <ThemedView style={styles.members}>
+        {group.members.map((member) => (
+          <MemberRow key={member.id} member={member} />
+        ))}
+      </ThemedView>
+
+      <ThemedText type="smallBold">Balances</ThemedText>
+      <GroupBalances groupId={group.id} members={group.members} />
+
+      {managed ? (
+        <ThemedView style={styles.actions}>
+          {archived ? null : (
+            <>
+              <Button label="Add friends" variant="secondary" disabled={busy} onPress={onAddFriends} />
+              <Button
+                label="Share an invitation link"
+                variant="secondary"
+                disabled={busy}
+                onPress={onInvite}
+              />
+              <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
+            </>
+          )}
+
+          <Button
+            label={archived ? 'Reopen group' : 'Archive group'}
+            variant="secondary"
+            busy={busy}
+            onPress={onArchiveToggle}
+          />
+
+          {/* The owner cannot strand the others; alone, leaving is deleting. */}
+          {!isOwner || alone ? (
+            <Button label="Leave group" variant="secondary" disabled={busy} onPress={onLeave} />
+          ) : null}
+
+          {isOwner ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={onDelete}
+              style={({ pressed }) => [styles.delete, pressed && styles.pressed]}>
+              <ThemedText type="small" style={styles.deleteLabel}>
+                Delete this group
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </ThemedView>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.centeredText}>
+          This is the space you share with {group.name}. It’s just the two of you — to
+          include other people, create a group.
+        </ThemedText>
+      )}
+
+      <ThemedView style={styles.sheetFooter}>
+        <Button label="Close" variant="secondary" onPress={onClose} />
+      </ThemedView>
     </ThemedView>
   );
 }
@@ -415,18 +585,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    flex: 1,
     alignSelf: 'center',
     width: '100%',
     maxWidth: MaxContentWidth,
-    padding: Spacing.four,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
     gap: Spacing.three,
   },
   header: {
     gap: Spacing.one,
   },
-  placeholder: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  headerTitle: {
+    flex: 1,
+  },
+  detailsButton: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+  },
+  list: {
+    paddingVertical: Spacing.two,
+  },
+  centeredBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.three,
+    padding: Spacing.four,
+  },
+  footer: {
+    paddingBottom: Spacing.four,
   },
   members: {
     gap: Spacing.two,

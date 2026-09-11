@@ -159,3 +159,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   now to avoid keeping a derived total in sync before the read pattern is known.
 - The transaction list has no pagination yet (`docs/specs/transactions.md`); revisit once
   a group's history grows large enough to matter.
+- The transaction date is a plain `YYYY-MM-DD` text field on mobile: no native date-picker
+  library (e.g. `@react-native-community/datetimepicker`) is wired in yet, and adding one
+  means a native rebuild (`expo prebuild`, see `docs/MOBILE.md`) — deliberately deferred
+  rather than done silently mid-feature. Revisit once someone actually needs one.

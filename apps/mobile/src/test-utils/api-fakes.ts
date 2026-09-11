@@ -55,3 +55,27 @@ export const groupDetail = {
   ],
   viewerRole: 'owner' as const,
 };
+
+export const transaction = {
+  id: '44444444-4444-4444-8444-444444444444',
+  groupId: groupSummary.id,
+  kind: 'expense' as const,
+  title: 'Groceries',
+  amountCents: 4250,
+  occurredOn: '2026-09-11',
+  comment: null,
+  payer: ada,
+  splitMode: 'shares' as const,
+  participants: [
+    { user: ada, shareCents: 2125, weight: 1 },
+    { user: grace, shareCents: 2125, weight: 1 },
+  ],
+  createdBy: ada.id,
+  createdAt: '2026-09-11T12:00:00.000Z',
+  updatedAt: '2026-09-11T12:00:00.000Z',
+};
+
+export const balances = [
+  { userId: ada.id, amountCents: 2125 },
+  { userId: grace.id, amountCents: -2125 },
+];
