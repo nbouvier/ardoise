@@ -9,6 +9,7 @@ current setup and state.
 | --------------- | --------- | ------------------------------------------- |
 | `apps/mobile`   | jest-expo | `npm run test --workspace @splitcount/mobile` |
 | `apps/server`   | Vitest    | `npm run test --workspace @splitcount/server` |
+| `packages/shared` | Vitest  | `npm run test --workspace @splitcount/shared` |
 
 From the repository root:
 
@@ -55,7 +56,11 @@ resolve its compiled output.
 `@types/jest` is not wired). Use `@testing-library/react-native` for component tests.
 `transformIgnorePatterns` also transforms `@splitcount/shared`; native modules are mocked
 (`__mocks__/`), and injected fakes (`GoogleModule`, `TokenStore`) keep native code out of
-`AuthClient` tests.
+`AuthClient` tests. `@expo/ui`'s date picker is mocked the same way
+(`__mocks__/@expo/ui/community/datetime-picker.tsx`, mapped explicitly in `moduleNameMapper`
+since it's a deep subpath import): pressing the mock reports a fixed date, enough to test
+the wiring around it without a real host view, which Jest cannot render. Real calendar
+interaction is a device concern.
 
 ## Current state
 
@@ -66,15 +71,29 @@ resolve its compiled output.
   (`src/features/friends/`) covering the invitation lifecycle and friendship symmetry;
   groups unit + integration tests (`src/features/groups/`) covering membership
   authorization on every route, archiving, deletion cascades, group invitations, and the
-  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend).
+  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend);
+  transactions unit + integration tests (`src/features/transactions/`) covering the
+  balance calculation (sign convention, sum-to-zero) in isolation, and end-to-end: every
+  split shape, the pair-group regression (transactions must **not** be refused by the
+  same guard that blocks every other pair-group mutation), archived-group read-only
+  behaviour, cross-group transaction access, and cascade deletion.
+- `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
+  many generated totals/weights/group sizes, rounding determinism, tie-breaking — and the
+  transaction request schema's shape per kind.
 - `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation
   flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
-  invite sharing and opening the group shared with a friend, and the groups feature
+  invite sharing and opening the group shared with a friend, the groups feature
   (`src/features/groups/`): list with the archived toggle, creation with friend selection,
-  and the detail screen including the pair-group variant where every management action is
-  absent.
+  and the detail screen — now transaction-first, with group management behind the
+  "Details" sheet, including the pair-group variant where every management action is
+  absent **but "Add a transaction" is present**, and the transactions feature
+  (`src/features/transactions/`): the split editor (selection, weight stepper, live
+  preview, mode switching, the allocation indicator), the add/edit form (defaults, request
+  shape for each kind, full-replace edit, transfer validation), the transaction row's
+  "my share" calculation, and the date field's local-date conversion (no time-zone shift)
+  and its iOS/Android wiring.
 
 ### Gotchas
 

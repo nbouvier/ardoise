@@ -27,21 +27,28 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   invitation link (copy or OS share sheet: SMS, mail, WhatsApp…). The link opens the app,
   prompts for Google sign-in if needed, and connects both people after an explicit
   confirmation. See `docs/specs/friends-and-invitations.md`.
-- **Groups** — named spaces that people belong to, and where expenses will live. A user
+- **Groups** — named spaces that people belong to, and where transactions live. A user
   creates a group, adds friends to it, or shares an invitation link for anyone else.
   Groups can be archived (reversible, hidden behind a toggle in the list) or deleted
   (permanent). Every pair of friends also shares an **implicit group**, opened by tapping
   that friend: unlisted, two people forever, otherwise a normal group.
   See `docs/specs/groups.md`.
+- **Group transactions** — any member records an expense, an income, or a transfer in a
+  group: a title, an amount, a date, an optional comment, who it's attributed to
+  (defaulting to the recorder), and who it concerns. Splitting defaults to equal shares
+  and can be changed to weighted shares or fixed amounts per person. Any member can edit
+  or delete any transaction. Works identically in the implicit pair group; an archived
+  group is read-only for transactions. Balances are not computed yet — a transaction is
+  recorded, not yet reflected in a running total. See `docs/specs/transactions.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
-`/health`, auth, friends, invitations and groups, tooling and documentation. Groups hold
-members but no expenses yet.
+`/health`, auth, friends, invitations, groups and group transactions, tooling and
+documentation.
 
 ## Planned direction
 
-- Expense entry inside a group, with flexible splitting between members.
-- Running balances and settle-up suggestions.
+- Running balances per member and settle-up suggestions, built on the transaction data
+  now recorded.
 - Better tracking and organisation than Tricount (categories, history, clarity).
 
 ## Not yet decided
@@ -52,6 +59,8 @@ members but no expenses yet.
 - Notifying the inviter when someone accepts an invitation (needs push notifications).
 - Whether group ownership can be transferred, and whether a pair group can be cleared
   without removing the friend.
+- Whether transactions need an edit history, given any member can change or remove
+  another member's entry with no trace kept.
 
 ## Feature specifications
 

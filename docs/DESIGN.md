@@ -68,20 +68,67 @@ shows the toggle, not the empty state.
 
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
-Pushed above the tabs, so it has a back button. Name, an "Archived" note when it applies,
-a placeholder for the expenses to come, the member list (avatar + name, "Owner" on the
-owner), then the actions.
+Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
+the group's name, an "Archived" note when it applies, the transaction list
+(`TransactionRow`: title, date, kind, payer, and the viewer's own share, coloured), and a
+primary "Add a transaction" button — absent on an archived group. A row opens the same
+add/edit sheet, pre-filled; on an archived group rows render but are not pressable, read
+only. Empty state: an explanation and the same "Add a transaction" action.
 
-**One screen for both kinds of group.** For a pair group every management action is
-**absent** — not disabled — because it can never apply, and a closing line explains that
-it is just the two of them. For a standard group: "Add friends", "Share an invitation
-link" and "Rename" (all three gone while archived), "Archive group" / "Reopen group",
-"Leave group" (hidden for an owner who still has company), and a red text-only "Delete
-this group" for the owner. Destructive actions confirm through an `Alert` that states what
-is lost.
+Group management — everything that used to sit directly on this screen — moved behind a
+small "Details" button in the header, opening a sheet: the member list (avatar + name,
+"Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
+net, coloured, "settled up" at zero — a member who left with an unsettled balance still
+appears, without an avatar), then the management actions.
+
+**One screen for both kinds of group**, in both the main view and the details sheet.
+**Transactions behave identically on a pair group** — the one thing that does. Every
+management action stays **absent**, not disabled, on a pair group, and the details
+sheet's closing line explains that it is just the two of them. For a standard group:
+"Add friends", "Share an invitation link" and "Rename" (all three gone while archived),
+"Archive group" / "Reopen group", "Leave group" (hidden for an owner who still has
+company), and a red text-only "Delete this group" for the owner. Destructive actions
+confirm through an `Alert` that states what is lost.
 
 States: loading, "This group is gone" (deleted, or the viewer was removed — no retry, just
 a way back), and a retryable connection error.
+
+### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
+
+One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
+"Delete this transaction". Kind picker (Expense / Income / Transfer), title, amount, date
+(`DatePickerField` — see below), optional comment, then "Who paid" (`MemberSelect`,
+defaulting to the signed-in member). An expense or income continues with "Who it
+concerns" (`SplitEditor`); a transfer replaces it with a single "To" picker instead, excluding the
+payer. "Save" is disabled until the title, amount, date and split are all valid.
+
+### Split editor (`src/features/transactions/split-editor.tsx`)
+
+Every member as a checkbox row (all pre-selected by default, on the caller's side — this
+component just edits whatever selection it is given), plus a **Shares / Fixed amounts**
+toggle. In shares mode each checked member gets a −/+ weight stepper (default 1 — an
+equal split is simply everyone at the same weight) and a live-computed "= 12.34" preview
+of their cut, using the same rounding as the server. In fixed-amount mode each checked
+member gets an amount field instead, with a running "X left to allocate" / "X over the
+total" line — green when it balances, red otherwise. Switching modes seeds fixed amounts
+from the shares preview, and resets shares to equal weights, rather than losing the
+selection.
+
+### Date field (`src/features/transactions/date-picker-field.tsx`)
+
+A native picker via `@expo/ui`, one component with the platform split inside it rather
+than as separate files, since only the trigger differs:
+
+- **iOS** — an inline `compact` SwiftUI `DatePicker`: a small tappable field that pops its
+  own calendar, no extra chrome needed.
+- **Android** — Compose has no inline "compact field" equivalent, so a plain field shows
+  the formatted date and tapping it opens the Material dialog picker; it unmounts on
+  confirmation or dismissal.
+- **Web** — `@expo/ui` has no host views there at all (`date-picker-field.web.tsx`): the
+  same plain `YYYY-MM-DD` text field every platform used before this existed.
+
+`@expo/ui` was already a dependency, unused until now — see `docs/MOBILE.md` for the
+native-rebuild consequence of that.
 
 ### Create a group (`src/features/groups/create-group-screen.tsx`)
 
@@ -151,9 +198,12 @@ is stale — restart the dev server rather than working around the type.
 
 ## Current state
 
-Auth screens (sign-in, account, gate), the friends screens and the groups screens are
-real. The Expo starter Home tab is gone — Groups took its place. Groups hold members but
-no expenses yet, and say so.
+Auth screens (sign-in, account, gate), the friends screens, the groups screens and the
+transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
+Groups now hold transactions and show balances; settle-up suggestions are not built yet.
 
-The groups screens are covered by component tests but have **not** been validated on a
-device yet: web sign-in is disabled, so they cannot be reached on the web target.
+The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
+text field on web (see "Date field" above and `docs/MOBILE.md`).
+
+These screens are covered by component tests but have **not** been validated on a device
+yet: web sign-in is disabled, so they cannot be reached on the web target.

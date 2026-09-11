@@ -6,6 +6,10 @@ import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
 import { friendsPlugin } from './features/friends/plugin.js';
 import { groupsPlugin, type GroupsPluginOptions } from './features/groups/plugin.js';
 import { invitesPlugin, type InvitesPluginOptions } from './features/invites/plugin.js';
+import {
+  transactionsPlugin,
+  type TransactionsPluginOptions,
+} from './features/transactions/plugin.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -17,6 +21,8 @@ export interface BuildAppOptions {
   invites?: InvitesPluginOptions;
   /** Groups plugin overrides. Tests pass a fake clock here. */
   groups?: GroupsPluginOptions;
+  /** Transactions plugin overrides. Tests pass a fake clock here. */
+  transactions?: TransactionsPluginOptions;
 }
 
 /**
@@ -46,6 +52,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(invitesPlugin, { ...options.invites });
   app.register(friendsPlugin);
   app.register(groupsPlugin, { ...options.groups });
+  app.register(transactionsPlugin, { ...options.transactions });
 
   registerHealthRoutes(app);
 

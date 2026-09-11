@@ -1,6 +1,6 @@
-import type { FriendSummary, GroupDetail } from '@splitcount/shared';
+import type { Balance, FriendSummary, GroupDetail, Transaction } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { ApiError } from '@/lib/api/errors';
 
@@ -45,7 +45,33 @@ const pair: GroupDetail = {
   viewerRole: 'member',
 };
 
+const groceries: Transaction = {
+  id: '66666666-6666-4666-8666-666666666666',
+  groupId: trip.id,
+  kind: 'expense',
+  title: 'Groceries',
+  amountCents: 4250,
+  occurredOn: '2026-09-11',
+  comment: null,
+  payer: ada,
+  splitMode: 'shares',
+  participants: [
+    { user: ada, shareCents: 2125, weight: 1 },
+    { user: grace, shareCents: 2125, weight: 1 },
+  ],
+  createdBy: ada.id,
+  createdAt: '2026-09-11T12:00:00.000Z',
+  updatedAt: '2026-09-11T12:00:00.000Z',
+};
+
+const balances: Balance[] = [
+  { userId: ada.id, amountCents: 2125 },
+  { userId: grace.id, amountCents: -2125 },
+];
+
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
+const mockFetchTransactions = jest.fn<() => Promise<Transaction[]>>();
+const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 
 const mockAuthContext = {
   authorizedFetch: jest.fn(),
@@ -66,6 +92,14 @@ jest.mock('@/lib/api/groups', () => ({
   rotateGroupInvite: jest.fn(),
 }));
 
+jest.mock('@/lib/api/transactions', () => ({
+  fetchTransactions: () => mockFetchTransactions(),
+  fetchBalances: () => mockFetchBalances(),
+  createTransaction: jest.fn(),
+  updateTransaction: jest.fn(),
+  deleteTransaction: jest.fn(),
+}));
+
 jest.mock('@/lib/api/friends', () => ({
   fetchFriends: async () => [],
   removeFriend: jest.fn(),
@@ -77,22 +111,52 @@ jest.mock('expo-router', () => ({
 
 beforeEach(() => {
   mockFetchGroup.mockReset().mockResolvedValue(trip);
+  mockFetchTransactions.mockReset().mockResolvedValue([]);
+  mockFetchBalances.mockReset().mockResolvedValue([]);
 });
 
+async function openDetails() {
+  await fireEvent.press(screen.getByRole('button', { name: 'Group details' }));
+}
+
 describe('GroupScreen', () => {
-  it('shows the group, its size and its members', async () => {
+  it('shows the group name and its transactions', async () => {
+    mockFetchTransactions.mockResolvedValue([groceries]);
+
     await render(<GroupScreen groupId={trip.id} />);
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
-    expect(screen.getByText('2 members')).toBeTruthy();
-    expect(screen.getByText('Grace Hopper')).toBeTruthy();
-    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(await screen.findByText('Groceries')).toBeTruthy();
   });
 
-  it('offers the management actions to a member', async () => {
+  it('shows an empty state and an "Add a transaction" action', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
+    expect(await screen.findByText(/No transactions yet/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /add a transaction/i })).toBeTruthy();
+  });
+
+  it('opens the add-transaction form', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
+
+    expect(await screen.findByLabelText('Title')).toBeTruthy();
+  });
+
+  it('keeps membership actions behind "Group details", alongside members and balances', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    for (const action of [/add friends/i, /share an invitation link/i, /rename/i, /archive group/i]) {
+      expect(screen.queryByRole('button', { name: action })).toBeNull();
+    }
+
+    await openDetails();
+
+    expect(await screen.findByText('Grace Hopper')).toBeTruthy();
     for (const action of [/add friends/i, /share an invitation link/i, /rename/i, /archive group/i]) {
       expect(screen.getByRole('button', { name: action })).toBeTruthy();
     }
@@ -101,8 +165,9 @@ describe('GroupScreen', () => {
   it('keeps deletion to the owner', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
+    await openDetails();
 
-    expect(screen.getByRole('button', { name: /delete this group/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /delete this group/i })).toBeTruthy();
     // The owner cannot strand the others.
     expect(screen.queryByRole('button', { name: /leave group/i })).toBeNull();
   });
@@ -112,30 +177,49 @@ describe('GroupScreen', () => {
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
+    await openDetails();
 
-    expect(screen.getByRole('button', { name: /leave group/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /leave group/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /delete this group/i })).toBeNull();
   });
 
-  it('drops the membership actions of an archived group, and offers to reopen it', async () => {
+  it('hides "Add a transaction" and drops the membership actions of an archived group', async () => {
     mockFetchGroup.mockResolvedValue({ ...trip, archivedAt: '2026-09-12T12:00:00.000Z' });
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
     expect(screen.getByText(/Archived/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /reopen group/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /add a transaction/i })).toBeNull();
+
+    await openDetails();
+
+    expect(await screen.findByRole('button', { name: /reopen group/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /add friends/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /share an invitation link/i })).toBeNull();
   });
 
-  it('shows a pair group named after the other person, with no way to change who is in it', async () => {
+  it('offers a transaction on a pair group exactly like a standard one', async () => {
     mockFetchGroup.mockResolvedValue(pair);
 
     await render(<GroupScreen groupId={pair.id} />);
+    await screen.findByText('Grace Hopper');
 
-    // The other person names the group *and* appears in its member list.
-    expect(await screen.findAllByText('Grace Hopper')).toHaveLength(2);
+    // Transactions are the one thing that behaves the same on a pair group.
+    expect(await screen.findByRole('button', { name: /add a transaction/i })).toBeTruthy();
+  });
+
+  it('shows a pair group named after the other person, with no way to change who is in it', async () => {
+    mockFetchGroup.mockResolvedValue(pair);
+    mockFetchBalances.mockResolvedValue(balances);
+
+    await render(<GroupScreen groupId={pair.id} />);
+    await screen.findByText('Grace Hopper');
+    await openDetails();
+
+    // The other person names the group (header + details heading) *and*
+    // appears in both the member list and the balances list.
+    expect(await screen.findAllByText('Grace Hopper')).toHaveLength(4);
     // Absent, not disabled: none of these can ever apply to a pair group.
     for (const action of [
       /add friends/i,

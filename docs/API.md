@@ -275,7 +275,123 @@ The group the caller shares with a friend, **created on first access**. Idempote
 safe under concurrency: the unique constraint on the friendship guarantees one group per
 pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends.
 
+## Transactions
+
+See `docs/specs/transactions.md`. Every route below requires authentication and resolves
+the caller's group membership first, exactly like every other group route — a non-member
+gets `404 { "error": "group_not_found" }`. **Unlike every other group route, these work
+identically on the implicit pair group** — transactions are the point of it.
+
+An **archived group is fully read-only for transactions**: `POST`, `PATCH` and `DELETE`
+all refuse with `409 { "error": "group_archived" }`; `GET` still works.
+
+Shared error codes, beyond the ones `groups` already defines:
+
+| Status | Code                 | Meaning                                                        |
+| ------ | -------------------- | ---------------------------------------------------------------- |
+| `404`  | `transaction_not_found` | Unknown id, or it belongs to a different group than the URL's |
+| `400`  | `not_group_member`   | The payer, a concerned member, or a transfer's recipient isn't a current member of the group |
+| `400`  | `invalid_split`      | A fixed-amount split doesn't sum to the total, or a transfer targets the payer |
+
+`kind` is one of `expense` / `income` / `transfer`; `splitMode` is `shares` or `amount`.
+Amounts are integer cents throughout. Any member can record, edit or delete any
+transaction — there is no per-transaction ownership.
+
+`Transaction` is:
+
+```json
+{
+  "id": "<uuid>",
+  "groupId": "<uuid>",
+  "kind": "expense",
+  "title": "Groceries",
+  "amountCents": 4250,
+  "occurredOn": "2026-09-11",
+  "comment": null,
+  "payer": "<FriendSummary>",
+  "splitMode": "shares",
+  "participants": [
+    { "user": "<FriendSummary>", "shareCents": 2125, "weight": 1 }
+  ],
+  "createdBy": "<uuid>",
+  "createdAt": "2026-09-11T12:00:00.000Z",
+  "updatedAt": "2026-09-11T12:00:00.000Z"
+}
+```
+
+`weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
+a single-participant amount split).
+
+### `GET /groups/:groupId/transactions`
+
+The group's transactions, most recent first (by date, then by recording order for
+same-day entries). Response `200 { "transactions": ["<Transaction>"] }`.
+
+### `POST /groups/:groupId/transactions`
+
+Record a transaction. `payerId` and every concerned member must be current members of
+the group. Request, discriminated on `kind`:
+
+```json
+{
+  "kind": "expense",
+  "title": "Groceries",
+  "amount": 4250,
+  "occurredOn": "2026-09-11",
+  "comment": null,
+  "payerId": "<uuid>",
+  "split": {
+    "mode": "shares",
+    "participants": [{ "userId": "<uuid>", "weight": 1 }]
+  }
+}
+```
+
+`income` has the same shape as `expense`. A `transfer` has no `split`; instead:
+
+```json
+{
+  "kind": "transfer",
+  "title": "Reimbursement",
+  "amount": 2000,
+  "occurredOn": "2026-09-11",
+  "payerId": "<uuid>",
+  "toUserId": "<uuid>"
+}
+```
+
+A `split` with `"mode": "amount"` takes a fixed `amount` per participant instead of a
+`weight`, and must sum exactly to the transaction's `amount`. Response
+`201 { "transaction": "<Transaction>" }`.
+
+### `GET /groups/:groupId/transactions/:transactionId`
+
+A single transaction. Response `200 { "transaction": "<Transaction>" }`.
+
+### `PATCH /groups/:groupId/transactions/:transactionId`
+
+Edit a transaction. **A full replace, not a partial update** — the request is the same
+shape as `POST`, every field required, because a transaction's fields are interdependent
+(the kind drives whether a split or a single recipient applies). Response
+`200 { "transaction": "<Transaction>" }`.
+
+### `DELETE /groups/:groupId/transactions/:transactionId`
+
+Delete a transaction. Immediate and permanent. Response `204`.
+
+### `GET /groups/:groupId/transactions/balances`
+
+Every member's net balance in the group: positive means the group owes them, negative
+means they owe the group. Every current member appears, including at zero; a member who
+left with an unsettled balance still appears too. Computed on the fly from the
+transactions, not stored — see `docs/ARCHITECTURE.md`.
+
+Response `200`:
+
+```json
+{ "balances": [{ "userId": "<uuid>", "amountCents": 500 }] }
+```
+
 ## Planned
 
-- Expenses CRUD with split definitions.
-- Balances / settle-up.
+- Settle-up suggestions (minimising the number of payments to clear a group's balances).

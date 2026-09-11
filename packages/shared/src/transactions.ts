@@ -1,0 +1,221 @@
+import { z } from 'zod';
+
+import { friendSummarySchema } from './friends.js';
+
+/**
+ * `expense` — the payer spent on behalf of the people it concerns; each of
+ * them owes the payer their share. `income` — the reverse: the payer
+ * received money on their behalf; each of them is owed their share. `transfer`
+ * — one member reimburses another for the full amount; nothing to split.
+ * See `docs/specs/transactions.md`.
+ */
+export const transactionKindSchema = z.enum(['expense', 'income', 'transfer']);
+export type TransactionKind = z.infer<typeof transactionKindSchema>;
+
+/**
+ * `shares` (the default) divides the amount proportionally to a weight per
+ * participant — equal split is simply everyone at weight 1. `amount` takes a
+ * fixed amount per participant instead of computing one.
+ */
+export const splitModeSchema = z.enum(['shares', 'amount']);
+export type SplitMode = z.infer<typeof splitModeSchema>;
+
+/** 999,999.99 in the transaction's implicit currency, in cents. */
+export const MAX_TRANSACTION_AMOUNT_CENTS = 99_999_999;
+
+export const transactionAmountSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(MAX_TRANSACTION_AMOUNT_CENTS);
+
+export const transactionTitleSchema = z.string().trim().min(1).max(80);
+export const transactionCommentSchema = z.string().trim().min(1).max(500);
+
+/** How much a participant counts for, relative to the others, in a shares split. */
+export const shareWeightSchema = z.number().int().min(1).max(1000);
+
+/** A participant's cents of the total — a shares split's output, or an amount split's input. */
+export const shareCentsSchema = z.number().int().min(0).max(MAX_TRANSACTION_AMOUNT_CENTS);
+
+export const sharesSplitParticipantSchema = z.object({
+  userId: z.uuid(),
+  weight: shareWeightSchema,
+});
+export type SharesSplitParticipant = z.infer<typeof sharesSplitParticipantSchema>;
+
+export const amountSplitParticipantSchema = z.object({
+  userId: z.uuid(),
+  amount: shareCentsSchema,
+});
+export type AmountSplitParticipant = z.infer<typeof amountSplitParticipantSchema>;
+
+/** No duplicate participant, in either split mode — each person appears once. */
+function hasUniqueUserIds(participants: readonly { userId: string }[]): boolean {
+  return new Set(participants.map((p) => p.userId)).size === participants.length;
+}
+
+export const splitInputSchema = z
+  .discriminatedUnion('mode', [
+    z.object({
+      mode: z.literal('shares'),
+      participants: z.array(sharesSplitParticipantSchema).min(1).max(100),
+    }),
+    z.object({
+      mode: z.literal('amount'),
+      participants: z.array(amountSplitParticipantSchema).min(1).max(100),
+    }),
+  ])
+  .refine((value) => hasUniqueUserIds(value.participants), {
+    message: 'duplicate participant',
+    path: ['participants'],
+  });
+export type SplitInput = z.infer<typeof splitInputSchema>;
+
+const transactionCommonFields = {
+  title: transactionTitleSchema,
+  amount: transactionAmountSchema,
+  occurredOn: z.iso.date(),
+  comment: transactionCommentSchema.nullable().optional(),
+  payerId: z.uuid(),
+};
+
+/**
+ * `POST /groups/:groupId/transactions` and `PATCH .../transactions/:txId`: the
+ * latter is a full replace (all fields required), not a partial update — a
+ * transaction's fields are interdependent (kind drives whether a split or a
+ * single recipient applies), so there is no useful partial shape.
+ */
+export const createTransactionRequestSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('expense'),
+    ...transactionCommonFields,
+    split: splitInputSchema,
+  }),
+  z.object({
+    kind: z.literal('income'),
+    ...transactionCommonFields,
+    split: splitInputSchema,
+  }),
+  z.object({
+    kind: z.literal('transfer'),
+    ...transactionCommonFields,
+    /** The one person being reimbursed. Must differ from `payerId`. */
+    toUserId: z.uuid(),
+  }),
+]);
+export type CreateTransactionRequest = z.infer<typeof createTransactionRequestSchema>;
+
+export const updateTransactionRequestSchema = createTransactionRequestSchema;
+export type UpdateTransactionRequest = CreateTransactionRequest;
+
+/** A transaction's participant as returned by the API, resolved to a live user. */
+export const transactionParticipantSchema = z.object({
+  user: friendSummarySchema,
+  shareCents: z.number().int(),
+  /** Only meaningful when the transaction's `splitMode` is `shares`. */
+  weight: z.number().int().nullable(),
+});
+export type TransactionParticipant = z.infer<typeof transactionParticipantSchema>;
+
+export const transactionSchema = z.object({
+  id: z.uuid(),
+  groupId: z.uuid(),
+  kind: transactionKindSchema,
+  title: z.string().min(1),
+  amountCents: z.number().int(),
+  occurredOn: z.iso.date(),
+  comment: z.string().nullable(),
+  payer: friendSummarySchema,
+  splitMode: splitModeSchema,
+  participants: z.array(transactionParticipantSchema),
+  createdBy: z.uuid(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type Transaction = z.infer<typeof transactionSchema>;
+
+export const transactionsListResponseSchema = z.object({
+  transactions: z.array(transactionSchema),
+});
+export type TransactionsListResponse = z.infer<typeof transactionsListResponseSchema>;
+
+export const transactionResponseSchema = z.object({ transaction: transactionSchema });
+export type TransactionResponse = z.infer<typeof transactionResponseSchema>;
+
+/** `GET /groups/:groupId/transactions/balances`. Positive: the group owes them. */
+export const balanceSchema = z.object({
+  userId: z.uuid(),
+  amountCents: z.number().int(),
+});
+export type Balance = z.infer<typeof balanceSchema>;
+
+export const balancesResponseSchema = z.object({ balances: z.array(balanceSchema) });
+export type BalancesResponse = z.infer<typeof balancesResponseSchema>;
+
+// --- Split arithmetic -------------------------------------------------
+//
+// Pure, dependency-free math shared by both apps: the client uses it for a
+// live preview while composing a transaction, the server uses it as the
+// authority and recomputes independently of whatever the client sent. Kept
+// here so the two can never drift into splitting the same input differently.
+
+export interface SplitShare {
+  userId: string;
+  shareCents: number;
+}
+
+/**
+ * Divide `totalCents` among `participants` proportionally to weight, rounding
+ * to the cent with the largest-remainder method: each participant first gets
+ * `floor(total * weight / totalWeight)`, then the leftover cents (always
+ * fewer than the participant count) go one by one to the largest fractional
+ * remainders. Ties break on `userId` (lexicographic), so the same input
+ * always splits the same way — on the client and on the server alike.
+ *
+ * The result always sums to exactly `totalCents`.
+ */
+export function splitByShares(
+  totalCents: number,
+  participants: readonly SharesSplitParticipant[],
+): SplitShare[] {
+  if (participants.length === 0) {
+    throw new Error('splitByShares: at least one participant is required');
+  }
+
+  const totalWeight = participants.reduce((sum, p) => sum + p.weight, 0);
+  if (totalWeight <= 0) {
+    throw new Error('splitByShares: total weight must be positive');
+  }
+
+  const withRemainders = participants.map((p) => {
+    const exact = (totalCents * p.weight) / totalWeight;
+    const shareCents = Math.floor(exact);
+    return { userId: p.userId, shareCents, remainder: exact - shareCents };
+  });
+
+  let leftover = totalCents - withRemainders.reduce((sum, p) => sum + p.shareCents, 0);
+
+  // Largest remainder first; lexicographic userId breaks ties deterministically.
+  const byRemainder = [...withRemainders].sort((a, b) => {
+    if (b.remainder !== a.remainder) {
+      return b.remainder - a.remainder;
+    }
+    return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
+  });
+
+  for (const entry of byRemainder) {
+    if (leftover <= 0) {
+      break;
+    }
+    entry.shareCents += 1;
+    leftover -= 1;
+  }
+
+  return withRemainders.map(({ userId, shareCents }) => ({ userId, shareCents }));
+}
+
+/** Whether a set of shares sums to exactly `totalCents` — the split invariant. */
+export function splitSumsTo(totalCents: number, shares: readonly SplitShare[]): boolean {
+  return shares.reduce((sum, share) => sum + share.shareCents, 0) === totalCents;
+}
