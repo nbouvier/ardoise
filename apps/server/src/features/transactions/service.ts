@@ -6,6 +6,7 @@ import type {
   GroupDetail,
   SplitMode,
   Transaction,
+  TransactionCategory,
   TransactionKind,
   UpdateTransactionRequest,
 } from '@splitcount/shared';
@@ -110,6 +111,7 @@ function toTransactionFields(
     amountCents: input.amount,
     occurredOn: input.occurredOn,
     comment: input.comment ?? null,
+    category: input.category ?? null,
     payerId: input.payerId,
     splitMode,
   };
@@ -135,6 +137,7 @@ function toTransaction(
     amountCents: row.amountCents,
     occurredOn: row.occurredOn,
     comment: row.comment,
+    category: row.category as TransactionCategory | null,
     payer: resolveUser(userMap, row.payerId),
     splitMode: row.splitMode as SplitMode,
     participants: participants.map((participant) => ({

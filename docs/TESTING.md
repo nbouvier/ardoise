@@ -83,7 +83,8 @@ interaction is a device concern.
   balance calculation (sign convention, sum-to-zero) in isolation, and end-to-end: every
   split shape, the pair-group regression (transactions must **not** be refused by the
   same guard that blocks every other pair-group mutation), archived-group read-only
-  behaviour, cross-group transaction access, and cascade deletion.
+  behaviour, cross-group transaction access, cascade deletion, and the category field
+  (round-trips, defaults to none, an unknown value is refused, clearing it back to none).
 - `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
   many generated totals/weights/group sizes, rounding determinism, tie-breaking — and the
   transaction request schema's shape per kind.

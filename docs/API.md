@@ -310,8 +310,9 @@ Shared error codes, beyond the ones `groups` already defines:
 | `400`  | `invalid_split`      | A fixed-amount split doesn't sum to the total, or a transfer targets the payer |
 
 `kind` is one of `expense` / `income` / `transfer`; `splitMode` is `shares` or `amount`.
-Amounts are integer cents throughout. Any member can record, edit or delete any
-transaction — there is no per-transaction ownership.
+`category` is one of a fixed preset list, or `null` — see "Categories" below. Amounts are
+integer cents throughout. Any member can record, edit or delete any transaction — there
+is no per-transaction ownership.
 
 `Transaction` is:
 
@@ -324,6 +325,7 @@ transaction — there is no per-transaction ownership.
   "amountCents": 4250,
   "occurredOn": "2026-09-11",
   "comment": null,
+  "category": "groceries",
   "payer": "<FriendSummary>",
   "splitMode": "shares",
   "participants": [
@@ -337,6 +339,12 @@ transaction — there is no per-transaction ownership.
 
 `weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
 a single-participant amount split).
+
+**Categories** are a fixed, closed preset list (`@splitcount/shared`'s `categories.ts`) —
+`groceries`, `restaurant`, `leisure`, `housing`, `transport`, `travel`, `health`,
+`shopping`, `bills`, `gifts`, `education`, `pets`, `other`. There is no route to create,
+rename or list them dynamically; the emoji and label for each key are a client-side
+lookup (`categoryDefinition()`), not part of the `Transaction` response.
 
 ### `GET /groups/:groupId/transactions`
 
@@ -355,6 +363,7 @@ the group. Request, discriminated on `kind`:
   "amount": 4250,
   "occurredOn": "2026-09-11",
   "comment": null,
+  "category": "groceries",
   "payerId": "<uuid>",
   "split": {
     "mode": "shares",
@@ -362,6 +371,10 @@ the group. Request, discriminated on `kind`:
   }
 }
 ```
+
+`category` is optional (omit or `null` for none) and validated against the fixed preset
+list — an unrecognised value is `400 { "error": "invalid_request" }`, the same as any
+other malformed field.
 
 `income` has the same shape as `expense`. A `transfer` has no `split`; instead:
 

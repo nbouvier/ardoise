@@ -20,6 +20,7 @@ function transaction(overrides: Partial<TransactionRow> = {}): TransactionRow {
     amountCents: 1000,
     occurredOn: '2026-09-11',
     comment: null,
+    category: null,
     payerId: 'alice',
     splitMode: 'shares',
     createdBy: 'alice',

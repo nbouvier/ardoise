@@ -17,6 +17,7 @@ export interface TransactionFields {
   amountCents: number;
   occurredOn: string;
   comment: string | null;
+  category: string | null;
   payerId: string;
   splitMode: string;
 }
