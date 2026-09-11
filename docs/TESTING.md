@@ -54,6 +54,18 @@ resolve its compiled output.
 ## Current state
 
 - `apps/server`: `GET /health` integration test; database migration tests
-  (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`).
+  (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`);
+  friends unit + integration tests (`src/features/friends/`), covering invitation
+  lifecycle, friendship symmetry and the HTML landing page (including escaping).
 - `apps/mobile`: API endpoints (`src/lib/api/`), auth state machine
-  (`src/features/auth/auth-client.test.ts`), and auth screens.
+  (`src/features/auth/auth-client.test.ts`), auth screens, and the friends feature
+  (`src/features/friends/`): pending-invite store, friends list, invite sharing and the
+  invitation confirmation flow.
+
+### Gotchas
+
+- When faking `useAuth`, return **the same object on every render**. The real context
+  memoises its value, so `authorizedFetch` is stable; a fresh `jest.fn()` per render makes
+  every `useCallback`/`useEffect` that depends on it re-run, and data-loading screens loop.
+- Server tests that depend on time inject a clock (`friends: { now }` in `createTestApp`)
+  rather than waiting.

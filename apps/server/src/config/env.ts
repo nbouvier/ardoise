@@ -39,6 +39,21 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 24 * 60 * 60),
+  /**
+   * Publicly reachable base URL of this API. Invitation links are built from
+   * it, so it must be an address the recipient's device can open.
+   */
+  PUBLIC_BASE_URL: z.url().default('http://localhost:3000'),
+  /** Friend-invitation lifetime in seconds. */
+  FRIEND_INVITE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(7 * 24 * 60 * 60),
+  /** App Store listing, shown on the invitation landing page. Unset until published. */
+  APP_STORE_URL: z.url().optional(),
+  /** Play Store listing, shown on the invitation landing page. Unset until published. */
+  PLAY_STORE_URL: z.url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

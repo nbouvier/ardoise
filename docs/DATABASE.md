@@ -74,6 +74,47 @@ One row per issued refresh token. Rotation revokes the old row and inserts a new
 
 Index: `sessions_user_id_idx` on `user_id`.
 
+### `friend_invites`
+
+A shareable invitation to become someone's friend. One usable row per inviter at a time:
+rotating an invitation revokes the previous one.
+
+| Column       | Type             | Notes                                              |
+| ------------ | ---------------- | -------------------------------------------------- |
+| `id`         | uuid PK          | `gen_random_uuid()`                                 |
+| `inviter_id` | uuid FK          | → `users.id`, `ON DELETE CASCADE`                   |
+| `code`       | text, unique     | 128 bits of randomness, base64url (22 chars)        |
+| `expires_at` | timestamptz      | Default lifetime 7 days (`FRIEND_INVITE_TTL_SECONDS`) |
+| `created_at` | timestamptz      | `now()`                                             |
+| `revoked_at` | timestamptz null | Set on rotation / revocation; non-null → unusable   |
+
+Index: `friend_invites_inviter_id_idx` on `inviter_id`.
+
+Unlike `sessions.refresh_token_hash`, the code is stored **in clear**. It has to be
+redisplayable ("copy my link again"), and it only grants a narrow, expiring, revocable
+capability — becoming the friend of one user, subject to that person's own acceptance.
+
+### `friendships`
+
+A symmetric friendship, stored once per pair.
+
+| Column       | Type        | Notes                             |
+| ------------ | ----------- | --------------------------------- |
+| `id`         | uuid PK     | `gen_random_uuid()`               |
+| `user_a_id`  | uuid FK     | → `users.id`, `ON DELETE CASCADE` |
+| `user_b_id`  | uuid FK     | → `users.id`, `ON DELETE CASCADE` |
+| `created_at` | timestamptz | `now()`                           |
+
+The pair is always written in a **canonical order** (`user_a_id` < `user_b_id`, see
+`orderPair` in `src/features/friends/friendships.ts`), so the unique constraint
+`friendships_pair_unique` alone rules out duplicates — including under concurrent
+acceptance, where the insert uses `ON CONFLICT DO NOTHING`. A check constraint
+(`friendships_distinct_users`) forbids self-friendship.
+
+Index: `friendships_user_b_id_idx` on `user_b_id` (the `user_a_id` side is covered by the
+unique constraint's index).
+
 ## Current state
 
 - Migration `0000_*` — `users` and `sessions` tables (Google sign-in).
+- Migration `0001_*` — `friend_invites` and `friendships` tables (friends and invitations).
