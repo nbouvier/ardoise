@@ -55,8 +55,10 @@ Google avatar (or initial fallback), name, email, and an outlined "Sign out" but
 ### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
 The app's landing screen. Rows of name + member count, tappable to open the group. Empty
-state: "No groups yet" with what a group is for. A primary "Create a group" sits at the
-bottom, outside the list, so it stays reachable.
+state: "No groups yet" with what a group is for. A footer holds the primary "Create a
+group" action and the same "Got an invitation code?" entry as the Friends tab — a code is
+a code, and the confirmation screen figures out whether it leads to a friendship or a
+group.
 
 **Archived groups** live under a discreet "Show archived (n)" toggle at the very bottom of
 the list, and are rendered muted (55% opacity) with "n members · archived" when revealed.
@@ -97,8 +99,19 @@ and the empty state points at the invitation link instead.
 List of avatar + name rows. **Tapping a row opens the group shared with that friend**;
 "Remove" stays a separate hit area at the end of the row, and its confirmation says that
 the shared group and its contents go too. Empty state: "No friends yet". A footer holds the
-primary "Invite a friend" action and an "Got an invitation code?" field — the manual
-fallback for someone who installed the app after following a link.
+primary "Invite a friend" action and the invitation code entry below.
+
+### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
+
+The manual fallback for someone who has a code instead of a link — typed in, or pasted
+from somewhere the link itself didn't survive. A small "Got an invitation code?" label,
+a text field and a secondary "Open" button (disabled until something is typed), submittable
+from the keyboard too. Feeds the same `pendingInvite` store a deep link does, so it opens
+the same confirmation screen.
+
+**Rendered identically at the bottom of both the Friends and Groups tabs** — one component,
+so a friend code and a group code are entered the same way and neither tab has to know
+which kind of code the visitor is holding.
 
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 

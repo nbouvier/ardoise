@@ -220,7 +220,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   Groups, Friends, Account.
 - **Group list**: name + member count rows. Archived groups sit under a discreet
   "Show archived (n)" toggle at the bottom and are muted when shown. Primary
-  "Create a group" action.
+  "Create a group" action, and the same manual "got an invitation code?" entry the
+  Friends tab has — one code, entered the same way, whichever it turns out to lead to.
 - **Create**: a name field and the friend list with multi-selection; creating with no
   friends selected is allowed.
 - **Group detail** is one screen used for both kinds. For a pair group, the member

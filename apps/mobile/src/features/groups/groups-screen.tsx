@@ -8,6 +8,7 @@ import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { useTheme } from '@/hooks/use-theme';
 
 import { CreateGroupScreen } from './create-group-screen';
@@ -103,7 +104,10 @@ export function GroupsScreen() {
 
         {body()}
 
-        <Button label="Create a group" onPress={() => setCreating(true)} />
+        <ThemedView style={styles.footer}>
+          <Button label="Create a group" onPress={() => setCreating(true)} />
+          <InvitationCodeEntry />
+        </ThemedView>
       </SafeAreaView>
 
       <Modal
@@ -149,6 +153,9 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingVertical: Spacing.two,
+  },
+  footer: {
+    gap: Spacing.two,
   },
   archivedSection: {
     marginTop: Spacing.three,

@@ -2,6 +2,8 @@ import type { GroupSummary } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { pendingInvite } from '@/features/invites/pending-invite';
+
 import { GroupsScreen } from './groups-screen';
 
 const trip: GroupSummary = {
@@ -46,6 +48,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 beforeEach(() => {
   mockFetchGroups.mockReset().mockResolvedValue([]);
   mockPush.mockReset();
+  pendingInvite.clear();
 });
 
 describe('GroupsScreen', () => {
@@ -136,5 +139,18 @@ describe('GroupsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /create a group/i }));
 
     expect(await screen.findByText('New group')).toBeTruthy();
+  });
+
+  it('offers the same "got a code?" entry as the Friends tab, for a group code', async () => {
+    await render(<GroupsScreen />);
+    await screen.findByText('No groups yet');
+
+    await fireEvent.changeText(
+      screen.getByLabelText('Invitation code'),
+      'Zx3k9QpL2mN7vR1sT4uW8g',
+    );
+    await fireEvent.press(screen.getByRole('button', { name: /^open$/i }));
+
+    expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
   });
 });

@@ -8,7 +8,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,7 +17,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { groupsChanged } from '@/features/groups/groups-changed';
-import { pendingInvite } from '@/features/invites/pending-invite';
+import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { fetchPairGroup } from '@/lib/api/groups';
@@ -73,7 +72,6 @@ export function FriendsScreen() {
   const theme = useTheme();
   const [inviting, setInviting] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [code, setCode] = useState('');
 
   /**
    * Open the group shared with a friend. It is created on first access, so
@@ -111,11 +109,6 @@ export function FriendsScreen() {
         },
       ],
     );
-  }
-
-  function handleUseCode() {
-    pendingInvite.set(code);
-    setCode('');
   }
 
   return (
@@ -159,32 +152,7 @@ export function FriendsScreen() {
 
         <ThemedView style={styles.footer}>
           <Button label="Invite a friend" onPress={() => setInviting(true)} />
-
-          <ThemedText type="small" themeColor="textSecondary">
-            Got an invitation code?
-          </ThemedText>
-          <ThemedView style={styles.codeRow}>
-            <TextInput
-              accessibilityLabel="Invitation code"
-              placeholder="Paste it here"
-              placeholderTextColor={theme.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={code}
-              onChangeText={setCode}
-              onSubmitEditing={handleUseCode}
-              style={[
-                styles.codeInput,
-                { color: theme.text, backgroundColor: theme.backgroundElement },
-              ]}
-            />
-            <Button
-              label="Open"
-              variant="secondary"
-              disabled={code.trim().length === 0}
-              onPress={handleUseCode}
-            />
-          </ThemedView>
+          <InvitationCodeEntry />
         </ThemedView>
       </SafeAreaView>
 
@@ -253,17 +221,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     gap: Spacing.two,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  codeInput: {
-    flex: 1,
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
   },
   modal: {
     flex: 1,
