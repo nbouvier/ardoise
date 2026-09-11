@@ -59,6 +59,7 @@
     "preset": "jest-expo",
     "moduleNameMapper": {
       "\\.(css)$": "<rootDir>/__mocks__/style-mock.js",
+      "^@expo/ui/community/datetime-picker$": "<rootDir>/__mocks__/@expo/ui/community/datetime-picker.tsx",
       "^@/assets/(.*)$": "<rootDir>/assets/$1",
       "^@/(.*)$": "<rootDir>/src/$1"
     },

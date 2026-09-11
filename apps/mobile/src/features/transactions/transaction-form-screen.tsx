@@ -18,6 +18,7 @@ import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/a
 import { errorFields, logger } from '@/lib/logger';
 
 import { AmountInput } from './amount-input';
+import { DatePickerField } from './date-picker-field';
 import { MemberSelect } from './member-select';
 import { SplitEditor } from './split-editor';
 
@@ -202,15 +203,7 @@ export function TransactionFormScreen({
           <ThemedText type="small" themeColor="textSecondary">
             Date
           </ThemedText>
-          <TextInput
-            accessibilityLabel="Date"
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={theme.textSecondary}
-            value={occurredOn}
-            onChangeText={setOccurredOn}
-            maxLength={10}
-            style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-          />
+          <DatePickerField value={occurredOn} onChange={setOccurredOn} />
         </View>
       </ThemedView>
 

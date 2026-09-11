@@ -56,7 +56,11 @@ resolve its compiled output.
 `@types/jest` is not wired). Use `@testing-library/react-native` for component tests.
 `transformIgnorePatterns` also transforms `@splitcount/shared`; native modules are mocked
 (`__mocks__/`), and injected fakes (`GoogleModule`, `TokenStore`) keep native code out of
-`AuthClient` tests.
+`AuthClient` tests. `@expo/ui`'s date picker is mocked the same way
+(`__mocks__/@expo/ui/community/datetime-picker.tsx`, mapped explicitly in `moduleNameMapper`
+since it's a deep subpath import): pressing the mock reports a fixed date, enough to test
+the wiring around it without a real host view, which Jest cannot render. Real calendar
+interaction is a device concern.
 
 ## Current state
 
@@ -87,8 +91,9 @@ resolve its compiled output.
   absent **but "Add a transaction" is present**, and the transactions feature
   (`src/features/transactions/`): the split editor (selection, weight stepper, live
   preview, mode switching, the allocation indicator), the add/edit form (defaults, request
-  shape for each kind, full-replace edit, transfer validation), and the transaction row's
-  "my share" calculation.
+  shape for each kind, full-replace edit, transfer validation), the transaction row's
+  "my share" calculation, and the date field's local-date conversion (no time-zone shift)
+  and its iOS/Android wiring.
 
 ### Gotchas
 

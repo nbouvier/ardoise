@@ -97,10 +97,9 @@ a way back), and a retryable connection error.
 
 One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
 "Delete this transaction". Kind picker (Expense / Income / Transfer), title, amount, date
-(a plain `YYYY-MM-DD` text field for now — no date-picker library is wired in yet, see
-`docs/ARCHITECTURE.md`), optional comment, then "Who paid" (`MemberSelect`, defaulting to
-the signed-in member). An expense or income continues with "Who it concerns"
-(`SplitEditor`); a transfer replaces it with a single "To" picker instead, excluding the
+(`DatePickerField` — see below), optional comment, then "Who paid" (`MemberSelect`,
+defaulting to the signed-in member). An expense or income continues with "Who it
+concerns" (`SplitEditor`); a transfer replaces it with a single "To" picker instead, excluding the
 payer. "Save" is disabled until the title, amount, date and split are all valid.
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
@@ -114,6 +113,22 @@ member gets an amount field instead, with a running "X left to allocate" / "X ov
 total" line — green when it balances, red otherwise. Switching modes seeds fixed amounts
 from the shares preview, and resets shares to equal weights, rather than losing the
 selection.
+
+### Date field (`src/features/transactions/date-picker-field.tsx`)
+
+A native picker via `@expo/ui`, one component with the platform split inside it rather
+than as separate files, since only the trigger differs:
+
+- **iOS** — an inline `compact` SwiftUI `DatePicker`: a small tappable field that pops its
+  own calendar, no extra chrome needed.
+- **Android** — Compose has no inline "compact field" equivalent, so a plain field shows
+  the formatted date and tapping it opens the Material dialog picker; it unmounts on
+  confirmation or dismissal.
+- **Web** — `@expo/ui` has no host views there at all (`date-picker-field.web.tsx`): the
+  same plain `YYYY-MM-DD` text field every platform used before this existed.
+
+`@expo/ui` was already a dependency, unused until now — see `docs/MOBILE.md` for the
+native-rebuild consequence of that.
 
 ### Create a group (`src/features/groups/create-group-screen.tsx`)
 
@@ -187,8 +202,8 @@ Auth screens (sign-in, account, gate), the friends screens, the groups screens a
 transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
 Groups now hold transactions and show balances; settle-up suggestions are not built yet.
 
-The transaction date field is a plain text input (`YYYY-MM-DD`) rather than a native date
-picker — no such library is wired into the mobile app yet; see `docs/ARCHITECTURE.md`.
+The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
+text field on web (see "Date field" above and `docs/MOBILE.md`).
 
 These screens are covered by component tests but have **not** been validated on a device
 yet: web sign-in is disabled, so they cannot be reached on the web target.

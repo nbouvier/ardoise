@@ -67,6 +67,24 @@ hand. Change native config through `app.json` / config plugins, then re-run, or
 After the dev build is installed, iterate with just `npm run mobile` (JS reloads live;
 rebuild only when native dependencies or config change).
 
+## Native UI (`@expo/ui`)
+
+`@expo/ui` renders native SwiftUI (iOS) / Jetpack Compose (Android) views from React
+Native. It was a dependency from early on but unused until the transaction date field
+(`src/features/transactions/date-picker-field.tsx`, via `@expo/ui/community/datetime-picker`)
+— the first real use, 2026-09-11.
+
+**If your installed dev build predates that**, it does not have the native module linked
+and the date field will fail at runtime. Regenerate and reinstall:
+
+```bash
+npm run prebuild --workspace @splitcount/mobile
+npm run mobile:android   # or: npm run mobile:ios
+```
+
+A fresh `expo run:*` (which does this automatically) also works. No `app.json` change was
+needed — `@expo/ui` has no config plugin, only autolinking.
+
 ## Cloud builds (EAS) — alternative
 
 For a dev build without local native toolchains (e.g. iOS from Windows), use EAS Build.

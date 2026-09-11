@@ -230,8 +230,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   pre-selected), and the split editor (shares with live-updating computed amounts, or a
   toggle to fixed amounts with a running "remaining to allocate" indicator). A transfer
   simplifies the same sheet to picking one other member instead of a split editor. The
-  date is entered as plain `YYYY-MM-DD` text for now — no native date-picker component is
-  available in the app yet (see `docs/ARCHITECTURE.md`); revisit once one is added.
+  date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
+  native pickers, it stays a plain `YYYY-MM-DD` text field (`docs/DESIGN.md`).
 - Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
   transaction" action, confirmed.
 - Empty state: an explanation and the same "Add a transaction" action as the group's

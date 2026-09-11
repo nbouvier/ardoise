@@ -135,6 +135,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | A shares split defaults every participant to weight 1; there is no separate "equal" mode | An equal split *is* a shares split where everyone is weighted the same — a dedicated mode would just be that one case with its own code path |
 | 2026-09-11 | Balances are computed on the fly from `transactions` / `transaction_participants`, not stored | No denormalized total to keep in sync while the feature is new; revisit if querying at scale becomes a real cost (see Open items) |
 | 2026-09-11 | Transactions are the one thing that works on a pair group like a standard group | Every other pair-group route is refused by `assertNotPairGroup`; transactions must not share that guard, or the pair group could never hold anything |
+| 2026-09-11 | The transaction date field uses `@expo/ui`'s `community/datetime-picker`, not a new dependency | `@expo/ui` was already a dependency but not yet linked into the native build; reusing it (SwiftUI `DatePicker` on iOS, a Material dialog on Android) needs the same native rebuild a brand-new picker library would have, for zero added dependency footprint |
 
 ## Open items
 
@@ -144,6 +145,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).
+- Any dev build installed before `@expo/ui`'s `community/datetime-picker` was actually
+  used (2026-09-11) needs regenerating — `npm run prebuild --workspace @splitcount/mobile`
+  then `mobile:android` / `mobile:ios` — before the transaction date field works on
+  device; see `docs/MOBILE.md`.
 - `users` is shared domain data: the auth feature owns the writes, everyone else reads
   through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
   third reader). `friendships` is now in the same position — `groups` reads it directly
@@ -159,7 +164,3 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   now to avoid keeping a derived total in sync before the read pattern is known.
 - The transaction list has no pagination yet (`docs/specs/transactions.md`); revisit once
   a group's history grows large enough to matter.
-- The transaction date is a plain `YYYY-MM-DD` text field on mobile: no native date-picker
-  library (e.g. `@react-native-community/datetimepicker`) is wired in yet, and adding one
-  means a native rebuild (`expo prebuild`, see `docs/MOBILE.md`) — deliberately deferred
-  rather than done silently mid-feature. Revisit once someone actually needs one.
