@@ -27,14 +27,20 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   invitation link (copy or OS share sheet: SMS, mail, WhatsApp…). The link opens the app,
   prompts for Google sign-in if needed, and connects both people after an explicit
   confirmation. See `docs/specs/friends-and-invitations.md`.
+- **Groups** — named spaces that people belong to, and where expenses will live. A user
+  creates a group, adds friends to it, or shares an invitation link for anyone else.
+  Groups can be archived (reversible, hidden behind a toggle in the list) or deleted
+  (permanent). Every pair of friends also shares an **implicit group**, opened by tapping
+  that friend: unlisted, two people forever, otherwise a normal group.
+  See `docs/specs/groups.md`.
 
-Otherwise the project is still at an early stage: monorepo, mobile skeleton, an API with
-`/health`, the auth endpoints and the friends endpoints, tooling and documentation.
+Otherwise the project is still at an early stage: monorepo, mobile client, an API with
+`/health`, auth, friends, invitations and groups, tooling and documentation. Groups hold
+members but no expenses yet.
 
 ## Planned direction
 
-- Groups / "counts" bundling participants and expenses, picked from the friend list.
-- Expense entry with flexible splitting between participants.
+- Expense entry inside a group, with flexible splitting between members.
 - Running balances and settle-up suggestions.
 - Better tracking and organisation than Tricount (categories, history, clarity).
 
@@ -44,6 +50,8 @@ Otherwise the project is still at an early stage: monorepo, mobile skeleton, an 
 - Offline support (the current model is online, server-authoritative).
 - Adding friends by email address, alongside invitation links.
 - Notifying the inviter when someone accepts an invitation (needs push notifications).
+- Whether group ownership can be transferred, and whether a pair group can be cleared
+  without removing the friend.
 
 ## Feature specifications
 

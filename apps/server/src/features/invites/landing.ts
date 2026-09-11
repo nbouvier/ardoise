@@ -3,10 +3,15 @@
  * serves: everything else is JSON. Kept to a single self-contained document
  * (no assets, no template engine) so it stays fast and dependency-free.
  *
+ * One page serves every kind of invitation, because the link format and the
+ * code space are shared — only the headline changes.
+ *
  * Until the app ships to stores, the code shown on the page is the fallback for
  * "the app is not installed yet": there is no deferred deep linking, so the
  * recipient installs the app and types the code in.
  */
+
+import type { InvitePreview } from '@splitcount/shared';
 
 /** The mobile app's URL scheme. Must match `scheme` in `apps/mobile/app.json`. */
 export const APP_SCHEME = 'splitcount';
@@ -17,13 +22,14 @@ export interface LandingLinks {
 }
 
 export interface ValidLandingInput extends LandingLinks {
-  inviterName: string;
+  preview: InvitePreview;
   code: string;
 }
 
 /**
- * Escape text interpolated into HTML. The inviter's name comes from their
- * Google profile — it is user-controlled and must never be trusted as markup.
+ * Escape text interpolated into HTML. Both the inviter's name (from their
+ * Google profile) and a group's name (typed by a user) are user-controlled and
+ * must never be trusted as markup.
  */
 export function escapeHtml(value: string): string {
   return value
@@ -96,16 +102,30 @@ function storeLinks(links: LandingLinks): string {
   return `<p>Don’t have the app?</p><div class="stores">${entries.join('')}</div>`;
 }
 
+/** What the invitation leads to, in plain words. Raw text — escaped by callers. */
+export function describeInvite(preview: InvitePreview): { headline: string; blurb: string } {
+  if (preview.kind === 'group') {
+    return {
+      headline: `${preview.inviter.name} invited you to “${preview.group.name}”`,
+      blurb: 'Join the group and share expenses with everyone in it.',
+    };
+  }
+  return {
+    headline: `${preview.inviter.name} invited you to SplitCount`,
+    blurb: 'Share expenses with the people you split with.',
+  };
+}
+
 /** The page shown for a usable invitation. */
 export function renderInvitePage(input: ValidLandingInput): string {
-  const name = escapeHtml(input.inviterName);
+  const { headline, blurb } = describeInvite(input.preview);
   const code = escapeHtml(input.code);
   const deepLink = `${APP_SCHEME}://invite/${code}`;
 
   return page(
-    `${input.inviterName} invited you to SplitCount`,
-    `<h1>${name} invited you to SplitCount</h1>
-<p>Share expenses with the people you split with.</p>
+    headline,
+    `<h1>${escapeHtml(headline)}</h1>
+<p>${escapeHtml(blurb)}</p>
 <a class="primary" href="${deepLink}">Open in SplitCount</a>
 <p>Already installed the app? Enter this invitation code:</p>
 <code class="code">${code}</code>

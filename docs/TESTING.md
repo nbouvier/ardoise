@@ -32,10 +32,16 @@ Prefer integration tests that build the Fastify app via `buildApp()` and drive i
 authorization rules) directly.
 
 Database-backed tests use an in-memory **PGlite** instance (real Postgres SQL, no
-external service), migrated per test file:
+external service), migrated **once per test file**:
 
-- `createTestDatabase()` (`src/test/database.ts`) — a fresh, migrated handle.
-- `createTestApp()` (`src/test/app.ts`) — a ready Fastify instance wired to one.
+- `createTestContext()` (`src/test/app.ts`) — a ready Fastify instance plus `reset()`.
+  Build it in `beforeAll`, call `reset()` in `beforeEach`. This is the default: migrating
+  a PGlite database costs a second or two, so one per *test* made the suite five times
+  slower for no extra isolation.
+- `createTestApp()` — the same without the reset, for a file whose tests write nothing.
+- `createTestDatabase()` / `resetDatabase()` (`src/test/database.ts`) — the handle-level
+  building blocks.
+- `signInAs(app, idToken)` (`src/test/auth.ts`) — a signed-in user and their headers.
 
 Close it in `afterAll` (`app.close()` / `handle.close()`). External boundaries such as
 Google token verification are mocked, never contacted.
@@ -55,17 +61,31 @@ resolve its compiled output.
 
 - `apps/server`: `GET /health` integration test; database migration tests
   (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`);
-  friends unit + integration tests (`src/features/friends/`), covering invitation
-  lifecycle, friendship symmetry and the HTML landing page (including escaping).
-- `apps/mobile`: API endpoints (`src/lib/api/`), auth state machine
-  (`src/features/auth/auth-client.test.ts`), auth screens, and the friends feature
-  (`src/features/friends/`): pending-invite store, friends list, invite sharing and the
-  invitation confirmation flow.
+  invitation code and landing-page tests (`src/features/invites/`), including HTML
+  escaping of both an inviter name and a group name; friends integration tests
+  (`src/features/friends/`) covering the invitation lifecycle and friendship symmetry;
+  groups unit + integration tests (`src/features/groups/`) covering membership
+  authorization on every route, archiving, deletion cascades, group invitations, and the
+  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend).
+- `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
+  auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
+  invitation feature (`src/features/invites/`): pending-invite store and the confirmation
+  flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
+  invite sharing and opening the group shared with a friend, and the groups feature
+  (`src/features/groups/`): list with the archived toggle, creation with friend selection,
+  and the detail screen including the pair-group variant where every management action is
+  absent.
 
 ### Gotchas
 
 - When faking `useAuth`, return **the same object on every render**. The real context
   memoises its value, so `authorizedFetch` is stable; a fresh `jest.fn()` per render makes
   every `useCallback`/`useEffect` that depends on it re-run, and data-loading screens loop.
-- Server tests that depend on time inject a clock (`friends: { now }` in `createTestApp`)
-  rather than waiting.
+- Server tests that depend on time inject a clock (`invites: { now }` / `groups: { now }`
+  in `createTestContext`) rather than waiting.
+- A screen that navigates needs `expo-router` mocked (`useRouter: () => ({ push })`).
+  Assert on the typed object form — `{ pathname: '/groups/[id]', params: { id } }` — since
+  that is what the code passes.
+- `resetDatabase` truncates `users` and `groups` with `cascade`. Those are the two roots:
+  a standard group hangs off no user, so truncating `users` alone would leave it behind.
+  A new top-level table needs adding there.

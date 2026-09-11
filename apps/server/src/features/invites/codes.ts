@@ -1,13 +1,24 @@
 import { randomBytes } from 'node:crypto';
 
-import type { FriendInviteRow } from '../../db/schema.js';
+import type { InviteRow } from '../../db/schema.js';
 
 /** 128 bits of randomness, base64url — opaque and not enumerable. */
 export function generateInviteCode(): string {
   return randomBytes(16).toString('base64url');
 }
 
-export type InviteErrorReason = 'not_found' | 'expired' | 'revoked' | 'self_invite';
+/**
+ * Why an invitation cannot be used. `not_found`, `expired` and `revoked`
+ * describe the code itself; `gone` is for a target that no longer accepts
+ * anyone (a deleted or archived group) and `self_invite` for the one case where
+ * the holder is the wrong person (their own friend link).
+ */
+export type InviteErrorReason =
+  | 'not_found'
+  | 'expired'
+  | 'revoked'
+  | 'gone'
+  | 'self_invite';
 
 export class InviteError extends Error {
   constructor(readonly reason: InviteErrorReason) {
@@ -21,9 +32,9 @@ export class InviteError extends Error {
  * expiry so a rotated link reports the more specific reason.
  */
 export function assertInviteUsable(
-  invite: FriendInviteRow | undefined,
+  invite: InviteRow | undefined,
   now: Date,
-): asserts invite is FriendInviteRow {
+): asserts invite is InviteRow {
   if (!invite) {
     throw new InviteError('not_found');
   }

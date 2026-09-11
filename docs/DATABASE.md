@@ -74,26 +74,6 @@ One row per issued refresh token. Rotation revokes the old row and inserts a new
 
 Index: `sessions_user_id_idx` on `user_id`.
 
-### `friend_invites`
-
-A shareable invitation to become someone's friend. One usable row per inviter at a time:
-rotating an invitation revokes the previous one.
-
-| Column       | Type             | Notes                                              |
-| ------------ | ---------------- | -------------------------------------------------- |
-| `id`         | uuid PK          | `gen_random_uuid()`                                 |
-| `inviter_id` | uuid FK          | → `users.id`, `ON DELETE CASCADE`                   |
-| `code`       | text, unique     | 128 bits of randomness, base64url (22 chars)        |
-| `expires_at` | timestamptz      | Default lifetime 7 days (`FRIEND_INVITE_TTL_SECONDS`) |
-| `created_at` | timestamptz      | `now()`                                             |
-| `revoked_at` | timestamptz null | Set on rotation / revocation; non-null → unusable   |
-
-Index: `friend_invites_inviter_id_idx` on `inviter_id`.
-
-Unlike `sessions.refresh_token_hash`, the code is stored **in clear**. It has to be
-redisplayable ("copy my link again"), and it only grants a narrow, expiring, revocable
-capability — becoming the friend of one user, subject to that person's own acceptance.
-
 ### `friendships`
 
 A symmetric friendship, stored once per pair.
@@ -114,7 +94,104 @@ acceptance, where the insert uses `ON CONFLICT DO NOTHING`. A check constraint
 Index: `friendships_user_b_id_idx` on `user_b_id` (the `user_a_id` side is covered by the
 unique constraint's index).
 
+### `groups`
+
+A space shared by a set of people, and later the expenses they record in it.
+
+| Column          | Type             | Notes                                                    |
+| --------------- | ---------------- | -------------------------------------------------------- |
+| `id`            | uuid PK          | `gen_random_uuid()`                                       |
+| `kind`          | text             | `standard` or `pair` (default `standard`)                 |
+| `name`          | text, null       | Set for a standard group, always `NULL` for a pair group  |
+| `friendship_id` | uuid FK, unique, null | → `friendships.id`, `ON DELETE CASCADE`; pair groups only |
+| `archived_at`   | timestamptz null | Non-null → inactive. Reversible, loses nothing            |
+| `created_at`    | timestamptz      | `now()`                                                   |
+| `updated_at`    | timestamptz      | `now()`; refreshed on rename / archive                    |
+
+Two shapes, kept exclusive by check constraints:
+
+- `groups_kind_valid` — `kind in ('standard', 'pair')`.
+- `groups_pair_shape` — `(kind = 'pair') = (friendship_id is not null)`.
+- `groups_standard_named` — `(kind = 'standard') = (name is not null)`.
+
+The **pair group is keyed by the friendship**, which is what makes "every pair of friends
+has one" true in the database rather than in application code: the `UNIQUE` on
+`friendship_id` guarantees exactly one even when two devices create it at the same instant
+(the insert uses `ON CONFLICT DO NOTHING`), and the cascade takes it away with the
+friendship. It stores no name — the API returns the *other* member's name, so each side
+sees who they share with.
+
+### `group_members`
+
+Who belongs to a group, and with which rights. **A membership row is the only thing that
+grants access to a group**: every route resolves it before anything else.
+
+| Column      | Type        | Notes                              |
+| ----------- | ----------- | ---------------------------------- |
+| `id`        | uuid PK     | `gen_random_uuid()`                |
+| `group_id`  | uuid FK     | → `groups.id`, `ON DELETE CASCADE` |
+| `user_id`   | uuid FK     | → `users.id`, `ON DELETE CASCADE`  |
+| `role`      | text        | `owner` or `member` (default `member`) |
+| `joined_at` | timestamptz | `now()`                            |
+
+Constraints: `group_members_unique` on (`group_id`, `user_id`) — which also makes a
+repeated or concurrent join a no-op rather than a duplicate — and
+`group_members_role_valid` on the role.
+
+Index: `group_members_user_id_idx` on `user_id` (the group side is covered by the unique
+constraint's index).
+
+### `invites`
+
+A shareable invitation. **One table for every kind on purpose**: the code space is shared,
+so a single link format, a single landing page and a single pair of public routes serve
+friendships and groups alike.
+
+| Column       | Type             | Notes                                                    |
+| ------------ | ---------------- | -------------------------------------------------------- |
+| `id`         | uuid PK          | `gen_random_uuid()`                                       |
+| `kind`       | text             | `friend` or `group`                                       |
+| `inviter_id` | uuid FK          | → `users.id`, `ON DELETE CASCADE`; who issued it          |
+| `group_id`   | uuid FK, null    | → `groups.id`, `ON DELETE CASCADE`; group invitations only |
+| `code`       | text, unique     | 128 bits of randomness, base64url (22 chars)              |
+| `expires_at` | timestamptz      | Default lifetime 7 days (`INVITE_TTL_SECONDS`)            |
+| `created_at` | timestamptz      | `now()`                                                   |
+| `revoked_at` | timestamptz null | Set on rotation / revocation; non-null → unusable         |
+
+Check constraints: `invites_kind_valid`, and `invites_target_shape`
+(`(kind = 'group') = (group_id is not null)`).
+
+Indexes: `invites_inviter_id_idx`, `invites_group_id_idx`.
+
+"One active invitation" is scoped differently per kind and enforced by the service rather
+than a constraint: a **friend** invitation is one per inviter (the link *is* "add me"), a
+**group** invitation is one per group whoever created it (the link belongs to the group,
+and keeps working after that person leaves).
+
+Unlike `sessions.refresh_token_hash`, the code is stored **in clear**. It has to be
+redisplayable ("copy my link again"), and it only grants a narrow, expiring, revocable
+capability — becoming someone's friend or joining one group, subject to the recipient's
+own acceptance.
+
+## Cascades worth knowing
+
+- Removing a **friendship** removes the pair group and everything in it, on both sides.
+  This is why removing a friend is a destructive action in the product, not just a
+  relational one.
+- Deleting a **group** removes its memberships and its invitation. A code pointing at a
+  deleted group becomes simply unknown (`404`), which is a dead link like any other and
+  does not confirm the group ever existed.
+- Deleting a **user** removes their sessions, friendships (and therefore their pair
+  groups), memberships and the invitations they issued. Standard groups they belonged to
+  survive; one left with no members at all is deleted by the service when its last member
+  leaves.
+
 ## Current state
 
 - Migration `0000_*` — `users` and `sessions` tables (Google sign-in).
 - Migration `0001_*` — `friend_invites` and `friendships` tables (friends and invitations).
+- Migration `0002_*` — drops `friend_invites`, superseded by the generalised `invites`
+  table. Deliberately a drop rather than a rename: the shape changed, and there is no
+  deployment holding data yet.
+- Migration `0003_*` — `groups`, `group_members` and `invites` tables (groups, and one
+  invitation system for friends and groups).

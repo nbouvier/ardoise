@@ -1,13 +1,12 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { AuthGate } from '@/features/auth/auth-gate';
-import { InviteLinkHandler } from '@/features/friends/invite-link-handler';
-import { InvitePrompt } from '@/features/friends/invite-prompt';
+import { InviteLinkHandler } from '@/features/invites/invite-link-handler';
+import { InvitePrompt } from '@/features/invites/invite-prompt';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,7 +19,14 @@ export default function RootLayout() {
         {/* Above the gate: an invitation may arrive before there is an account. */}
         <InviteLinkHandler />
         <AuthGate>
-          <AppTabs />
+          {/* A stack around the tabs, so a group opens on top of them. */}
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="groups/[id]"
+              options={{ headerShown: true, headerTitle: '', headerBackTitle: 'Groups' }}
+            />
+          </Stack>
           <InvitePrompt />
         </AuthGate>
       </AuthProvider>

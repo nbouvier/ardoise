@@ -1,8 +1,9 @@
-import type { FriendSummary } from '@splitcount/shared';
-import { Image } from 'expo-image';
+import type { AcceptInviteResult, InvitePreview } from '@splitcount/shared';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -10,20 +11,20 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { getApiBaseUrl } from '@/lib/api/config';
 import { ApiError } from '@/lib/api/errors';
-import { acceptInvite, previewInvite } from '@/lib/api/friends';
+import { acceptInvite, previewInvite } from '@/lib/api/invites';
 import { errorFields, logger } from '@/lib/logger';
 
 /**
- * Why an invitation cannot be used. `dead` covers unknown, expired and revoked
- * codes on purpose: the recipient's next step is identical, and not
- * distinguishing them avoids confirming that a code ever existed.
+ * Why an invitation cannot be used. `dead` covers unknown, expired, revoked and
+ * "the group is gone" on purpose: the recipient's next step is identical, and
+ * not distinguishing them avoids confirming that a code ever existed.
  */
 type Problem = 'dead' | 'self' | 'offline';
 
 type ScreenState =
   | { status: 'loading' }
-  | { status: 'preview'; inviter: FriendSummary }
-  | { status: 'accepted'; friend: FriendSummary; alreadyFriends: boolean }
+  | { status: 'preview'; preview: InvitePreview }
+  | { status: 'accepted'; result: AcceptInviteResult }
   | { status: 'problem'; problem: Problem };
 
 const PROBLEM_COPY: Record<Problem, { title: string; body: string }> = {
@@ -53,16 +54,50 @@ function problemFor(error: unknown): Problem {
   return 'offline';
 }
 
+/** The headline and supporting line of the confirmation, per kind. */
+function previewCopy(preview: InvitePreview): { title: string; body: string } {
+  if (preview.kind === 'group') {
+    const others = preview.group.memberCount;
+    return {
+      title: `${preview.inviter.name} invited you to “${preview.group.name}”`,
+      body:
+        others === 1
+          ? 'You’ll be able to share expenses with everyone in this group.'
+          : `${others} people are already in this group.`,
+    };
+  }
+  return {
+    title: `${preview.inviter.name} wants to add you as a friend`,
+    body: 'You’ll both be able to share expenses together.',
+  };
+}
+
+function acceptedCopy(result: AcceptInviteResult): string {
+  if (result.kind === 'group') {
+    return result.alreadyMember
+      ? `You’re already in “${result.group.name}”`
+      : `You joined “${result.group.name}”`;
+  }
+  return result.alreadyFriends
+    ? `You were already friends with ${result.friend.name}`
+    : `You’re now friends with ${result.friend.name}`;
+}
+
 export interface AcceptInviteScreenProps {
   code: string;
   /** Dismiss the invitation, whether it succeeded or not. */
   onClose: () => void;
-  /** Called after a friendship is created, so the friend list can reload. */
-  onAccepted?: () => void;
+  /** Called once the invitation took effect, so the right list can reload. */
+  onAccepted?: (result: AcceptInviteResult) => void;
 }
 
+/**
+ * The confirmation an invitation leads to, whatever it is for. One screen
+ * because the flow is identical: see who is inviting, decide, land somewhere.
+ */
 export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteScreenProps) {
   const { authorizedFetch } = useAuth();
+  const router = useRouter();
   const [state, setState] = useState<ScreenState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [accepting, setAccepting] = useState(false);
@@ -71,16 +106,16 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
     let active = true;
 
     previewInvite(getApiBaseUrl(), code)
-      .then(({ inviter }) => {
+      .then((preview) => {
         if (active) {
-          setState({ status: 'preview', inviter });
+          setState({ status: 'preview', preview });
         }
       })
       .catch((error: unknown) => {
         if (!active) {
           return;
         }
-        logger.warn('friends.invite.preview.failed', errorFields(error));
+        logger.warn('invites.preview.failed', errorFields(error));
         setState({ status: 'problem', problem: problemFor(error) });
       });
 
@@ -97,15 +132,20 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   async function handleAccept() {
     setAccepting(true);
     try {
-      const { friend, alreadyFriends } = await acceptInvite(authorizedFetch, code);
-      setState({ status: 'accepted', friend, alreadyFriends });
-      onAccepted?.();
+      const result = await acceptInvite(authorizedFetch, code);
+      setState({ status: 'accepted', result });
+      onAccepted?.(result);
     } catch (error) {
-      logger.warn('friends.invite.accept.failed', errorFields(error));
+      logger.warn('invites.accept.failed', errorFields(error));
       setState({ status: 'problem', problem: problemFor(error) });
     } finally {
       setAccepting(false);
     }
+  }
+
+  function openGroup(groupId: string) {
+    onClose();
+    router.push({ pathname: '/groups/[id]', params: { id: groupId } });
   }
 
   if (state.status === 'loading') {
@@ -137,45 +177,51 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   }
 
   if (state.status === 'accepted') {
+    const { result } = state;
     return (
       <ThemedView style={styles.container}>
-        <Avatar user={state.friend} />
+        {result.kind === 'friend' ? (
+          <Avatar name={result.friend.name} picture={result.friend.picture} size={88} />
+        ) : null}
         <ThemedText type="subtitle" style={styles.centered}>
-          {state.alreadyFriends
-            ? `You were already friends with ${state.friend.name}`
-            : `You’re now friends with ${state.friend.name}`}
+          {acceptedCopy(result)}
         </ThemedText>
         <ThemedView style={styles.actions}>
-          <Button label="Done" onPress={onClose} />
+          {result.kind === 'group' ? (
+            <Button label="Open group" onPress={() => openGroup(result.group.id)} />
+          ) : null}
+          <Button
+            label="Done"
+            variant={result.kind === 'group' ? 'secondary' : 'primary'}
+            onPress={onClose}
+          />
         </ThemedView>
       </ThemedView>
     );
   }
 
+  const { title, body } = previewCopy(state.preview);
   return (
     <ThemedView style={styles.container}>
-      <Avatar user={state.inviter} />
+      <Avatar
+        name={state.preview.inviter.name}
+        picture={state.preview.inviter.picture}
+        size={88}
+      />
       <ThemedText type="subtitle" style={styles.centered}>
-        {`${state.inviter.name} wants to add you as a friend`}
+        {title}
       </ThemedText>
       <ThemedText themeColor="textSecondary" style={styles.centered}>
-        You’ll both be able to share expenses together.
+        {body}
       </ThemedText>
       <ThemedView style={styles.actions}>
-        <Button label="Accept" busy={accepting} onPress={() => void handleAccept()} />
+        <Button
+          label={state.preview.kind === 'group' ? 'Join group' : 'Accept'}
+          busy={accepting}
+          onPress={() => void handleAccept()}
+        />
         <Button label="Not now" variant="secondary" disabled={accepting} onPress={onClose} />
       </ThemedView>
-    </ThemedView>
-  );
-}
-
-function Avatar({ user }: { user: FriendSummary }) {
-  if (user.picture) {
-    return <Image source={{ uri: user.picture }} style={styles.avatar} contentFit="cover" />;
-  }
-  return (
-    <ThemedView type="backgroundElement" style={[styles.avatar, styles.avatarFallback]}>
-      <ThemedText type="subtitle">{user.name.charAt(0).toUpperCase()}</ThemedText>
     </ThemedView>
   );
 }
@@ -193,16 +239,6 @@ const styles = StyleSheet.create({
   },
   centered: {
     textAlign: 'center',
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    marginBottom: Spacing.two,
-  },
-  avatarFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   actions: {
     alignSelf: 'stretch',

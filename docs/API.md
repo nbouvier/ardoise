@@ -77,13 +77,79 @@ Response `200`: `{ "user": { "id": "<uuid>", "email": "...", "name": "...", "pic
 
 `401` when the access token is missing, invalid or expired.
 
-## Friends and invitations
+## Invitations
 
-See `docs/specs/friends-and-invitations.md`. A `FriendSummary`
-(`{ id, name, picture }`) is how *another* user is exposed — deliberately narrower than
-the `UserProfile` returned for oneself: it carries no email address.
+Invitations share **one code space**, one link format and one landing page, whatever they
+lead to (`docs/specs/friends-and-invitations.md`, `docs/specs/groups.md`). The client
+captures a code without knowing what it is for; these routes say. An invitation code is
+opaque, 128 bits of randomness in base64url (22 characters).
 
-An invitation code is opaque, 128 bits of randomness in base64url (22 characters).
+The routes that *issue* an invitation belong to the feature owning the target
+(`POST /friends/invite`, `POST /groups/:groupId/invite`); the two below are the public
+ones every invitation goes through.
+
+### `GET /invites/:code`
+
+What the invitation leads to. **Unauthenticated** on purpose: the recipient must be able
+to see who is inviting them, and into what, before deciding to sign in.
+
+Response `200`, discriminated on `kind`:
+
+```json
+{ "invite": { "kind": "friend", "inviter": { "id": "<uuid>", "name": "Ada", "picture": null } } }
+```
+
+```json
+{
+  "invite": {
+    "kind": "group",
+    "inviter": { "id": "<uuid>", "name": "Ada", "picture": null },
+    "group": { "id": "<uuid>", "name": "Corsica 2026", "memberCount": 4 }
+  }
+}
+```
+
+- `404 { "error": "invite_not_found" }` — unknown or malformed code.
+- `410 { "error": "invite_expired" }` / `"invite_revoked"` / `"invite_gone"`.
+  `invite_gone` means the target no longer accepts anyone (an archived group). All of
+  them are dead links as far as the holder is concerned.
+
+### `POST /invites/:code/accept`
+
+Accept, as the authenticated caller. Idempotent.
+
+Response `200`, discriminated on `kind`:
+
+```json
+{
+  "result": {
+    "kind": "friend",
+    "friend": { "id": "<uuid>", "name": "Ada", "picture": null },
+    "alreadyFriends": false
+  }
+}
+```
+
+```json
+{ "result": { "kind": "group", "group": "<GroupSummary>", "alreadyMember": false } }
+```
+
+- `409 { "error": "self_invite" }` — the inviter cannot accept their own **friend** link.
+  Accepting one's own **group** link is a no-op reported as `alreadyMember: true`.
+- `404` / `410` as for the preview. `401` when unauthenticated.
+
+### `GET /i/:code`
+
+The public HTML page an invitation link points to. Not JSON: it tries to open
+`splitcount://invite/<code>`, and otherwise shows who is inviting (and which group, for a
+group invitation), the code to enter manually, and the store links when they are
+configured. Served with `Cache-Control: no-store`.
+
+## Friends
+
+See `docs/specs/friends-and-invitations.md`. A `FriendSummary` (`{ id, name, picture }`)
+is how *another* user is exposed — deliberately narrower than the `UserProfile` returned
+for oneself: it carries no email address.
 
 ### `POST /friends/invite`
 
@@ -112,30 +178,6 @@ immediately. Requires authentication. Response `200`: same shape as above.
 Revoke the active invitation without issuing a new one. Idempotent. Requires
 authentication. Response `204`.
 
-### `GET /friends/invites/:code`
-
-Who is inviting. **Unauthenticated** on purpose: the recipient must be able to see who
-sent the link before deciding to sign in.
-
-Response `200`: `{ "inviter": { "id": "<uuid>", "name": "Ada", "picture": null } }`
-
-- `404 { "error": "invite_not_found" }` — unknown or malformed code.
-- `410 { "error": "invite_expired" }` / `410 { "error": "invite_revoked" }`.
-
-### `POST /friends/invites/:code/accept`
-
-Create the friendship between the authenticated caller and the inviter. Idempotent.
-
-Response `200`:
-
-```json
-{ "friend": { "id": "<uuid>", "name": "Ada", "picture": null }, "alreadyFriends": false }
-```
-
-- `alreadyFriends` is `true` when the relationship already existed.
-- `409 { "error": "self_invite" }` — the inviter cannot accept their own link.
-- `404` / `410` as for the preview. `401` when unauthenticated.
-
 ### `GET /friends`
 
 The caller's friends, sorted by name. Requires authentication.
@@ -147,15 +189,93 @@ Response `200`: `{ "friends": [ { "id": "<uuid>", "name": "Ada", "picture": null
 Remove a friend. Symmetric and idempotent. Requires authentication. Response `204`;
 `400 { "error": "invalid_request" }` when `friendId` is not a UUID.
 
-### `GET /i/:code`
+**Destructive beyond the relationship**: the group the pair shared goes with the
+friendship, along with everything in it.
 
-The public HTML page an invitation link points to. Not JSON: it tries to open
-`splitcount://invite/<code>`, and otherwise shows who is inviting, the code to enter
-manually, and the store links when they are configured. Served with
-`Cache-Control: no-store`.
+## Groups
+
+See `docs/specs/groups.md`. Every route below requires authentication and resolves the
+caller's **membership** before anything else.
+
+A group the caller does not belong to is answered `404 { "error": "group_not_found" }`,
+never `403` — a non-member must not be able to tell a group they cannot see from one that
+does not exist.
+
+Shared error codes:
+
+| Status | Code                   | Meaning                                                    |
+| ------ | ---------------------- | ---------------------------------------------------------- |
+| `404`  | `group_not_found`      | No such group, or the caller is not a member                |
+| `403`  | `not_group_owner`      | Deleting is owner-only                                      |
+| `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
+| `409`  | `group_archived`       | An archived group takes no new members and issues no links  |
+| `409`  | `owner_cannot_leave`   | The owner cannot leave while other members remain           |
+| `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
+| `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
+
+`GroupSummary` is `{ id, kind, name, memberCount, archivedAt, createdAt }`, with `kind`
+one of `standard` / `pair`. `GroupDetail` adds `members` (a `FriendSummary` plus `role`)
+and `viewerRole`. A **pair group stores no name**: the API fills it with the *other*
+member's name, so each side sees who they share with.
+
+### `GET /groups`
+
+The caller's groups. **Pair groups are never listed** — they are reached from the friend
+list. Active groups first, then archived ones; alphabetical within each.
+
+Response `200`: `{ "groups": [ "<GroupSummary>" ] }`
+
+### `POST /groups`
+
+Create a group. `memberIds` is optional and must contain only friends of the caller.
+
+Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"] }` → Response
+`201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
+
+### `GET /groups/:groupId`
+
+The group and its members. Response `200 { "group": "<GroupDetail>" }`.
+
+### `PATCH /groups/:groupId`
+
+Rename and/or archive. Any member may do either; at least one field is required.
+
+Request: `{ "name": "Corsica", "archived": true }` → Response
+`200 { "group": "<GroupDetail>" }`. Archiving is reversible (`"archived": false`) and
+loses nothing.
+
+### `DELETE /groups/:groupId`
+
+Delete the group and everything in it. **Owner only**, irreversible. Response `204`.
+
+### `POST /groups/:groupId/members`
+
+Add friends of the caller. Already-members are ignored rather than rejected.
+
+Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetail>" }`.
+
+### `DELETE /groups/:groupId/members/:userId`
+
+Remove a member, or leave when `userId` is the caller. Response `204`, and removing
+someone who already left is a no-op. When the last member leaves, the group is deleted
+with its contents.
+
+The **owner cannot be removed** by another member: that would leave a group nobody is
+allowed to delete. They leave on their own terms, or delete it.
+
+### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
+
+The group's invitation link — **one per group**, not per member: any member sees, shares
+and can replace the same one. Same shapes as the `/friends/invite` trio. Accepting adds
+the person to the group; it does **not** create a friendship.
+
+### `POST /groups/pair/:friendId`
+
+The group the caller shares with a friend, **created on first access**. Idempotent, and
+safe under concurrency: the unique constraint on the friendship guarantees one group per
+pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends.
 
 ## Planned
 
-- Groups ("counts") CRUD.
 - Expenses CRUD with split definitions.
 - Balances / settle-up.

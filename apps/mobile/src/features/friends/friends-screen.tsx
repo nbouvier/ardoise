@@ -1,5 +1,5 @@
 import type { FriendSummary } from '@splitcount/shared';
-import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,40 +8,50 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { groupsChanged } from '@/features/groups/groups-changed';
+import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/features/auth/use-auth';
+import { fetchPairGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
 import { InviteScreen } from './invite-screen';
-import { pendingInvite } from './pending-invite';
 import { useFriends } from './use-friends';
 
 function FriendRow({
   friend,
+  busy,
+  onOpen,
   onRemove,
 }: {
   friend: FriendSummary;
+  busy: boolean;
+  onOpen: (friend: FriendSummary) => void;
   onRemove: (friend: FriendSummary) => void;
 }) {
   const theme = useTheme();
 
   return (
     <ThemedView style={styles.row}>
-      {friend.picture ? (
-        <Image source={{ uri: friend.picture }} style={styles.avatar} contentFit="cover" />
-      ) : (
-        <ThemedView type="backgroundElement" style={[styles.avatar, styles.avatarFallback]}>
-          <ThemedText>{friend.name.charAt(0).toUpperCase()}</ThemedText>
-        </ThemedView>
-      )}
-      <ThemedText style={styles.rowName}>{friend.name}</ThemedText>
+      {/* The row opens the group the two share; "Remove" stays a separate hit area. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open your shared group with ${friend.name}`}
+        disabled={busy}
+        onPress={() => onOpen(friend)}
+        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
+        <Avatar name={friend.name} picture={friend.picture} />
+        <ThemedText style={styles.rowName}>{friend.name}</ThemedText>
+      </Pressable>
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Remove ${friend.name}`}
@@ -57,29 +67,48 @@ function FriendRow({
 
 export function FriendsScreen() {
   const { status, friends, refresh, remove } = useFriends();
+  const { authorizedFetch } = useAuth();
+  const router = useRouter();
   const theme = useTheme();
   const [inviting, setInviting] = useState(false);
-  const [code, setCode] = useState('');
+  const [opening, setOpening] = useState(false);
 
-  function handleRemove(friend: FriendSummary) {
-    Alert.alert('Remove friend', `Remove ${friend.name} from your friends?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
-          remove(friend.id).catch((error: unknown) => {
-            logger.warn('friends.remove.failed', errorFields(error));
-            Alert.alert('Could not remove', 'Please try again.');
-          });
-        },
-      },
-    ]);
+  /**
+   * Open the group shared with a friend. It is created on first access, so
+   * from here it has simply always existed.
+   */
+  function handleOpen(friend: FriendSummary) {
+    setOpening(true);
+    fetchPairGroup(authorizedFetch, friend.id)
+      .then((group) => router.push({ pathname: '/groups/[id]', params: { id: group.id } }))
+      .catch((error: unknown) => {
+        logger.warn('groups.pair.open.failed', errorFields(error));
+        Alert.alert('Can’t open', 'Check your connection and try again.');
+      })
+      .finally(() => setOpening(false));
   }
 
-  function handleUseCode() {
-    pendingInvite.set(code);
-    setCode('');
+  function handleRemove(friend: FriendSummary) {
+    Alert.alert(
+      'Remove friend',
+      `Remove ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            remove(friend.id)
+              // The pair group went with the friendship.
+              .then(() => groupsChanged.notify())
+              .catch((error: unknown) => {
+                logger.warn('friends.remove.failed', errorFields(error));
+                Alert.alert('Could not remove', 'Please try again.');
+              });
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -110,38 +139,20 @@ export function FriendsScreen() {
             data={friends}
             keyExtractor={(friend) => friend.id}
             contentContainerStyle={styles.list}
-            renderItem={({ item }) => <FriendRow friend={item} onRemove={handleRemove} />}
+            renderItem={({ item }) => (
+              <FriendRow
+                friend={item}
+                busy={opening}
+                onOpen={handleOpen}
+                onRemove={handleRemove}
+              />
+            )}
           />
         )}
 
         <ThemedView style={styles.footer}>
           <Button label="Invite a friend" onPress={() => setInviting(true)} />
-
-          <ThemedText type="small" themeColor="textSecondary">
-            Got an invitation code?
-          </ThemedText>
-          <ThemedView style={styles.codeRow}>
-            <TextInput
-              accessibilityLabel="Invitation code"
-              placeholder="Paste it here"
-              placeholderTextColor={theme.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={code}
-              onChangeText={setCode}
-              onSubmitEditing={handleUseCode}
-              style={[
-                styles.codeInput,
-                { color: theme.text, backgroundColor: theme.backgroundElement },
-              ]}
-            />
-            <Button
-              label="Open"
-              variant="secondary"
-              disabled={code.trim().length === 0}
-              onPress={handleUseCode}
-            />
-          </ThemedView>
+          <InvitationCodeEntry />
         </ThemedView>
       </SafeAreaView>
 
@@ -196,34 +207,20 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingVertical: Spacing.two,
   },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
   rowName: {
     flex: 1,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  avatarFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.6,
   },
   footer: {
     gap: Spacing.two,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  codeInput: {
-    flex: 1,
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
   },
   modal: {
     flex: 1,

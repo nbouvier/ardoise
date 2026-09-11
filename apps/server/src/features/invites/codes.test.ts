@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FriendInviteRow } from '../../db/schema.js';
+import type { InviteRow } from '../../db/schema.js';
 
-import { assertInviteUsable, generateInviteCode, InviteError } from './invites.js';
+import { assertInviteUsable, generateInviteCode, InviteError } from './codes.js';
 
 const now = new Date('2026-09-10T12:00:00.000Z');
 
-function invite(overrides: Partial<FriendInviteRow> = {}): FriendInviteRow {
+function invite(overrides: Partial<InviteRow> = {}): InviteRow {
   return {
     id: 'invite-1',
+    kind: 'friend',
     inviterId: 'user-1',
+    groupId: null,
     code: 'code',
     expiresAt: new Date(now.getTime() + 1000),
     createdAt: now,
@@ -56,5 +58,12 @@ describe('assertInviteUsable', () => {
 
   it('treats the exact expiry instant as expired', () => {
     expect(() => assertInviteUsable(invite({ expiresAt: now }), now)).toThrow(InviteError);
+  });
+
+  it('applies the same rules to a group invitation', () => {
+    const groupInvite = invite({ kind: 'group', groupId: 'group-1', revokedAt: now });
+    expect(() => assertInviteUsable(groupInvite, now)).toThrow(
+      expect.objectContaining({ reason: 'revoked' }),
+    );
   });
 });

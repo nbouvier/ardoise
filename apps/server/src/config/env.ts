@@ -44,8 +44,8 @@ const envSchema = z.object({
    * it, so it must be an address the recipient's device can open.
    */
   PUBLIC_BASE_URL: z.url().default('http://localhost:3000'),
-  /** Friend-invitation lifetime in seconds. */
-  FRIEND_INVITE_TTL_SECONDS: z.coerce
+  /** Invitation lifetime in seconds, for every kind of invitation. */
+  INVITE_TTL_SECONDS: z.coerce
     .number()
     .int()
     .positive()

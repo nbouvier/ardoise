@@ -65,7 +65,11 @@ Once in the app:
 
 - A user can **remove a friend**, after a confirmation. Removal is symmetric: the
   relationship disappears for both.
-- A removed friend may be re-added later with a new (or the same still-valid) link.
+- Removal is **destructive**: the group the two shared goes with the friendship, along
+  with everything in it. The confirmation says so (`docs/specs/groups.md`).
+- A removed friend may be re-added later with a new (or the same still-valid) link — but
+  the shared group starts empty again.
+- Tapping a friend opens the group shared with them (`docs/specs/groups.md`).
 
 ## Out of scope
 
@@ -78,7 +82,8 @@ Once in the app:
 - Friend requests, pending states, or an inviter-side approval step.
 - Blocking, reporting, or muting a user.
 - Notifications (push or in-app) when someone accepts an invitation.
-- Any use of the friend list by other features — groups and expenses do not exist yet.
+- ~~Any use of the friend list by other features~~ — superseded: groups consume it
+  (`docs/specs/groups.md`).
 - Web (`mobile:web`) support beyond what already works: sign-in is disabled there, so
   invitations cannot be accepted on web.
 
@@ -142,17 +147,21 @@ Once in the app:
 
 ## Data / API considerations
 
-New endpoints (see `docs/API.md` for the authoritative surface):
+Endpoints (see `docs/API.md` for the authoritative surface):
 
 - `POST /friends/invite` — get-or-create the caller's active invite → `{ invite }`.
 - `POST /friends/invite/rotate` — revoke the active invite and issue a new one.
 - `DELETE /friends/invite` — revoke the active invite. Idempotent.
-- `GET /friends/invites/:code` — **unauthenticated** preview → `{ inviter }`. `404` unknown,
-  `410` expired or revoked.
-- `POST /friends/invites/:code/accept` — authenticated → `{ friend, alreadyFriends }`.
-  `409` when accepting one's own invite.
 - `GET /friends` — the caller's friends.
 - `DELETE /friends/:friendId` — remove a friend. Idempotent.
+
+Since groups arrived, the routes that *consume* a code are shared with them — one code
+space, one landing page, one confirmation screen (`docs/specs/groups.md`):
+
+- `GET /invites/:code` — **unauthenticated** preview. For a friend invitation it returns
+  `{ kind: 'friend', inviter }`. `404` unknown, `410` expired or revoked.
+- `POST /invites/:code/accept` — authenticated → `{ kind: 'friend', friend, alreadyFriends }`.
+  `409` when accepting one's own invite.
 - `GET /i/:code` — the public HTML landing page the shared link points to.
 
 Persisted data (see `docs/DATABASE.md`):
