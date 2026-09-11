@@ -3,6 +3,7 @@ import type {
   GroupDetail,
   SplitInput,
   Transaction,
+  TransactionCategory,
   TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
@@ -18,6 +19,7 @@ import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/a
 import { errorFields, logger } from '@/lib/logger';
 
 import { AmountInput } from './amount-input';
+import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
 import { MemberSelect } from './member-select';
 import { SplitEditor } from './split-editor';
@@ -83,6 +85,7 @@ export function TransactionFormScreen({
   const [amountCents, setAmountCents] = useState<number | null>(initial?.amountCents ?? 0);
   const [occurredOn, setOccurredOn] = useState(initial?.occurredOn ?? today());
   const [comment, setComment] = useState(initial?.comment ?? '');
+  const [category, setCategory] = useState<TransactionCategory | null>(initial?.category ?? null);
   const [payerId, setPayerId] = useState(initial?.payer.id ?? viewerId);
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
@@ -111,6 +114,7 @@ export function TransactionFormScreen({
       amount: amountCents ?? 0,
       occurredOn,
       comment: comment.trim() === '' ? null : comment.trim(),
+      category,
       payerId,
     };
     if (kind === 'transfer') {
@@ -206,6 +210,11 @@ export function TransactionFormScreen({
           <DatePickerField value={occurredOn} onChange={setOccurredOn} />
         </View>
       </ThemedView>
+
+      <ThemedText type="small" themeColor="textSecondary">
+        Category
+      </ThemedText>
+      <CategoryPicker value={category} onChange={setCategory} />
 
       <TextInput
         accessibilityLabel="Comment"

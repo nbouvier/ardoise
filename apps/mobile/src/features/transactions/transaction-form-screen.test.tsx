@@ -29,6 +29,7 @@ const existing: Transaction = {
   amountCents: 1000,
   occurredOn: '2026-09-10',
   comment: 'Weekly run',
+  category: 'groceries',
   payer: ada,
   splitMode: 'shares',
   participants: [
@@ -109,6 +110,7 @@ describe('TransactionFormScreen — recording', () => {
         kind: 'expense',
         title: 'Groceries',
         amount: 1000,
+        category: null,
         payerId: ada.id,
         split: {
           mode: 'shares',
@@ -120,6 +122,40 @@ describe('TransactionFormScreen — recording', () => {
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(existing);
+  });
+
+  it('picks a category, and clears it by tapping it again', async () => {
+    const onSaved = jest.fn();
+    await render(
+      <TransactionFormScreen
+        group={group}
+        viewerId={ada.id}
+        onSaved={onSaved}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Groceries');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
+    await fireEvent.press(screen.getByRole('button', { name: 'Groceries' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      expect.objectContaining({ category: 'groceries' }),
+    );
+
+    // Tapping the same category again clears it.
+    await fireEvent.press(screen.getByRole('button', { name: 'Groceries' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockCreateTransaction).toHaveBeenLastCalledWith(
+      expect.anything(),
+      group.id,
+      expect.objectContaining({ category: null }),
+    );
   });
 
   it('switches to a transfer, requiring a recipient other than the payer', async () => {
@@ -171,6 +207,10 @@ describe('TransactionFormScreen — editing', () => {
     expect(screen.getByLabelText('Title').props.value).toBe('Groceries');
     expect(screen.getByLabelText('Amount').props.value).toBe('10.00');
     expect(screen.getByLabelText('Comment').props.value).toBe('Weekly run');
+    expect(screen.getByRole('button', { name: 'Groceries' })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ selected: true }),
+    );
     expect(screen.getByRole('button', { name: 'Delete this transaction' })).toBeTruthy();
   });
 
@@ -199,6 +239,7 @@ describe('TransactionFormScreen — editing', () => {
         title: 'Groceries (corrected)',
         amount: 1000,
         occurredOn: '2026-09-10',
+        category: 'groceries',
         payerId: ada.id,
       }),
     );

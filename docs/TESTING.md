@@ -99,9 +99,10 @@ interaction is a device concern.
   absent **but "Add a transaction" is present**, and the transactions feature
   (`src/features/transactions/`): the split editor (selection, weight stepper, live
   preview, mode switching, the allocation indicator), the add/edit form (defaults, request
-  shape for each kind, full-replace edit, transfer validation), the transaction row's
-  "my share" calculation, and the date field's local-date conversion (no time-zone shift)
-  and its iOS/Android wiring.
+  shape for each kind, full-replace edit, transfer validation), the category picker
+  (selection, clearing by re-tapping), the transaction row's "my share" calculation and
+  category emoji, and the date field's local-date conversion (no time-zone shift) and its
+  iOS/Android wiring.
 
 ### Gotchas
 

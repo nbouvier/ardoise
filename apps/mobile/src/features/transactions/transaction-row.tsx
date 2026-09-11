@@ -1,4 +1,4 @@
-import type { Transaction } from '@splitcount/shared';
+import { categoryDefinition, type Transaction } from '@splitcount/shared';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -49,11 +49,15 @@ function myShareCents(transaction: Transaction, viewerId: string): number {
 /** One row of a group's transaction list. */
 export function TransactionRow({ transaction, viewerId, onPress }: TransactionRowProps) {
   const myShare = myShareCents(transaction, viewerId);
+  const category = categoryDefinition(transaction.category);
 
   const content = (
     <>
       <View style={styles.text}>
-        <ThemedText numberOfLines={1}>{transaction.title}</ThemedText>
+        <ThemedText numberOfLines={1}>
+          {category ? `${category.emoji} ` : ''}
+          {transaction.title}
+        </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {formatOccurredOn(transaction.occurredOn)} · {kindLabels[transaction.kind]} ·{' '}
           {transaction.payer.name}

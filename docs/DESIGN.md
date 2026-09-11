@@ -77,7 +77,8 @@ Pushed above the tabs, so it has a back button. **Transactions are the primary c
 the group's name, an "Archived" note when it applies, **the viewer's own balance**
 ("You are owed 21.25" / "You owe 8.00" / "You're all settled up" — said in words, so it
 never rests on spotting a minus sign), the transaction list
-(`TransactionRow`: title, date, kind, payer, and the viewer's own share, coloured), and a
+(`TransactionRow`: category emoji (when set) before the title, date, kind, payer, and the
+viewer's own share, coloured), and a
 primary "Add a transaction" button — absent on an archived group. A row opens the same
 add/edit sheet, pre-filled; on an archived group rows render but are not pressable, read
 only. Empty state: an explanation and the same "Add a transaction" action.
@@ -110,10 +111,19 @@ a way back), and a retryable connection error.
 
 One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
 "Delete this transaction". Kind picker (Expense / Income / Transfer), title, amount, date
-(`DatePickerField` — see below), optional comment, then "Who paid" (`MemberSelect`,
-defaulting to the signed-in member). An expense or income continues with "Who it
-concerns" (`SplitEditor`); a transfer replaces it with a single "To" picker instead, excluding the
-payer. "Save" is disabled until the title, amount, date and split are all valid.
+(`DatePickerField` — see below), a category grid (`CategoryPicker` — see below), optional
+comment, then "Who paid" (`MemberSelect`, defaulting to the signed-in member). An expense
+or income continues with "Who it concerns" (`SplitEditor`); a transfer replaces it with a
+single "To" picker instead, excluding the payer. "Save" is disabled until the title,
+amount, date and split are all valid — the category is never required.
+
+### Category picker (`src/features/transactions/category-picker.tsx`)
+
+Every preset as an emoji + label pill (`CategoryPicker`), wrapping into a grid — same
+pill styling as the split editor's mode toggle, filled when selected. Single-select, and
+tapping the already-selected pill again clears it: there is no separate "None" pill, the
+selection itself is the toggle. No way to add, rename or reorder a category here — the
+list is fixed (`@splitcount/shared`'s `categories.ts`).
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 

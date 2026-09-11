@@ -15,6 +15,7 @@ const expense: Transaction = {
   amountCents: 1000,
   occurredOn: '2026-09-11',
   comment: null,
+  category: null,
   payer: ada,
   splitMode: 'shares',
   participants: [
@@ -59,6 +60,25 @@ describe('TransactionRow', () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} />);
 
     expect(screen.queryByRole('button', { name: 'Groceries' })).toBeNull();
+    expect(screen.getByText('Groceries')).toBeTruthy();
+  });
+
+  it('shows the category emoji next to the title, when categorised', async () => {
+    await render(
+      <TransactionRow
+        transaction={{ ...expense, category: 'groceries' }}
+        viewerId={ada.id}
+        onPress={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText('🛒 Groceries')).toBeTruthy();
+  });
+
+  it('shows no emoji at all when uncategorised', async () => {
+    await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
+
+    expect(screen.queryByText(/^🛒/)).toBeNull();
     expect(screen.getByText('Groceries')).toBeTruthy();
   });
 });
