@@ -2,6 +2,7 @@ import type { Balance, FriendSummary, GroupDetail, Transaction } from '@splitcou
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
 
 import { GroupScreen } from './group-screen';
@@ -72,6 +73,7 @@ const balances: Balance[] = [
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchTransactions = jest.fn<() => Promise<Transaction[]>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
+const mockCreateTransaction = jest.fn<() => Promise<Transaction>>();
 
 const mockAuthContext = {
   authorizedFetch: jest.fn(),
@@ -95,7 +97,7 @@ jest.mock('@/lib/api/groups', () => ({
 jest.mock('@/lib/api/transactions', () => ({
   fetchTransactions: () => mockFetchTransactions(),
   fetchBalances: () => mockFetchBalances(),
-  createTransaction: jest.fn(),
+  createTransaction: () => mockCreateTransaction(),
   updateTransaction: jest.fn(),
   deleteTransaction: jest.fn(),
 }));
@@ -113,6 +115,7 @@ beforeEach(() => {
   mockFetchGroup.mockReset().mockResolvedValue(trip);
   mockFetchTransactions.mockReset().mockResolvedValue([]);
   mockFetchBalances.mockReset().mockResolvedValue([]);
+  mockCreateTransaction.mockReset().mockResolvedValue(groceries);
 });
 
 async function openDetails() {
@@ -144,6 +147,22 @@ describe('GroupScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
 
     expect(await screen.findByLabelText('Title')).toBeTruthy();
+  });
+
+  it('tells the Friends tab to reload after a transaction is saved', async () => {
+    // A friend's per-group balance changed here has no other way to reach the
+    // Friends tab's own per-friend total — it can only find out by asking.
+    const notify = jest.spyOn(friendsChanged, 'notify');
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
+    await fireEvent.changeText(await screen.findByLabelText('Title'), 'Groceries');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Groceries')).toBeTruthy();
+    expect(notify).toHaveBeenCalled();
   });
 
   it('keeps membership actions behind "Group details", alongside members and balances', async () => {

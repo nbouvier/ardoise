@@ -18,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { friendsChanged } from '@/features/friends/friends-changed';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
@@ -301,6 +302,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                   // Unlike the list, balances cannot be recomputed from one
                   // transaction — every member's share of it moved.
                   balancesResult.refresh();
+                  // A friend's per-friend total on the Friends tab may depend
+                  // on this transaction too; it has no other way to know.
+                  friendsChanged.notify();
                   setSheet(null);
                 }}
                 onDeleted={() => {
@@ -308,6 +312,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                     transactionsResult.remove(editingTransaction.id);
                   }
                   balancesResult.refresh();
+                  friendsChanged.notify();
                   setSheet(null);
                 }}
                 onCancel={() => setSheet(null)}
