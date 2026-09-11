@@ -158,7 +158,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   third reader). `friendships` is now in the same position — `groups` reads it directly
   for the pair group and for "is this person a friend of the caller?", and imports only
   the pure `orderPair` helper from `friends`. If a third reader appears, extract it the
-  same way.
+  same way. Since 2026-09-11 `friends` is in that position with the ledger: it builds
+  `GET /friends`'s per-friend balance from `transactions`' own repository
+  (`balancesWith`), behind a narrow `CounterpartyBalances` interface declared on its
+  service — read-only, and not through the transactions *service*, since the aggregate is
+  already scoped to transactions the caller is party to and needs no group membership
+  check. `transactions` stays the owner of those tables and of the rule.
 - Invitation lifetime (7 days) is a first guess; tune with real usage.
 - Group ownership cannot be transferred, so an inactive owner strands a group nobody can
   delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).

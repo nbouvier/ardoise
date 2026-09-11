@@ -172,11 +172,17 @@ describe('friends routes', () => {
         },
       });
 
+      // A brand-new friendship shares no transaction yet, so both sides read
+      // as settled rather than as a missing figure.
       expect((await listFriends(ada.headers)).json()).toEqual({
-        friends: [{ id: grace.userId, name: 'Grace Hopper', picture: null }],
+        friends: [
+          { id: grace.userId, name: 'Grace Hopper', picture: null, balanceCents: 0 },
+        ],
       });
       expect((await listFriends(grace.headers)).json()).toEqual({
-        friends: [{ id: ada.userId, name: 'Ada Lovelace', picture: null }],
+        friends: [
+          { id: ada.userId, name: 'Ada Lovelace', picture: null, balanceCents: 0 },
+        ],
       });
     });
 

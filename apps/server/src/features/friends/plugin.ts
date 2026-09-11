@@ -1,6 +1,8 @@
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { createTransactionsRepository } from '../transactions/repository.js';
+
 import { createFriendsRepository } from './repository.js';
 import {
   createFriendInviteHandler,
@@ -19,7 +21,16 @@ const friendParamsSchema = z.object({ friendId: z.uuid() });
 export const friendsPlugin = fp(
   async (app) => {
     const repository = createFriendsRepository(app.db);
-    const friends = createFriendsService({ repository, invites: app.invites });
+    // A friend list is a list of balances as much as a list of people, so it
+    // reads the ledger `transactions` owns — the same way `groups` reads
+    // `friendships` directly. A repository, not the transactions service:
+    // nothing here goes through a group's membership checks, because the
+    // aggregate is already scoped to transactions the caller is party to.
+    const friends = createFriendsService({
+      repository,
+      invites: app.invites,
+      ledger: createTransactionsRepository(app.db),
+    });
 
     app.decorate('friends', friends);
     app.invites.register('friend', createFriendInviteHandler(repository));

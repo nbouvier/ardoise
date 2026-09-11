@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
@@ -51,6 +51,11 @@ export interface TransactionsRepository {
     at: Date,
   ): Promise<CreatedTransaction>;
   remove(transactionId: string): Promise<void>;
+  /**
+   * Net balance between `userId` and each person they share a transaction
+   * with, across every group. Positive: that person owes `userId`.
+   */
+  balancesWith(userId: string): Promise<Map<string, number>>;
 }
 
 function toParticipantRows(
@@ -132,6 +137,78 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
 
     async remove(transactionId) {
       await db.delete(transactions).where(eq(transactions.id, transactionId));
+    },
+
+    async balancesWith(userId) {
+      // Aggregated in the database, unlike a group's balance: this one spans
+      // the caller's whole history across every group, so pulling the rows
+      // into the application would grow with the account's lifetime.
+      //
+      // No group filter is needed — being on a transaction already implies
+      // having shared its group — and none is wanted: filtering on *current*
+      // membership would drop what someone who has since left still owes.
+      // See `computePairwiseBalances` in `balances.ts` for the rule in
+      // readable form; the two are cross-checked by test.
+      //
+      // Two passes rather than one union: each is a single indexed lookup
+      // (`transactions_payer_id_idx`, `transaction_participants_user_id_idx`)
+      // and merging two small maps is cheaper to read than a subquery.
+      const signedShare = sql`case when ${transactions.kind} = 'income'
+        then -${transactionParticipants.shareCents}
+        else ${transactionParticipants.shareCents} end`;
+
+      // What the caller paid: each other participant owes them their share.
+      const owedToCaller = await db
+        .select({
+          counterpartyId: transactionParticipants.userId,
+          deltaCents: sql<number>`sum(${signedShare})::int`,
+        })
+        .from(transactions)
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            eq(transactions.payerId, userId),
+            // Paying for oneself is not a debt to oneself.
+            ne(transactionParticipants.userId, userId),
+          ),
+        )
+        .groupBy(transactionParticipants.userId);
+
+      // What someone else paid: the caller owes that payer their own share.
+      const owedByCaller = await db
+        .select({
+          counterpartyId: transactions.payerId,
+          deltaCents: sql<number>`sum(${signedShare})::int`,
+        })
+        .from(transactions)
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            ne(transactions.payerId, userId),
+            eq(transactionParticipants.userId, userId),
+          ),
+        )
+        .groupBy(transactions.payerId);
+
+      const balances = new Map<string, number>();
+      const add = (counterpartyId: string, deltaCents: number) => {
+        balances.set(counterpartyId, (balances.get(counterpartyId) ?? 0) + deltaCents);
+      };
+
+      for (const row of owedToCaller) {
+        add(row.counterpartyId, Number(row.deltaCents));
+      }
+      for (const row of owedByCaller) {
+        add(row.counterpartyId, -Number(row.deltaCents));
+      }
+
+      return balances;
     },
   };
 }

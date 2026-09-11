@@ -180,9 +180,25 @@ authentication. Response `204`.
 
 ### `GET /friends`
 
-The caller's friends, sorted by name. Requires authentication.
+The caller's friends, sorted by name, each with where the two of them stand. Requires
+authentication.
 
-Response `200`: `{ "friends": [ { "id": "<uuid>", "name": "Ada", "picture": null } ] }`
+`balanceCents` is positive when that friend owes the caller, negative when the caller owes
+them, `0` when they are settled — including when they share no transaction at all. It is
+the net across **every group the two share**, archived ones included, and a group only one
+of them still belongs to counts too. It is built solely from transactions the caller is
+party to, so it can never surface a group or an amount they cannot already read. Computed
+on the fly, not stored — see `docs/specs/balances.md` and `docs/ARCHITECTURE.md`.
+
+Response `200`:
+
+```json
+{
+  "friends": [
+    { "id": "<uuid>", "name": "Ada", "picture": null, "balanceCents": 1250 }
+  ]
+}
+```
 
 ### `DELETE /friends/:friendId`
 
@@ -385,6 +401,9 @@ Every member's net balance in the group: positive means the group owes them, neg
 means they owe the group. Every current member appears, including at zero; a member who
 left with an unsettled balance still appears too. Computed on the fly from the
 transactions, not stored — see `docs/ARCHITECTURE.md`.
+
+This is a net against the **group**, not against a person: it cannot say who owes whom.
+For that, see `balanceCents` on `GET /friends` and `docs/specs/balances.md`.
 
 Response `200`:
 

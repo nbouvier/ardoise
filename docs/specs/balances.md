@@ -113,8 +113,10 @@ properties the display depends on:
   group and everything in it is lost.
 - **A transaction is edited or deleted**: both balances reflect it on the next read;
   there is no stored total that could survive the change.
-- **The balance load fails while the friend list itself succeeded**: the list must still
-  render with names, since opening a friend's group is the primary action of the screen.
+- **The balance load fails**: the amounts travel with the friend list in one response, so
+  the list fails as a whole and the screen offers its existing retry. There is no
+  half-loaded state showing names without amounts, and in particular no friend is ever
+  shown as settled because a figure could not be read.
 - **A transaction where the viewer is both the payer and a concerned member**: the two
   contributions net out, exactly as they do in a group balance.
 
@@ -197,8 +199,9 @@ See `docs/API.md` for the authoritative surface.
 
 ## Observability
 
-- A failure to load balances must be diagnosable, distinct from a failure to load the
-  friend list or the group itself.
+- A failure to load a group's balances must be diagnosable, distinct from a failure to
+  load the group itself. Per-friend balances travel with the friend list, so their failure
+  is the friend list's failure and is already diagnosable as such.
 - Amounts are financial data and must **not** be logged, per
   `docs/guidelines/LOGGING.md`. A balance failure logs the operation and the caller, never
   the figures.

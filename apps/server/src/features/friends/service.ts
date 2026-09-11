@@ -1,4 +1,4 @@
-import type { FriendSummary, Invite } from '@splitcount/shared';
+import type { FriendEntry, Invite } from '@splitcount/shared';
 
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
@@ -14,20 +14,31 @@ export interface FriendsService {
   rotateInvite(userId: string): Promise<Invite>;
   /** Revoke the active invitation. Idempotent. */
   revokeInvite(userId: string): Promise<void>;
-  listFriends(userId: string): Promise<FriendSummary[]>;
+  /** The caller's friends, each with where the two of them stand. */
+  listFriends(userId: string): Promise<FriendEntry[]>;
   removeFriend(userId: string, friendId: string): Promise<void>;
+}
+
+/**
+ * The slice of the transaction ledger a friend list needs: how much each
+ * person the caller shares transactions with owes them, or is owed. Narrow on
+ * purpose — `friends` reads the ledger, it does not get to write to it.
+ */
+export interface CounterpartyBalances {
+  balancesWith(userId: string): Promise<Map<string, number>>;
 }
 
 export interface FriendsServiceDeps {
   repository: FriendsRepository;
   invites: InvitesService;
+  ledger: CounterpartyBalances;
 }
 
 /** One active friend invitation per inviter — the link *is* "add me". */
 const targetFor = (userId: string) => ({ kind: 'friend' as const, inviterId: userId });
 
 export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
-  const { repository, invites } = deps;
+  const { repository, invites, ledger } = deps;
 
   return {
     getOrCreateInvite: (userId) => invites.getOrCreate(targetFor(userId), userId),
@@ -35,8 +46,18 @@ export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
     revokeInvite: (userId) => invites.revoke(targetFor(userId)),
 
     async listFriends(userId) {
-      const rows = await repository.listFriends(userId);
-      return rows.map(toUserSummary);
+      // The ledger is keyed by counterparty across every group, so a friend
+      // absent from it simply shares no transaction with the caller: settled,
+      // not missing.
+      const [rows, balances] = await Promise.all([
+        repository.listFriends(userId),
+        ledger.balancesWith(userId),
+      ]);
+
+      return rows.map((row) => ({
+        ...toUserSummary(row),
+        balanceCents: balances.get(row.id) ?? 0,
+      }));
     },
 
     async removeFriend(userId, friendId) {
