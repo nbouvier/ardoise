@@ -47,6 +47,13 @@ external service), migrated **once per test file**:
 Close it in `afterAll` (`app.close()` / `handle.close()`). External boundaries such as
 Google token verification are mocked, never contacted.
 
+Vitest's default timeouts are raised (`hookTimeout` 60s, `testTimeout` 30s in
+`apps/server/vitest.config.ts`). Every database-backed file starts and migrates its own
+PGlite, and the files run concurrently, so on a busy machine that setup alone can exceed
+the 10s/5s defaults — a spurious failure that says nothing about the code. The timeouts
+are a ceiling for setup, not a licence for slow tests: a *test* that needs seconds is
+doing too much.
+
 The root `npm test` runs `pretest` first, which builds `@splitcount/shared` so both apps
 resolve its compiled output.
 
