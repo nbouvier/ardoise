@@ -38,8 +38,12 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   (defaulting to the recorder), and who it concerns. Splitting defaults to equal shares
   and can be changed to weighted shares or fixed amounts per person. Any member can edit
   or delete any transaction. Works identically in the implicit pair group; an archived
-  group is read-only for transactions. Balances are not computed yet — a transaction is
-  recorded, not yet reflected in a running total. See `docs/specs/transactions.md`.
+  group is read-only for transactions. See `docs/specs/transactions.md`.
+- **Balances** — a group shows where each member stands against it, and the viewer's own
+  position sits on the group screen itself. The friend list goes further: next to each
+  friend, the net of what they owe the user or the user owes them, summed across every
+  group the two share. Both are derived from the transactions on every read, never stored.
+  See `docs/specs/balances.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
 `/health`, auth, friends, invitations, groups and group transactions, tooling and
@@ -47,8 +51,8 @@ documentation.
 
 ## Planned direction
 
-- Running balances per member and settle-up suggestions, built on the transaction data
-  now recorded.
+- Settle-up suggestions — who should pay whom to clear a group, or to clear everything
+  between two people, built on the balances now shown.
 - Better tracking and organisation than Tricount (categories, history, clarity).
 
 ## Not yet decided

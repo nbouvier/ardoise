@@ -88,6 +88,10 @@ concerns.
 
 ### Balances
 
+Balances are specified in full in `docs/specs/balances.md`, including the balance between
+two people across every group they share. What follows is the group-level rule this
+feature establishes, which that spec builds on.
+
 - A group shows each member's **balance**: the net of every transaction they were the
   payer or a concerned member of. Positive means the group owes them; negative means they
   owe the group.
@@ -105,6 +109,8 @@ concerns.
 - **Settle-up suggestions** — who should pay whom, and how many transfers it takes to
   clear every balance. Balances themselves (the net per member) are in scope; minimising
   the number of payments to settle them is a further step, left for later.
+- **The balance between two people across the groups they share** — see
+  `docs/specs/balances.md`.
 - Multiple currencies, or a currency at all (inherited from groups: none exists yet).
 - Recurring transactions.
 - Receipt photos or any attachment.

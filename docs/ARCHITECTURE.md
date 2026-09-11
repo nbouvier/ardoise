@@ -135,6 +135,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | A shares split defaults every participant to weight 1; there is no separate "equal" mode | An equal split *is* a shares split where everyone is weighted the same — a dedicated mode would just be that one case with its own code path |
 | 2026-09-11 | Balances are computed on the fly from `transactions` / `transaction_participants`, not stored | No denormalized total to keep in sync while the feature is new; revisit if querying at scale becomes a real cost (see Open items) |
 | 2026-09-11 | Transactions are the one thing that works on a pair group like a standard group | Every other pair-group route is refused by `assertNotPairGroup`; transactions must not share that guard, or the pair group could never hold anything |
+| 2026-09-11 | The balance between two people is attributed transaction by transaction (payer credited, concerned member debited), never derived from group balances | A group balance is a net against the *group*: it cannot say who owes whom. Deriving a per-person figure from settle-up suggestions instead would make the number move when an unrelated third party spends |
+| 2026-09-11 | The per-friend balance is aggregated in SQL, while a group's stays an in-application sum | A group is bounded (a trip ends); the per-friend figure spans the caller's whole history across every group, so loading rows into Node is the wrong shape there |
+| 2026-09-11 | The per-friend aggregate filters on "both people are on the transaction", with no group filter at all | Being on a transaction already implies having shared its group. Filtering on *current* membership instead would silently drop the debt of someone who left a shared group |
+| 2026-09-11 | Each friend's balance rides on `GET /friends` rather than its own route; `friendSummarySchema` is left untouched | The friend list has no useful state without the amounts, and a second call would show names before figures. The summary shape is reused by group members, transaction participants and invitation previews, none of which have a balance |
 | 2026-09-11 | The transaction date field uses `@expo/ui`'s `community/datetime-picker`, not a new dependency | `@expo/ui` was already a dependency but not yet linked into the native build; reusing it (SwiftUI `DatePicker` on iOS, a Material dialog on Android) needs the same native rebuild a brand-new picker library would have, for zero added dependency footprint |
 
 ## Open items
@@ -158,9 +162,16 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - Invitation lifetime (7 days) is a first guess; tune with real usage.
 - Group ownership cannot be transferred, so an inactive owner strands a group nobody can
   delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).
-- Balances are recomputed from the transaction rows on every request. Fine at the volume
-  a trip or a flatshare produces; if a long-lived group's history makes that aggregation
-  costly, the next step is a denormalized running balance updated on write — not done
-  now to avoid keeping a derived total in sync before the read pattern is known.
+- Balances are recomputed from the transaction rows on every request, both per group and
+  per friend (`docs/specs/balances.md`). Fine at the volume a trip or a flatshare
+  produces, and deliberately so: a stored total is a duplicate that every write path
+  (create, edit, delete, group deletion, friendship removal) must keep correct, and a
+  drifted money figure is the worst failure this product can have.
+  **The per-friend aggregate is the one to watch**: a group's history is bounded by the
+  trip that ends it, but that query spans the caller's entire history and grows with the
+  lifetime of the account. Revisit when it is measured slow, not before. The right shape
+  then is a `pair_balances(user_a, user_b, amount_cents)` table written in the same SQL
+  transaction as every transaction write — it matches the read pattern exactly, one
+  indexed row per friend — with the current computation kept as the recompute oracle.
 - The transaction list has no pagination yet (`docs/specs/transactions.md`); revisit once
   a group's history grows large enough to matter.
