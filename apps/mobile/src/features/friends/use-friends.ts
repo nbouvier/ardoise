@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendEntry } from '@splitcount/shared';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
@@ -11,7 +11,7 @@ export type FriendsStatus = 'loading' | 'ready' | 'error';
 
 interface FriendsState {
   status: FriendsStatus;
-  friends: FriendSummary[];
+  friends: FriendEntry[];
 }
 
 export interface UseFriendsResult extends FriendsState {

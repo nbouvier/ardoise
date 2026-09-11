@@ -7,7 +7,12 @@ Living document for visual and interaction conventions. Update it as the UI evol
 Defined in `apps/mobile/src/constants/theme.ts`:
 
 - **Colours** — `Colors.light` / `Colors.dark` with roles: `text`, `textSecondary`,
-  `background`, `backgroundElement`, `backgroundSelected`.
+  `background`, `backgroundElement`, `backgroundSelected`, plus `credit` / `debit` for a
+  balance in or against the viewer's favour (lifted on dark, where the light greens and
+  reds go muddy). Reach for them through `balanceTone()`
+  (`src/features/transactions/balance-display.ts`) rather than testing the sign by hand.
+  Destructive-action red is still written inline at its few call sites — a different
+  meaning that happens to share a hue.
 - **Spacing** — `Spacing` scale: `half` (2) → `six` (64). Use tokens, not raw numbers.
 - **Fonts** — `Fonts` per platform: `sans`, `serif`, `rounded`, `mono`.
 - **Layout** — `MaxContentWidth` (800), `BottomTabInset` per platform.
@@ -69,7 +74,9 @@ shows the toggle, not the empty state.
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
 Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
-the group's name, an "Archived" note when it applies, the transaction list
+the group's name, an "Archived" note when it applies, **the viewer's own balance**
+("You are owed 21.25" / "You owe 8.00" / "You're all settled up" — said in words, so it
+never rests on spotting a minus sign), the transaction list
 (`TransactionRow`: title, date, kind, payer, and the viewer's own share, coloured), and a
 primary "Add a transaction" button — absent on an archived group. A row opens the same
 add/edit sheet, pre-filled; on an archived group rows render but are not pressable, read
@@ -80,6 +87,12 @@ small "Details" button in the header, opening a sheet: the member list (avatar +
 "Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
 net, coloured, "settled up" at zero — a member who left with an unsettled balance still
 appears, without an avatar), then the management actions.
+
+The balances are read **once, by the group screen**, and handed to both the summary and
+the sheet; the screen refreshes them after a transaction is saved or deleted, since a
+balance cannot be patched from a single transaction the way the list can. The summary
+keeps showing the last known figure while that reload is in flight, rather than blinking
+on every save.
 
 **One screen for both kinds of group**, in both the main view and the details sheet.
 **Transactions behave identically on a pair group** — the one thing that does. Every
@@ -143,10 +156,19 @@ and the empty state points at the invitation link instead.
 
 ### Friends (`src/features/friends/friends-screen.tsx`, tab `app/(tabs)/friends.tsx`)
 
-List of avatar + name rows. **Tapping a row opens the group shared with that friend**;
-"Remove" stays a separate hit area at the end of the row, and its confirmation says that
-the shared group and its contents go too. Empty state: "No friends yet". A footer holds the
-primary "Invite a friend" action and the invitation code entry below.
+List of avatar + name rows, each with **where the two of them stand** under the name —
+"owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted across every group
+they share (`docs/specs/balances.md`). No grand total sits above the list: members of
+shared groups who are not friends are absent from it, so a sum of the rows would not be
+the viewer's overall position.
+
+**Tapping a row opens the group shared with that friend**; "Remove" stays a separate hit
+area at the end of the row, and its confirmation says that the shared group and its
+contents go too. Empty state: "No friends yet". A footer holds the primary "Invite a
+friend" action and the invitation code entry below.
+
+The **friend picker** deliberately shows no balance: it is a selection list, and a money
+figure there is noise.
 
 ### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
 
@@ -200,7 +222,8 @@ is stale — restart the dev server rather than working around the type.
 
 Auth screens (sign-in, account, gate), the friends screens, the groups screens and the
 transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
-Groups now hold transactions and show balances; settle-up suggestions are not built yet.
+Groups hold transactions and show balances, and the friend list shows where you stand with
+each person across every group you share; settle-up suggestions are not built yet.
 
 The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
 text field on web (see "Date field" above and `docs/MOBILE.md`).

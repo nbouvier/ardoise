@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendEntry } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -20,6 +20,7 @@ import { groupsChanged } from '@/features/groups/groups-changed';
 import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
 import { fetchPairGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -32,10 +33,10 @@ function FriendRow({
   onOpen,
   onRemove,
 }: {
-  friend: FriendSummary;
+  friend: FriendEntry;
   busy: boolean;
-  onOpen: (friend: FriendSummary) => void;
-  onRemove: (friend: FriendSummary) => void;
+  onOpen: (friend: FriendEntry) => void;
+  onRemove: (friend: FriendEntry) => void;
 }) {
   const theme = useTheme();
 
@@ -49,7 +50,13 @@ function FriendRow({
         onPress={() => onOpen(friend)}
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
         <Avatar name={friend.name} picture={friend.picture} />
-        <ThemedText style={styles.rowName}>{friend.name}</ThemedText>
+        <ThemedView style={styles.rowText}>
+          <ThemedText numberOfLines={1}>{friend.name}</ThemedText>
+          {/* Netted across every group the two share — see docs/specs/balances.md. */}
+          <ThemedText type="small" themeColor={balanceTone(friend.balanceCents)}>
+            {balanceWithPerson(friend.balanceCents)}
+          </ThemedText>
+        </ThemedView>
       </Pressable>
 
       <Pressable
@@ -77,7 +84,7 @@ export function FriendsScreen() {
    * Open the group shared with a friend. It is created on first access, so
    * from here it has simply always existed.
    */
-  function handleOpen(friend: FriendSummary) {
+  function handleOpen(friend: FriendEntry) {
     setOpening(true);
     fetchPairGroup(authorizedFetch, friend.id)
       .then((group) => router.push({ pathname: '/groups/[id]', params: { id: group.id } }))
@@ -88,7 +95,7 @@ export function FriendsScreen() {
       .finally(() => setOpening(false));
   }
 
-  function handleRemove(friend: FriendSummary) {
+  function handleRemove(friend: FriendEntry) {
     Alert.alert(
       'Remove friend',
       `Remove ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
@@ -213,8 +220,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
   },
-  rowName: {
+  rowText: {
     flex: 1,
+    gap: Spacing.half,
   },
   pressed: {
     opacity: 0.6,

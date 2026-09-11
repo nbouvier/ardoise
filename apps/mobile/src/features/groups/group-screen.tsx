@@ -18,9 +18,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
-import { GroupBalances } from '@/features/transactions/group-balances';
+import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
+import { useBalances, type UseBalancesResult } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -54,6 +55,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
   const transactionsResult = useTransactions(groupId);
+  // Read once here rather than inside the details sheet: the summary above the
+  // transaction list and the per-member list in the sheet are the same figures.
+  const balancesResult = useBalances(groupId);
 
   /**
    * Run a change, keep the screen in sync, and surface a failure plainly.
@@ -209,6 +213,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               Archived — read-only until it’s reopened.
             </ThemedText>
           ) : null}
+          {viewerId ? <ViewerBalance result={balancesResult} viewerId={viewerId} /> : null}
         </ThemedView>
 
         <TransactionList
@@ -235,6 +240,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
             {sheet === 'details' ? (
               <DetailsSheet
                 group={group}
+                balances={balancesResult}
                 managed={managed}
                 archived={archived}
                 isOwner={isOwner}
@@ -292,12 +298,16 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 initial={editingTransaction ?? undefined}
                 onSaved={(transaction) => {
                   transactionsResult.upsert(transaction);
+                  // Unlike the list, balances cannot be recomputed from one
+                  // transaction — every member's share of it moved.
+                  balancesResult.refresh();
                   setSheet(null);
                 }}
                 onDeleted={() => {
                   if (editingTransaction) {
                     transactionsResult.remove(editingTransaction.id);
                   }
+                  balancesResult.refresh();
                   setSheet(null);
                 }}
                 onCancel={() => setSheet(null)}
@@ -377,6 +387,7 @@ function TransactionList({
 
 function DetailsSheet({
   group,
+  balances,
   managed,
   archived,
   isOwner,
@@ -391,6 +402,7 @@ function DetailsSheet({
   onDelete,
 }: {
   group: GroupDetail;
+  balances: UseBalancesResult;
   managed: boolean;
   archived: boolean;
   isOwner: boolean;
@@ -418,7 +430,7 @@ function DetailsSheet({
       </ThemedView>
 
       <ThemedText type="smallBold">Balances</ThemedText>
-      <GroupBalances groupId={group.id} members={group.members} />
+      <GroupBalances result={balances} members={group.members} />
 
       {managed ? (
         <ThemedView style={styles.actions}>

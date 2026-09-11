@@ -209,6 +209,28 @@ describe('GroupScreen', () => {
     expect(await screen.findByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
+  it('answers "where do I stand" on the screen itself, without opening the details', async () => {
+    mockFetchGroup.mockResolvedValue(trip);
+    mockFetchBalances.mockResolvedValue(balances);
+
+    await render(<GroupScreen groupId={trip.id} />);
+
+    // Ada is owed 21.25 — said in words, not left to a leading "+".
+    expect(await screen.findByText('You are owed 21.25')).toBeTruthy();
+  });
+
+  it('states the viewer’s own side when they are the one owing', async () => {
+    mockFetchGroup.mockResolvedValue(trip);
+    mockFetchBalances.mockResolvedValue([
+      { userId: ada.id, amountCents: -800 },
+      { userId: grace.id, amountCents: 800 },
+    ]);
+
+    await render(<GroupScreen groupId={trip.id} />);
+
+    expect(await screen.findByText('You owe 8.00')).toBeTruthy();
+  });
+
   it('shows a pair group named after the other person, with no way to change who is in it', async () => {
     mockFetchGroup.mockResolvedValue(pair);
     mockFetchBalances.mockResolvedValue(balances);

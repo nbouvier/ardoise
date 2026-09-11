@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendEntry } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -6,13 +6,14 @@ import { pendingInvite } from '@/features/invites/pending-invite';
 
 import { FriendsScreen } from './friends-screen';
 
-const ada: FriendSummary = {
+const ada: FriendEntry = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'Ada Lovelace',
   picture: null,
+  balanceCents: 0,
 };
 
-const mockFetchFriends = jest.fn<() => Promise<FriendSummary[]>>();
+const mockFetchFriends = jest.fn<() => Promise<FriendEntry[]>>();
 const mockRemoveFriend = jest.fn<() => Promise<void>>();
 const mockFetchInvite = jest.fn<() => Promise<unknown>>();
 const mockFetchPairGroup = jest.fn<() => Promise<{ id: string }>>();
@@ -65,6 +66,30 @@ describe('FriendsScreen', () => {
 
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
     expect(screen.queryByText('No friends yet')).toBeNull();
+  });
+
+  it('says what a friend owes the viewer', async () => {
+    mockFetchFriends.mockResolvedValue([{ ...ada, balanceCents: 1250 }]);
+
+    await render(<FriendsScreen />);
+
+    expect(await screen.findByText('owes you 12.50')).toBeTruthy();
+  });
+
+  it('says what the viewer owes a friend, without relying on a minus sign', async () => {
+    mockFetchFriends.mockResolvedValue([{ ...ada, balanceCents: -1250 }]);
+
+    await render(<FriendsScreen />);
+
+    expect(await screen.findByText('you owe 12.50')).toBeTruthy();
+  });
+
+  it('reads a friend with no shared transaction as settled', async () => {
+    mockFetchFriends.mockResolvedValue([{ ...ada, balanceCents: 0 }]);
+
+    await render(<FriendsScreen />);
+
+    expect(await screen.findByText('settled up')).toBeTruthy();
   });
 
   it('offers a retry when the list cannot be loaded', async () => {

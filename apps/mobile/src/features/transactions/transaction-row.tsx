@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 
 import { centsToText } from './amount-input';
+import { balanceTone } from './balance-display';
 
 export interface TransactionRowProps {
   transaction: Transaction;
@@ -58,9 +59,7 @@ export function TransactionRow({ transaction, viewerId, onPress }: TransactionRo
           {transaction.payer.name}
         </ThemedText>
       </View>
-      <ThemedText
-        type="smallBold"
-        style={myShare > 0 ? styles.positive : myShare < 0 ? styles.negative : undefined}>
+      <ThemedText type="smallBold" themeColor={balanceTone(myShare)}>
         {myShare === 0 ? '—' : `${myShare > 0 ? '+' : '−'}${centsToText(Math.abs(myShare))}`}
       </ThemedText>
     </>
@@ -91,12 +90,6 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
     gap: Spacing.half,
-  },
-  positive: {
-    color: '#1a9f5c',
-  },
-  negative: {
-    color: '#d64545',
   },
   pressed: {
     opacity: 0.6,

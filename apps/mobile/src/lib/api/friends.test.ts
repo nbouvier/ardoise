@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-import { ada, fakeAuthorizedFetch, invite, response } from '@/test-utils/api-fakes';
+import {
+  ada,
+  adaEntry,
+  fakeAuthorizedFetch,
+  graceEntry,
+  invite,
+  response,
+} from '@/test-utils/api-fakes';
 
 import { fetchFriends, fetchInvite, removeFriend, rotateInvite } from './friends';
 
@@ -35,11 +42,21 @@ describe('rotateInvite', () => {
 });
 
 describe('fetchFriends', () => {
-  it('parses the list', async () => {
+  it('parses the list, balances included', async () => {
+    const fetcher = fakeAuthorizedFetch(
+      response({ jsonBody: { friends: [adaEntry, graceEntry] } }),
+    );
+
+    await expect(fetchFriends(fetcher)).resolves.toEqual([adaEntry, graceEntry]);
+    expect(fetcher).toHaveBeenCalledWith('/friends');
+  });
+
+  it('rejects a friend without a balance rather than defaulting it', async () => {
+    // Silently reading a missing balance as zero would show "settled up" for
+    // someone who is not: the amounts are part of the contract, not a bonus.
     const fetcher = fakeAuthorizedFetch(response({ jsonBody: { friends: [ada] } }));
 
-    await expect(fetchFriends(fetcher)).resolves.toEqual([ada]);
-    expect(fetcher).toHaveBeenCalledWith('/friends');
+    await expect(fetchFriends(fetcher)).rejects.toThrow();
   });
 });
 

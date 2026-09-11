@@ -8,12 +8,44 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { centsToText } from './amount-input';
-import { useBalances } from './use-balances';
+import { balanceTone } from './balance-display';
+import type { UseBalancesResult } from './use-balances';
 
 export interface GroupBalancesProps {
-  groupId: string;
+  /** Loaded by the group screen, so one read serves the summary and this list. */
+  result: UseBalancesResult;
   /** The group's current members, to put a name and a face on a balance. */
   members: GroupMember[];
+}
+
+/**
+ * Where the viewer stands against the group, in one line — the answer to
+ * "what do I owe here" without opening the details sheet. Renders nothing
+ * until the balances have loaded once, and keeps showing the last known
+ * figure while a reload is in flight rather than blinking after every saved
+ * transaction.
+ */
+export function ViewerBalance({
+  result,
+  viewerId,
+}: {
+  result: UseBalancesResult;
+  viewerId: string;
+}) {
+  const mine = result.balances.find((balance) => balance.userId === viewerId);
+  if (!mine) {
+    return null;
+  }
+
+  return (
+    <ThemedText type="smallBold" themeColor={balanceTone(mine.amountCents)}>
+      {mine.amountCents === 0
+        ? 'You’re all settled up'
+        : mine.amountCents > 0
+          ? `You are owed ${centsToText(mine.amountCents)}`
+          : `You owe ${centsToText(-mine.amountCents)}`}
+    </ThemedText>
+  );
 }
 
 /**
@@ -22,8 +54,8 @@ export interface GroupBalancesProps {
  * unsettled balance from before they left — they just have no current
  * membership to read a name from.
  */
-export function GroupBalances({ groupId, members }: GroupBalancesProps) {
-  const { status, balances, refresh } = useBalances(groupId);
+export function GroupBalances({ result, members }: GroupBalancesProps) {
+  const { status, balances, refresh } = result;
   const theme = useTheme();
   const byId = new Map(members.map((member) => [member.id, member]));
 
@@ -60,15 +92,7 @@ export function GroupBalances({ groupId, members }: GroupBalancesProps) {
             <ThemedText style={styles.name} numberOfLines={1}>
               {member?.name ?? 'Former member'}
             </ThemedText>
-            <ThemedText
-              type="smallBold"
-              style={
-                balance.amountCents > 0
-                  ? styles.positive
-                  : balance.amountCents < 0
-                    ? styles.negative
-                    : undefined
-              }>
+            <ThemedText type="smallBold" themeColor={balanceTone(balance.amountCents)}>
               {balance.amountCents === 0
                 ? 'settled up'
                 : `${balance.amountCents > 0 ? '+' : '−'}${centsToText(Math.abs(balance.amountCents))}`}
@@ -105,11 +129,5 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-  },
-  positive: {
-    color: '#1a9f5c',
-  },
-  negative: {
-    color: '#d64545',
   },
 });

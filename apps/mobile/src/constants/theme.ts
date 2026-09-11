@@ -14,6 +14,10 @@ export const Colors = {
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
+    /** A balance in the viewer's favour — money owed to them. */
+    credit: '#1a9f5c',
+    /** A balance against the viewer — money they owe. */
+    debit: '#d64545',
   },
   dark: {
     text: '#ffffff',
@@ -21,6 +25,9 @@ export const Colors = {
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
+    // Lifted off the light values, which go muddy on black.
+    credit: '#3ECF8E',
+    debit: '#FF6B6B',
   },
 } as const;
 

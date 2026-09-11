@@ -1,7 +1,7 @@
 import {
   friendsListResponseSchema,
   inviteResponseSchema,
-  type FriendSummary,
+  type FriendEntry,
   type Invite,
 } from '@splitcount/shared';
 
@@ -19,7 +19,8 @@ export async function rotateInvite(fetcher: AuthorizedFetch): Promise<Invite> {
   return (await parsedJson(response, inviteResponseSchema)).invite;
 }
 
-export async function fetchFriends(fetcher: AuthorizedFetch): Promise<FriendSummary[]> {
+/** The caller's friends, each with where the two of them stand. */
+export async function fetchFriends(fetcher: AuthorizedFetch): Promise<FriendEntry[]> {
   const response = await fetcher('/friends');
   return (await parsedJson(response, friendsListResponseSchema)).friends;
 }

@@ -32,6 +32,13 @@ export const grace = {
   picture: null,
 };
 
+/**
+ * A friend as `GET /friends` returns them: the summary plus where the two of
+ * them stand. Positive means they owe the viewer.
+ */
+export const adaEntry = { ...ada, balanceCents: 1250 };
+export const graceEntry = { ...grace, balanceCents: 0 };
+
 export const invite = {
   code: 'Zx3k9QpL2mN7vR1sT4uW8g',
   url: 'https://api.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
