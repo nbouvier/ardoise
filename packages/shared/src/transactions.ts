@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { transactionCategorySchema } from './categories.js';
 import { friendSummarySchema } from './friends.js';
 
 /**
@@ -77,6 +78,8 @@ const transactionCommonFields = {
   amount: transactionAmountSchema,
   occurredOn: z.iso.date(),
   comment: transactionCommentSchema.nullable().optional(),
+  /** From the fixed preset list (`categories.ts`). Optional on every kind. */
+  category: transactionCategorySchema.nullable().optional(),
   payerId: z.uuid(),
 };
 
@@ -126,6 +129,7 @@ export const transactionSchema = z.object({
   amountCents: z.number().int(),
   occurredOn: z.iso.date(),
   comment: z.string().nullable(),
+  category: transactionCategorySchema.nullable(),
   payer: friendSummarySchema,
   splitMode: splitModeSchema,
   participants: z.array(transactionParticipantSchema),
