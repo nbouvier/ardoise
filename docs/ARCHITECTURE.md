@@ -62,7 +62,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, invitation responses), and 2026-09-11 with the groups contract and the generalised invitation contract — `auth.ts`, `friends.ts`, `groups.ts`, `invites.ts`. |
+| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, invitation responses), 2026-09-11 with the groups contract and the generalised invitation contract, and 2026-09-11 with the transactions contract and split arithmetic (`transactions.ts`) — the first *logic*, not just schemas, in the package: the client needs to preview a split live while composing a transaction, and the server needs to compute the same split as the authority, so the rounding algorithm itself has to be one implementation, not two that could drift. Now `auth.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `transactions.ts`. |
 
 ## Client / server contract
 
@@ -131,6 +131,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | Pair groups are created lazily, on first access | No backfill for existing friendships, and `friends` needs no write dependency on `groups` |
 | 2026-09-11 | A non-member gets `404` for a group, never `403` | A `403` would confirm the group exists |
 | 2026-09-11 | One migrated PGlite per *test file*, truncated between tests | A database per test cost seconds each; same isolation, suite down from 92s to 17s |
+| 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@splitcount/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
+| 2026-09-11 | A shares split defaults every participant to weight 1; there is no separate "equal" mode | An equal split *is* a shares split where everyone is weighted the same — a dedicated mode would just be that one case with its own code path |
+| 2026-09-11 | Balances are computed on the fly from `transactions` / `transaction_participants`, not stored | No denormalized total to keep in sync while the feature is new; revisit if querying at scale becomes a real cost (see Open items) |
+| 2026-09-11 | Transactions are the one thing that works on a pair group like a standard group | Every other pair-group route is refused by `assertNotPairGroup`; transactions must not share that guard, or the pair group could never hold anything |
 
 ## Open items
 
@@ -149,3 +153,9 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - Invitation lifetime (7 days) is a first guess; tune with real usage.
 - Group ownership cannot be transferred, so an inactive owner strands a group nobody can
   delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).
+- Balances are recomputed from the transaction rows on every request. Fine at the volume
+  a trip or a flatshare produces; if a long-lived group's history makes that aggregation
+  costly, the next step is a denormalized running balance updated on write — not done
+  now to avoid keeping a derived total in sync before the read pattern is known.
+- The transaction list has no pagination yet (`docs/specs/transactions.md`); revisit once
+  a group's history grows large enough to matter.
