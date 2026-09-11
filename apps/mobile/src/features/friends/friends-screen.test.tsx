@@ -2,8 +2,9 @@ import type { FriendSummary } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { pendingInvite } from '@/features/invites/pending-invite';
+
 import { FriendsScreen } from './friends-screen';
-import { pendingInvite } from './pending-invite';
 
 const ada: FriendSummary = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -14,6 +15,8 @@ const ada: FriendSummary = {
 const mockFetchFriends = jest.fn<() => Promise<FriendSummary[]>>();
 const mockRemoveFriend = jest.fn<() => Promise<void>>();
 const mockFetchInvite = jest.fn<() => Promise<unknown>>();
+const mockFetchPairGroup = jest.fn<() => Promise<{ id: string }>>();
+const mockPush = jest.fn();
 
 // Stable across renders, like the real memoised auth context.
 const mockAuthContext = { authorizedFetch: jest.fn() };
@@ -29,6 +32,12 @@ jest.mock('@/lib/api/friends', () => ({
   rotateInvite: jest.fn(),
 }));
 
+jest.mock('@/lib/api/groups', () => ({
+  fetchPairGroup: () => mockFetchPairGroup(),
+}));
+
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+
 beforeEach(() => {
   mockFetchFriends.mockReset().mockResolvedValue([]);
   mockRemoveFriend.mockReset().mockResolvedValue(undefined);
@@ -37,6 +46,8 @@ beforeEach(() => {
     url: 'https://api.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
     expiresAt: '2026-09-17T12:00:00.000Z',
   });
+  mockFetchPairGroup.mockReset().mockResolvedValue({ id: 'group-1' });
+  mockPush.mockReset();
   pendingInvite.clear();
 });
 
@@ -89,5 +100,21 @@ describe('FriendsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /invite a friend/i }));
 
     expect(await screen.findByText(/Send this link/)).toBeTruthy();
+  });
+
+  it('opens the group shared with a friend when their row is tapped', async () => {
+    mockFetchFriends.mockResolvedValue([ada]);
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: /open your shared group with Ada Lovelace/i }),
+    );
+
+    expect(mockFetchPairGroup).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/groups/[id]',
+      params: { id: 'group-1' },
+    });
   });
 });

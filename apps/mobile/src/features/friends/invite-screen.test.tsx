@@ -2,20 +2,20 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
 
-import type { FriendInvite } from '@splitcount/shared';
+import type { Invite } from '@splitcount/shared';
 
 import { InviteScreen } from './invite-screen';
 
-const invite: FriendInvite = {
+const invite: Invite = {
   code: 'Zx3k9QpL2mN7vR1sT4uW8g',
   url: 'https://api.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
   expiresAt: '2026-09-17T12:00:00.000Z',
 };
 
-const rotated: FriendInvite = { ...invite, code: 'AAAAAAAAAAAAAAAAAAAAAA', url: 'https://api.test/i/AAAAAAAAAAAAAAAAAAAAAA' };
+const rotated: Invite = { ...invite, code: 'AAAAAAAAAAAAAAAAAAAAAA', url: 'https://api.test/i/AAAAAAAAAAAAAAAAAAAAAA' };
 
-const mockFetchInvite = jest.fn<() => Promise<FriendInvite>>();
-const mockRotateInvite = jest.fn<() => Promise<FriendInvite>>();
+const mockFetchInvite = jest.fn<() => Promise<Invite>>();
+const mockRotateInvite = jest.fn<() => Promise<Invite>>();
 const mockSetString = jest.fn<(value: string) => Promise<void>>();
 
 // The real context memoises its value, so `authorizedFetch` is stable across

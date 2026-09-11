@@ -1,4 +1,4 @@
-import type { InvitePreviewResponse } from '@splitcount/shared';
+import type { InvitePreview } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -8,7 +8,7 @@ import { pendingInvite } from './pending-invite';
 
 const CODE = 'Zx3k9QpL2mN7vR1sT4uW8g';
 
-const mockPreviewInvite = jest.fn<() => Promise<InvitePreviewResponse>>();
+const mockPreviewInvite = jest.fn<() => Promise<InvitePreview>>();
 const mockUseURL = jest.fn<() => string | null>();
 const mockAuthContext = { authorizedFetch: jest.fn() };
 
@@ -20,15 +20,18 @@ jest.mock('@/features/auth/use-auth', () => ({
   useAuth: () => mockAuthContext,
 }));
 
-jest.mock('@/lib/api/friends', () => ({
+jest.mock('@/lib/api/invites', () => ({
   previewInvite: () => mockPreviewInvite(),
   acceptInvite: jest.fn(),
 }));
+
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 beforeEach(() => {
   pendingInvite.clear();
   mockUseURL.mockReset().mockReturnValue(null);
   mockPreviewInvite.mockReset().mockResolvedValue({
+    kind: 'friend',
     inviter: { id: '11111111-1111-4111-8111-111111111111', name: 'Ada Lovelace', picture: null },
   });
 });

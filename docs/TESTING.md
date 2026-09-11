@@ -67,10 +67,14 @@ resolve its compiled output.
   groups unit + integration tests (`src/features/groups/`) covering membership
   authorization on every route, archiving, deletion cascades, group invitations, and the
   implicit pair group (idempotence under concurrency, immutability, cascade on unfriend).
-- `apps/mobile`: API endpoints (`src/lib/api/`), auth state machine
-  (`src/features/auth/auth-client.test.ts`), auth screens, and the friends feature
-  (`src/features/friends/`): pending-invite store, friends list, invite sharing and the
-  invitation confirmation flow.
+- `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
+  auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
+  invitation feature (`src/features/invites/`): pending-invite store and the confirmation
+  flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
+  invite sharing and opening the group shared with a friend, and the groups feature
+  (`src/features/groups/`): list with the archived toggle, creation with friend selection,
+  and the detail screen including the pair-group variant where every management action is
+  absent.
 
 ### Gotchas
 
@@ -79,6 +83,9 @@ resolve its compiled output.
   every `useCallback`/`useEffect` that depends on it re-run, and data-loading screens loop.
 - Server tests that depend on time inject a clock (`invites: { now }` / `groups: { now }`
   in `createTestContext`) rather than waiting.
+- A screen that navigates needs `expo-router` mocked (`useRouter: () => ({ push })`).
+  Assert on the typed object form — `{ pathname: '/groups/[id]', params: { id } }` — since
+  that is what the code passes.
 - `resetDatabase` truncates `users` and `groups` with `cascade`. Those are the two roots:
   a standard group hangs off no user, so truncating `users` alone would leave it behind.
   A new top-level table needs adding there.

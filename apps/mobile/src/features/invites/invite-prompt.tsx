@@ -1,11 +1,22 @@
+import type { AcceptInviteResult } from '@splitcount/shared';
 import { useSyncExternalStore } from 'react';
 import { Modal, StyleSheet } from 'react-native';
 
 import { ThemedView } from '@/components/themed-view';
+import { friendsChanged } from '@/features/friends/friends-changed';
+import { groupsChanged } from '@/features/groups/groups-changed';
 
 import { AcceptInviteScreen } from './accept-invite-screen';
-import { friendsChanged } from './friends-changed';
 import { pendingInvite } from './pending-invite';
+
+/** Tell whichever list the acceptance changed to reload. */
+function announce(result: AcceptInviteResult): void {
+  if (result.kind === 'group') {
+    groupsChanged.notify();
+  } else {
+    friendsChanged.notify();
+  }
+}
 
 /**
  * Shows the confirmation screen whenever an invitation is pending. Rendered
@@ -34,7 +45,7 @@ export function InvitePrompt() {
           <AcceptInviteScreen
             code={code}
             onClose={() => pendingInvite.clear()}
-            onAccepted={friendsChanged.notify}
+            onAccepted={announce}
           />
         ) : null}
       </ThemedView>
