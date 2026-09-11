@@ -7,7 +7,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
-import { GroupAccessError, type GroupAccessReason } from './membership.js';
+import { translateGroupAccessError } from './http.js';
 import { createGroupsRepository } from './repository.js';
 import {
   createGroupInviteHandler,
@@ -30,20 +30,6 @@ const groupParamsSchema = z.object({ groupId: z.uuid() });
 const memberParamsSchema = groupParamsSchema.extend({ userId: z.uuid() });
 const friendParamsSchema = z.object({ friendId: z.uuid() });
 
-/**
- * HTTP mapping of a refused group operation. `not_found` is deliberately what a
- * non-member gets: a `403` would confirm that the group exists.
- */
-const accessFailures: Record<GroupAccessReason, { status: number; error: string }> = {
-  not_found: { status: 404, error: 'group_not_found' },
-  not_owner: { status: 403, error: 'not_group_owner' },
-  pair_immutable: { status: 409, error: 'pair_group_immutable' },
-  archived: { status: 409, error: 'group_archived' },
-  owner_cannot_leave: { status: 409, error: 'owner_cannot_leave' },
-  cannot_remove_owner: { status: 409, error: 'cannot_remove_owner' },
-  not_friends: { status: 400, error: 'not_friends' },
-};
-
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
     const repository = createGroupsRepository(app.db);
@@ -65,12 +51,12 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       error: unknown,
       userId: string | undefined,
     ): FastifyReply {
-      if (!(error instanceof GroupAccessError)) {
+      const failure = translateGroupAccessError(error);
+      if (!failure) {
         throw error;
       }
-      const { status, error: code } = accessFailures[error.reason];
-      app.log.info({ userId, reason: error.reason }, 'groups.access.refused');
-      return reply.code(status).send({ error: code });
+      app.log.info({ userId, reason: failure.reason }, 'groups.access.refused');
+      return reply.code(failure.status).send({ error: failure.error });
     }
 
     /**

@@ -9,6 +9,7 @@ current setup and state.
 | --------------- | --------- | ------------------------------------------- |
 | `apps/mobile`   | jest-expo | `npm run test --workspace @splitcount/mobile` |
 | `apps/server`   | Vitest    | `npm run test --workspace @splitcount/server` |
+| `packages/shared` | Vitest  | `npm run test --workspace @splitcount/shared` |
 
 From the repository root:
 
@@ -66,7 +67,15 @@ resolve its compiled output.
   (`src/features/friends/`) covering the invitation lifecycle and friendship symmetry;
   groups unit + integration tests (`src/features/groups/`) covering membership
   authorization on every route, archiving, deletion cascades, group invitations, and the
-  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend).
+  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend);
+  transactions unit + integration tests (`src/features/transactions/`) covering the
+  balance calculation (sign convention, sum-to-zero) in isolation, and end-to-end: every
+  split shape, the pair-group regression (transactions must **not** be refused by the
+  same guard that blocks every other pair-group mutation), archived-group read-only
+  behaviour, cross-group transaction access, and cascade deletion.
+- `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
+  many generated totals/weights/group sizes, rounding determinism, tie-breaking — and the
+  transaction request schema's shape per kind.
 - `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation

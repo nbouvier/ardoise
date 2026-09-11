@@ -4,11 +4,12 @@
 
 Groups exist but hold no money yet — they are spaces with members only
 (`docs/specs/groups.md`). This feature adds the thing a group is actually for: recording
-who paid what, who it was for, and how it is split. This is the core of SplitCount, the
-behaviour Tricount is being out-organised on.
+who paid what, who it was for, and how it is split, and the running total each member
+owes or is owed as a result. This is the core of SplitCount, the behaviour Tricount is
+being out-organised on.
 
-Balances (who owes what, net, per member) are **not** part of this feature — see Out of
-scope.
+**Settle-up — suggesting who should pay whom to clear the balances** — is not part of
+this feature; see Out of scope.
 
 ## User story
 
@@ -85,10 +86,25 @@ concerns.
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
   at it — their own share, so "what do I owe on this one" never needs mental math.
 
+### Balances
+
+- A group shows each member's **balance**: the net of every transaction they were the
+  payer or a concerned member of. Positive means the group owes them; negative means they
+  owe the group.
+- A balance is a straightforward sum, not a separate record: for an expense or a
+  transfer, the payer's balance goes up by the amount and each concerned member's goes
+  down by their share (the same person can be both, and the two net out); for an income
+  it is the reverse. Every transaction's own shares always sum to its amount, so a
+  group's balances always sum to zero.
+- Every current member is shown, including at zero. A member who left the group but has
+  an unsettled balance from transactions recorded while they were a member still counts
+  toward the total — leaving does not erase what they owe or are owed.
+
 ## Out of scope
 
-- **Balances and settle-up.** Computing and displaying net balances per member, and
-  suggesting who should pay whom, is the next feature and reuses this one's data.
+- **Settle-up suggestions** — who should pay whom, and how many transfers it takes to
+  clear every balance. Balances themselves (the net per member) are in scope; minimising
+  the number of payments to settle them is a further step, left for later.
 - Multiple currencies, or a currency at all (inherited from groups: none exists yet).
 - Recurring transactions.
 - Receipt photos or any attachment.
@@ -107,7 +123,8 @@ concerns.
   be resolved against the group's current membership at the time of the call.
 - **A member who has since left the group** still appears, by name, on transactions
   recorded while they were a member — the record does not rewrite history. They cannot be
-  selected as payer or participant on a new or edited transaction.
+  selected as payer or participant on a new or edited transaction. If they left with an
+  unsettled balance, it still appears among the group's balances.
 - **Recording, editing or deleting on an archived group**: refused.
 - **Recording, editing or deleting on a group the caller does not belong to**: answered
   as "not found", like every other group route.
@@ -148,6 +165,11 @@ concerns.
       route, never a hint that the group or its transactions exist.
 - [ ] Deleting a group deletes its transactions; removing a friend deletes the pair
       group's transactions along with it.
+- [ ] A group shows every current member's balance, positive when the group owes them,
+      negative when they owe the group, zero for a member with no transactions.
+- [ ] A group's balances always sum to zero.
+- [ ] A member who left the group with an unsettled balance still appears among the
+      group's balances.
 
 ## Testing considerations
 
@@ -167,6 +189,9 @@ concerns.
   group.
 - Cascade deletion (group deleted → transactions gone; friendship removed → pair group's
   transactions gone) deserves a direct test, as it does for groups today.
+- **Balances sum to zero**: worth checking as a property across a generated set of
+  transactions, not just a fixed example — it is the clearest signal the ledger is
+  internally consistent.
 
 ## Data / API considerations
 
@@ -187,6 +212,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   preview while composing a transaction, the server uses it as the authority and
   recomputes independently of whatever the client sent (except in fixed-amount mode,
   where the entered amounts are the input, only validated to sum correctly).
+- **Balances are computed on the fly** from the transaction and participant rows, not
+  stored — there is no separate balance record to keep in sync. See
+  `docs/ARCHITECTURE.md` for the tradeoff and when to revisit it.
 
 ## UX / UI considerations
 
@@ -194,6 +222,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   transaction list, becoming the primary content of a group; group management (rename,
   archive, invite, members, delete) moves behind a secondary "Group details" sheet,
   reachable from the header.
+- **Balances** show in that "Group details" sheet, alongside the member list: each
+  member's name next to their balance, coloured (owed to them / owing) rather than just
+  signed, zero shown neutrally.
 - **Add transaction** is a sheet: kind, title, amount, date, optional comment, payer
   (defaulting to the signed-in member), a member picker for who it concerns (all members
   pre-selected), and the split editor (shares with live-updating computed amounts, or a

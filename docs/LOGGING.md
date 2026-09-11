@@ -22,6 +22,19 @@ current setup and state.
 
 Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
+### Group and transaction events
+
+| Event                        | Level | Fields                                                    | Meaning |
+| ----------------------------- | ----- | ---------------------------------------------------------- | ------- |
+| `groups.access.refused`       | info  | `userId`, `groupId`, `reason`                               | A group (or transaction) route was refused — not a member, archived, not owner… Shared across both features so a spike reads the same way regardless of which route tripped it. |
+| `transactions.access.refused` | info  | `userId`, `groupId`, `reason`                               | A transaction-specific refusal: `not_group_member` (payer/participant not in the group) or `invalid_split`. |
+| `transactions.created`        | info  | `userId`, `groupId`, `transactionId`, `kind`, `splitMode`, `participantCount` | A transaction was recorded. |
+| `transactions.updated`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was edited. |
+| `transactions.deleted`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was deleted. |
+
+**Never** log a transaction's title, comment or amount — user content and financial data,
+not diagnostic context. The transaction id is enough to look it up.
+
 ## Client (`apps/mobile`)
 
 - Structured logger in `src/lib/logger.ts` (`logger.info/warn/error/debug`, plus

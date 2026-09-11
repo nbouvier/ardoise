@@ -3,7 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp, type BuildAppOptions } from '../app.js';
 import { createTestDatabase, resetDatabase } from './database.js';
 
-export type TestAppOptions = Pick<BuildAppOptions, 'auth' | 'invites' | 'groups'>;
+export type TestAppOptions = Pick<
+  BuildAppOptions,
+  'auth' | 'invites' | 'groups' | 'transactions'
+>;
 
 export interface TestContext {
   app: FastifyInstance;
@@ -28,6 +31,7 @@ export async function createTestContext(
     auth: options.auth,
     invites: options.invites,
     groups: options.groups,
+    transactions: options.transactions,
   });
   app.addHook('onClose', () => handle.close());
   await app.ready();

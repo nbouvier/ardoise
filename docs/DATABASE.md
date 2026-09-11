@@ -173,6 +173,68 @@ redisplayable ("copy my link again"), and it only grants a narrow, expiring, rev
 capability — becoming someone's friend or joining one group, subject to the recipient's
 own acceptance.
 
+### `transactions`
+
+An expense, income or transfer recorded in a group.
+
+| Column          | Type             | Notes                                                    |
+| --------------- | ---------------- | --------------------------------------------------------- |
+| `id`            | uuid PK          | `gen_random_uuid()`                                        |
+| `group_id`      | uuid FK          | → `groups.id`, `ON DELETE CASCADE`                         |
+| `kind`          | text             | `expense`, `income` or `transfer`                          |
+| `title`         | text             |                                                             |
+| `amount_cents`  | integer          | Strictly positive                                          |
+| `occurred_on`   | date             | A calendar date, not a timestamp — no time zone drift      |
+| `comment`       | text, null       | Optional                                                   |
+| `payer_id`      | uuid FK          | → `users.id`, `ON DELETE CASCADE`                          |
+| `split_mode`    | text             | `shares` or `amount`                                       |
+| `created_by`    | uuid FK          | → `users.id`, `ON DELETE CASCADE`; who recorded it         |
+| `created_at`    | timestamptz      | `now()`                                                     |
+| `updated_at`    | timestamptz      | `now()`; refreshed on edit                                  |
+
+Check constraints: `transactions_kind_valid`, `transactions_split_mode_valid`,
+`transactions_amount_positive` (`amount_cents > 0`).
+
+Indexes: `transactions_group_id_occurred_on_idx` on (`group_id`, `occurred_on`) for the
+group's transaction list; `transactions_payer_id_idx`.
+
+A `transfer` is stored the same way as an `expense`/`income` with `split_mode = 'amount'`
+and a single row in `transaction_participants` — the one recipient, for the full amount.
+No third `split_mode` value is needed, and every other query (the transaction list, the
+balance calculation) treats all three kinds uniformly.
+
+### `transaction_participants`
+
+One member's share of a transaction.
+
+| Column           | Type        | Notes                                                              |
+| ---------------- | ----------- | -------------------------------------------------------------------- |
+| `id`             | uuid PK     | `gen_random_uuid()`                                                   |
+| `transaction_id` | uuid FK     | → `transactions.id`, `ON DELETE CASCADE`                              |
+| `user_id`        | uuid FK     | → `users.id`, `ON DELETE CASCADE`                                     |
+| `share_cents`    | integer     | ≥ 0; `shares` mode's computed output, or `amount` mode's input        |
+| `weight`         | integer, null | Set only in `shares` mode: the input the split was computed from     |
+
+Constraints: `transaction_participants_unique` on (`transaction_id`, `user_id`) — one row
+per person per transaction; `transaction_participants_share_non_negative`;
+`transaction_participants_weight_positive` (`weight is null or weight > 0`).
+
+Index: `transaction_participants_user_id_idx`.
+
+References the **user**, not their `group_members` row: leaving the group does not touch
+past transactions, so history is not rewritten. `Σ share_cents = amount_cents` for a given
+transaction is the core invariant — not expressible as a single-row `CHECK`, so it is
+enforced by the service inside the same database transaction that writes both tables.
+
+**`payer_id` and `created_by` cascade-delete like every other FK to `users.id`** in this
+schema, which means deleting a user's account would currently delete every transaction
+they paid for or recorded — including ones shared with people who remain in the group,
+silently breaking their balances. There is no account-deletion feature yet to trigger
+this, so it is left as-is for consistency with the rest of the schema; if one is added,
+revisit this the way a pair group's missing member is already handled at the API layer
+(`ON DELETE SET NULL` plus a "deleted user" fallback when rendering), rather than losing
+shared history.
+
 ## Cascades worth knowing
 
 - Removing a **friendship** removes the pair group and everything in it, on both sides.
@@ -184,7 +246,10 @@ own acceptance.
 - Deleting a **user** removes their sessions, friendships (and therefore their pair
   groups), memberships and the invitations they issued. Standard groups they belonged to
   survive; one left with no members at all is deleted by the service when its last member
-  leaves.
+  leaves. It would also currently remove every transaction they paid for or recorded —
+  see the note under `transactions` above.
+- Deleting a **group** now also removes its transactions and their participants, the same
+  way it already removes memberships and the invitation.
 
 ## Current state
 
@@ -195,3 +260,5 @@ own acceptance.
   deployment holding data yet.
 - Migration `0003_*` — `groups`, `group_members` and `invites` tables (groups, and one
   invitation system for friends and groups).
+- Migration `0004_*` — `transactions` and `transaction_participants` tables (expenses,
+  incomes and transfers, with per-member splits).
