@@ -23,6 +23,9 @@ export const transactionCategorySchema = z.enum([
 ]);
 export type TransactionCategory = z.infer<typeof transactionCategorySchema>;
 
+/** What an uncategorised transaction is recorded and returned as. */
+export const DEFAULT_TRANSACTION_CATEGORY: TransactionCategory = 'other';
+
 export interface CategoryDefinition {
   key: TransactionCategory;
   /** What identifies the category at a glance, next to its label everywhere it appears. */

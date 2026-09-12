@@ -75,11 +75,12 @@ paid, split between Bob and Carole").
   | 🐾    | Pets                  |
   | 🧾    | Other                 |
 
-- A category is **optional**, on every kind. Leaving it unset is a normal, common case,
-  not an error state — most useful for `expense`/`income`; a `transfer` rarely needs one,
-  since it is just money moving between two people rather than a kind of spending.
+- **Every transaction has a category — `Other` is the default**, not a stand-in for "no
+  category". Recording one without explicitly picking a category is the common case and
+  simply means it stays `Other`; there is no separate "uncategorised" state to display or
+  reason about.
 - Any member can change a transaction's category the same way they edit anything else
-  about it — no separate action.
+  about it.
 
 ### Splitting
 
@@ -116,9 +117,12 @@ concerns.
   same-day entries).
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
   at it — their own share, so "what do I owe on this one" never needs mental math.
-- A categorised entry shows its **emoji** next to the title. An uncategorised one shows
-  no emoji at all — never a placeholder or a generic default, which would just be visual
-  noise repeated on most rows.
+- Every entry shows its category as a small emoji badge to the right of its title —
+  always present, since every transaction has a category (`Other` when none was chosen).
+- **Tapping that badge lets the viewer change the category on the spot**, from the list,
+  without opening the full edit sheet — a list of the preset categories to pick from.
+  Everything else about the transaction is unchanged by this. On an archived group the
+  badge is not tappable, like the rest of the row.
 
 ### Balances
 
@@ -213,10 +217,13 @@ feature establishes, which that spec builds on.
 - [ ] A group's balances always sum to zero.
 - [ ] A member who left the group with an unsettled balance still appears among the
       group's balances.
-- [ ] A transaction can optionally be given a category from the fixed preset list; an
-      invalid or unknown category is refused, server-side.
-- [ ] A categorised transaction shows its emoji next to its title in the list; an
-      uncategorised one shows none.
+- [ ] A transaction can be given a category from the fixed preset list; leaving it unset
+      records `Other`. An invalid or unknown category is refused, server-side.
+- [ ] Every transaction shows its category as an emoji badge next to its title in the
+      list, and tapping the badge changes the category without opening the full edit
+      sheet.
+- [ ] A transaction recorded before categories existed, or before `Other` became the
+      default, reads as `Other` — never as a missing or blank category.
 
 ## Testing considerations
 
@@ -244,14 +251,17 @@ feature establishes, which that spec builds on.
 
 See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the schema.
 
-- A **transaction** persists: kind, title, amount, date, optional comment, an optional
-  **category**, payer, the group it belongs to, split mode, who recorded it, and
-  timestamps.
+- A **transaction** persists: kind, title, amount, date, optional comment, a **category**
+  (always set, `Other` by default), payer, the group it belongs to, split mode, who
+  recorded it, and timestamps.
 - The **category list is a fixed, closed set** (key, label, emoji) defined once in code
   (`@splitcount/shared`) and validated the same way on both sides — not a database table,
   since nothing today creates, renames or reorders one. If custom categories are ever
   added, that is the point to promote it to a table; until then a table would be
   unused flexibility.
+- **Transactions recorded before `Other` became the default** are backfilled to it by a
+  migration, so the column can become `NOT NULL` — there is no `NULL` category to handle
+  anywhere above the database layer.
 - A **participant** row per concerned member persists the transaction, the member, and
   their share of the amount (plus their weight, when the split is by shares).
 - Participants reference the user directly, not their membership row, so a transaction
@@ -279,16 +289,19 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   member's name next to their balance, coloured (owed to them / owing) rather than just
   signed, zero shown neutrally.
 - **Add transaction** is a sheet: kind, title, amount, date, **category** (a grid of
-  emoji + label, single-select, none picked by default — tapping the selected one again
-  clears it), optional comment, payer (defaulting to the signed-in member), a member
-  picker for who it concerns (all members pre-selected), and the split editor (shares
-  with live-updating computed amounts, or a toggle to fixed amounts with a running
-  "remaining to allocate" indicator). A transfer simplifies the same sheet to picking one
-  other member instead of a split editor. The date uses a native picker (inline on iOS, a
-  dialog on Android); on web, which has no native pickers, it stays a plain `YYYY-MM-DD`
-  text field (`docs/DESIGN.md`).
+  emoji + label, single-select, `Other` picked by default), optional comment, payer
+  (defaulting to the signed-in member), a member picker for who it concerns (all members
+  pre-selected), and the split editor (shares with live-updating computed amounts, or a
+  toggle to fixed amounts with a running "remaining to allocate" indicator). A transfer
+  simplifies the same sheet to picking one other member instead of a split editor. The
+  date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
+  native pickers, it stays a plain `YYYY-MM-DD` text field (`docs/DESIGN.md`).
 - Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
   transaction" action, confirmed.
+- **The category badge in the list is a second, faster way to change it**: tapping it
+  opens just the category list, applies the choice immediately (a full-replace update
+  behind the scenes, everything else about the transaction unchanged), and closes —
+  no separate save step, unlike the full edit sheet.
 - Empty state: an explanation and the same "Add a transaction" action as the group's
   primary button.
 - On a pair group, the transaction list and "Add a transaction" are present exactly as on

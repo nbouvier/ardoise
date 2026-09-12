@@ -186,7 +186,7 @@ An expense, income or transfer recorded in a group.
 | `amount_cents`  | integer          | Strictly positive                                          |
 | `occurred_on`   | date             | A calendar date, not a timestamp — no time zone drift      |
 | `comment`       | text, null       | Optional                                                   |
-| `category`      | text, null       | One of a fixed preset list, or `NULL` for none              |
+| `category`      | text             | One of a fixed preset list; default `'other'`, never `NULL` |
 | `payer_id`      | uuid FK          | → `users.id`, `ON DELETE CASCADE`                          |
 | `split_mode`    | text             | `shares` or `amount`                                       |
 | `created_by`    | uuid FK          | → `users.id`, `ON DELETE CASCADE`; who recorded it         |
@@ -195,9 +195,9 @@ An expense, income or transfer recorded in a group.
 
 Check constraints: `transactions_kind_valid`, `transactions_split_mode_valid`,
 `transactions_amount_positive` (`amount_cents > 0`), `transactions_category_valid` (one
-of the preset keys, or `NULL`) — the preset list is duplicated here and in
-`@splitcount/shared`'s `categories.ts`; keep both in sync by hand, there being only the
-one place that needs to change until custom categories exist.
+of the preset keys) — the preset list is duplicated here and in `@splitcount/shared`'s
+`categories.ts`; keep both in sync by hand, there being only the one place that needs to
+change until custom categories exist.
 
 Indexes: `transactions_group_id_occurred_on_idx` on (`group_id`, `occurred_on`) for the
 group's transaction list; `transactions_payer_id_idx`.
@@ -266,4 +266,7 @@ shared history.
   invitation system for friends and groups).
 - Migration `0004_*` — `transactions` and `transaction_participants` tables (expenses,
   incomes and transfers, with per-member splits).
-- Migration `0005_*` — adds `transactions.category` (a fixed preset list, nullable).
+- Migration `0005_*` — adds `transactions.category`, originally nullable.
+- Migration `0006_*` — backfills any `NULL` category to `'other'`, then makes the column
+  `NOT NULL DEFAULT 'other'`: an uncategorised transaction is `'other'`, not the absence
+  of a value.

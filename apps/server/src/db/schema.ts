@@ -213,7 +213,8 @@ export const transactions = pgTable(
     // A fixed, closed preset list (`@splitcount/shared`'s categories.ts) kept
     // in code, not a table — nothing creates, renames or reorders one today.
     // This CHECK is the one place that list is duplicated; keep both in sync.
-    category: text('category'),
+    // Always set — an uncategorised transaction is recorded as 'other'.
+    category: text('category').notNull().default('other'),
     payerId: uuid('payer_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -230,7 +231,7 @@ export const transactions = pgTable(
     check('transactions_amount_positive', sql`${table.amountCents} > 0`),
     check(
       'transactions_category_valid',
-      sql`${table.category} is null or ${table.category} in (
+      sql`${table.category} in (
         'groceries', 'restaurant', 'leisure', 'housing', 'transport', 'travel',
         'health', 'shopping', 'bills', 'gifts', 'education', 'pets', 'other'
       )`,

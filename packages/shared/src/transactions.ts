@@ -78,8 +78,12 @@ const transactionCommonFields = {
   amount: transactionAmountSchema,
   occurredOn: z.iso.date(),
   comment: transactionCommentSchema.nullable().optional(),
-  /** From the fixed preset list (`categories.ts`). Optional on every kind. */
-  category: transactionCategorySchema.nullable().optional(),
+  /**
+   * From the fixed preset list (`categories.ts`). Optional to *send* — the
+   * server defaults an omitted one to `other` — but never absent on a stored
+   * transaction; see `transactionSchema.category` below.
+   */
+  category: transactionCategorySchema.optional(),
   payerId: z.uuid(),
 };
 
@@ -129,7 +133,8 @@ export const transactionSchema = z.object({
   amountCents: z.number().int(),
   occurredOn: z.iso.date(),
   comment: z.string().nullable(),
-  category: transactionCategorySchema.nullable(),
+  /** Always set — an uncategorised transaction is stored and returned as `other`. */
+  category: transactionCategorySchema,
   payer: friendSummarySchema,
   splitMode: splitModeSchema,
   participants: z.array(transactionParticipantSchema),

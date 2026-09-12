@@ -158,7 +158,7 @@ describe('transactions routes', () => {
       expect(adaShare + graceShare).toBe(1001);
     });
 
-    it('records a category, and defaults to none when not given', async () => {
+    it('records a category, and defaults to "other" when none is given', async () => {
       const ada = await signIn('ada');
       const group = await createdGroup(ada, 'Trip');
 
@@ -169,7 +169,7 @@ describe('transactions routes', () => {
       expect(categorised.category).toBe('groceries');
 
       const uncategorised = await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
-      expect(uncategorised.category).toBeNull();
+      expect(uncategorised.category).toBe('other');
     });
 
     it('rejects an unknown category', async () => {
@@ -435,7 +435,7 @@ describe('transactions routes', () => {
       expect(updated.amountCents).toBe(2000);
     });
 
-    it('changes the category, and can clear it back to none', async () => {
+    it('changes the category, and resets to "other" when none is given', async () => {
       const ada = await signIn('ada');
       const group = await createdGroup(ada, 'Trip');
       const tx = await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
@@ -446,8 +446,8 @@ describe('transactions routes', () => {
       });
       expect(categorised.json().transaction.category).toBe('restaurant');
 
-      const cleared = await updateTx(ada, group.id, tx.id, expense(ada.userId, [ada.userId]));
-      expect(cleared.json().transaction.category).toBeNull();
+      const reset = await updateTx(ada, group.id, tx.id, expense(ada.userId, [ada.userId]));
+      expect(reset.json().transaction.category).toBe('other');
     });
 
     it('refuses editing on an archived group', async () => {
