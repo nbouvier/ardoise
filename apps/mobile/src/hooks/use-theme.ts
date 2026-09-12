@@ -3,12 +3,22 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, type Theme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
+function resolved(scheme: ReturnType<typeof useColorScheme>) {
+  return scheme === 'unspecified' || scheme == null ? 'light' : scheme;
+}
 
-  return Colors[theme];
+export function useTheme(): Theme {
+  return Colors[resolved(useColorScheme())];
+}
+
+/**
+ * Whether the dark palette is in use. Needed by the handful of tokens that are
+ * a function of the scheme rather than a colour — `cardShadow`, a medallion's
+ * two halves — and never as a licence to branch on the scheme inline.
+ */
+export function useIsDark(): boolean {
+  return resolved(useColorScheme()) === 'dark';
 }

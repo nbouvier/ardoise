@@ -1,10 +1,10 @@
 import { ActivityIndicator, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export type ButtonVariant = 'primary' | 'secondary';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export interface ButtonProps {
   label: string;
@@ -18,8 +18,10 @@ export interface ButtonProps {
 }
 
 /**
- * The app's action button: filled for the primary action of a screen, outlined
- * otherwise. The auth screens predate it and still style their own pressables.
+ * The app's action button. `primary` is the brand-filled call to action — one
+ * per screen; `secondary` is the same shape outlined in the brand hue;
+ * `ghost` is a soft brand wash for an action that must not compete; `danger`
+ * is the outlined destructive one.
  */
 export function Button({
   label,
@@ -32,7 +34,20 @@ export function Button({
 }: ButtonProps) {
   const theme = useTheme();
   const blocked = busy || disabled;
-  const primary = variant === 'primary';
+
+  const surfaces: Record<ButtonVariant, ViewStyle> = {
+    primary: { backgroundColor: theme.primary },
+    secondary: { borderWidth: 1.5, borderColor: theme.primary },
+    ghost: { backgroundColor: theme.primarySoft },
+    danger: { borderWidth: 1.5, borderColor: theme.danger },
+  };
+
+  const inks: Record<ButtonVariant, string> = {
+    primary: theme.onPrimary,
+    secondary: theme.primary,
+    ghost: theme.onPrimarySoft,
+    danger: theme.danger,
+  };
 
   return (
     <Pressable
@@ -43,19 +58,15 @@ export function Button({
       testID={testID}
       style={({ pressed }) => [
         styles.button,
-        primary
-          ? { backgroundColor: theme.text }
-          : { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.text },
+        surfaces[variant],
         pressed && styles.pressed,
         blocked && styles.blocked,
         style,
       ]}>
       {busy ? (
-        <ActivityIndicator color={primary ? theme.background : theme.text} />
+        <ActivityIndicator color={inks[variant]} />
       ) : (
-        <ThemedText style={[styles.label, primary && { color: theme.background }]}>
-          {label}
-        </ThemedText>
+        <ThemedText style={[styles.label, { color: inks[variant] }]}>{label}</ThemedText>
       )}
     </Pressable>
   );
@@ -65,16 +76,17 @@ const styles = StyleSheet.create({
   button: {
     height: 52,
     paddingHorizontal: Spacing.four,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
   blocked: {
     opacity: 0.4,
