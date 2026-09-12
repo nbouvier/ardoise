@@ -162,18 +162,18 @@ ever contain that friendship's own two people**, forever. Concretely:
 - This caps every sub-group in that part of the tree, however deep: a sub-group of a
   sub-group of a pair group is capped exactly the same way, transitively.
 
-### Balance across a group and its sub-groups
+### Balance in a group, and in each sub-group
 
-- The **group list** shows, next to each root group, the user's own net position for that
-  group **and every sub-group nested inside it**, rolled up into one figure: positive
-  means the user is owed, negative means they owe, consistent with every other balance
-  figure in the product (`docs/specs/balances.md`).
-- This rolled-up figure only ever reflects transactions the user is actually a party to
-  (payer or concerned member) — a sub-group they were never part of contributes exactly
-  nothing to it, whether or not they can currently see that it exists.
-- Inside a group, the same rolled-up figure — this group and its own sub-groups — is what
-  a member sees on the group screen itself, exactly where the plain, single-group figure
-  sits today; the details sheet's per-member list stays scoped to the one group, as today.
+- The **group list** shows, next to each root group, the user's own net position **in
+  that group alone**: positive means they are owed, negative means they owe, consistent
+  with every other balance figure in the product (`docs/specs/balances.md`).
+- A **sub-group is never folded into its parent's figure**, at any depth. Each space
+  answers "where do I stand here", and the number under a group's name is exactly what
+  its own transaction list and per-member balances add up to. A rolled-up figure was
+  tried and dropped for precisely that reason — see `docs/specs/balances.md`.
+- Inside a group, a member sees that group's own figure on the group screen, and each
+  **joined** sub-group in the sub-groups section carries its own; one the viewer has not
+  joined shows nothing, since they are on none of its transactions.
 
 ### Inviting into a group
 
@@ -288,9 +288,9 @@ ever contain that friendship's own two people**, forever. Concretely:
   group the user does not belong to.
 - **Creating a sub-group at the depth limit**: refused with an explanation; the five-level
   cap is fixed.
-- **A group's rolled-up balance when it holds a sub-group the viewer has never joined**:
-  that sub-group contributes zero, exactly as if it did not exist for balance purposes —
-  correct, since the viewer is on none of its transactions.
+- **A sub-group the viewer has never joined, in the parent's sub-groups section**: it is
+  listed with its member count and no balance of theirs — they are on none of its
+  transactions — and its money never reaches the parent's own figure.
 - **Network failure** while loading, creating, archiving, deleting, or joining a
   sub-group: an explicit, retryable error; nothing is half-created.
 
@@ -298,9 +298,8 @@ ever contain that friendship's own two people**, forever. Concretely:
 
 - [ ] A signed-in user can create a named group, optionally selecting friends, and it
       appears in their list and in each selected friend's list.
-- [ ] The group list shows root groups only, with member counts, each member's rolled-up
-      balance for that group and its sub-groups, and an empty state with a "Create a
-      group" action.
+- [ ] The group list shows root groups only, with member counts, each member's own
+      balance in that group, and an empty state with a "Create a group" action.
 - [ ] Archived groups are hidden behind a toggle that states how many there are, and are
       listed below the active ones when revealed.
 - [ ] Archiving a group loses nothing and can be undone; the group returns to the active
@@ -384,10 +383,9 @@ ever contain that friendship's own two people**, forever. Concretely:
   lost on the sub-group itself.
 - **Depth enforcement**: creating at depth four (the fifth level) succeeds; at depth five
   is refused. A generated chain, not just a hand-built one, is worth covering.
-- **Balance roll-up**: for a generated tree of groups and transactions, the group list's
-  rolled-up figure for a root group must equal the sum of that member's own balance in the
-  group plus their own balance in every descendant — the load-bearing consistency property,
-  the same category of test that already backs `docs/specs/balances.md`.
+- **Balance containment**: for a tree of groups and transactions, each group's figure must
+  equal that member's own balance in that group and nothing more — money spent in a
+  sub-group must not move its parent, at any depth (`docs/specs/balances.md`).
 - **Cascade deletion of a sub-tree**, not just a single group, deserves a direct test:
   deleting a group with two levels of sub-groups beneath it removes every membership,
   invitation and transaction at every level.
@@ -420,7 +418,7 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   client). See "Sub-groups of a pair group" above.
 - **A group's parent is immutable after creation.** There is no endpoint to change it.
   This is what keeps the tree acyclic without needing cycle detection, and keeps every
-  tree computation (membership propagation, effective-archive, balance roll-up, depth) a
+  tree computation (membership propagation, effective-archive, depth) a
   bounded top-down or bottom-up walk instead of an open-ended graph problem.
 - **Depth is capped at five levels** (a root group plus four levels of nesting), enforced
   at creation.
@@ -436,8 +434,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 
 - **Groups replace Home as the first tab** and the app's landing screen. Tabs remain
   Groups, Friends, Account.
-- **Group list**: root groups only, name + member count + the member's own rolled-up
-  balance across the group and its sub-groups. Archived groups sit under a discreet
+- **Group list**: root groups only, name + member count + the member's own balance in
+  that group. Archived groups sit under a discreet
   "Show archived (n)" toggle at the bottom and are muted when shown. Primary
   "Create a group" action, and the same manual "got an invitation code?" entry the
   Friends tab has — one code, entered the same way, whichever it turns out to lead to.
@@ -448,7 +446,7 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   pair group. It shows, above the transaction list: the group's own name, a breadcrumb of
   its ancestors when it is a sub-group (so a member always knows where in the tree they
   are), and a **sub-groups section** — shown for a pair group too — listing its direct
-  sub-groups with their member counts and, for a joined one, its own rolled-up balance;
+  sub-groups with their member counts and, for a joined one, its own balance;
   sub-groups the viewer has not joined are hidden by default behind a
   "Show sub-groups I'm not in (n)" toggle, mirroring the archived-groups pattern, and open
   a "Join this group?" confirmation rather than the group itself. For a pair group, the
@@ -524,9 +522,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   it; it is owner-only and confirmed, with the confirmation naming the scope of the loss.
 - Removing a friend is destructive too, since it takes the pair group **and every
   sub-group nested under it** with it — the confirmation must say so.
-- A group's rolled-up balance is built only from transactions the viewer is already a
-  party to, so it discloses no group, member or amount the viewer could not already reach
-  by opening each sub-group individually — see `docs/specs/balances.md`.
+- A group's balance is built only from that group's own transactions, which the viewer
+  can already read in full, so it discloses nothing about any sub-group — see
+  `docs/specs/balances.md`.
 
 ## Open questions
 

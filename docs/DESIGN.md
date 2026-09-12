@@ -64,9 +64,9 @@ Google avatar (or initial fallback), name, email, and an outlined "Sign out" but
 
 The app's landing screen, **root groups only** — a group that is itself a sub-group is
 reached by opening its parent, never listed here. Rows (`group-row.tsx`) show name,
-member count, and a third line: the viewer's own balance **rolled up over the group and
-every sub-group nested inside it** (`groupBalanceLabel` / `balanceTone`,
-`docs/specs/balances.md`) — the same wording as the group screen's own summary. Tappable
+member count, and a third line: the viewer's own balance **in that group alone**
+(`groupBalanceLabel` / `balanceTone`, `docs/specs/balances.md`) — the same wording as the
+group screen's own summary. Tappable
 to open the group. Empty state: "No groups yet" with what a group is for. A footer holds
 the primary "Create a group" action and the same "Got an invitation code?" entry as the
 Friends tab — a code is a code, and the confirmation screen figures out whether it leads
@@ -86,8 +86,8 @@ group's name, a **sub-groups section** (below), an "Archived" note when the grou
 *effectively* archived — itself or any ancestor (`readOnly` on `GroupDetail`,
 `docs/specs/groups.md`) — **the viewer's own balance** ("You are owed 21.25" / "You owe
 8.00" / "You're all settled up" — said in words, so it never rests on spotting a minus
-sign; for a group with sub-groups this is already rolled up over the whole sub-tree, read
-straight off `group.viewerBalanceCents` rather than a separate balances fetch), the
+sign; this group's own figure, read straight off `group.viewerBalanceCents` rather than a
+separate balances fetch), the
 transaction list (`TransactionRow`: the category emoji next to the title, date, kind,
 payer, and the viewer's own share, coloured), and a primary "Add a transaction" button —
 absent when effectively archived. A row opens the same add/edit sheet, pre-filled; when
@@ -112,16 +112,17 @@ group screen's own data (including this list) refetches whenever `groupsChanged`
 e.g. right after creating a sub-group and landing on its own screen, coming back here shows
 it immediately, not only after a fresh navigation.
 
-The header carries two small text buttons: **"Stats"** (the per-category breakdown, see
-"Group statistics" below) and **"Details"**. Both open sheets; both are present on every
-kind of group, archived or pair included, since both are read-only views.
+The header carries three small text buttons: **"Settle"** (the reimbursement plan, see
+"Reimbursements" below), **"Stats"** (the per-category breakdown, see "Group statistics"
+below) and **"Details"**. All three open sheets, and all three are present on every kind
+of group, archived or pair included: the first two are read-only views, and the plan's
+one action is refused with a reason rather than hidden.
 
 Group management — everything that used to sit directly on this screen — moved behind a
 small "Details" button in the header, opening a sheet: the member list (avatar + name,
 "Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
 net, coloured, "settled up" at zero — a member who left with an unsettled balance still
-appears, without an avatar; this list stays scoped to the one group, never rolled up),
-then the management actions.
+appears, without an avatar), then the management actions.
 
 The per-member balance list is read **once, by the group screen**, and handed to the
 sheet; the screen refreshes it after a transaction is saved or deleted, since a balance
@@ -147,6 +148,26 @@ sub-groups too when the group has any.
 
 States: loading, "This group is gone" (deleted, or the viewer was removed — no retry, just
 a way back), and a retryable connection error.
+
+### Reimbursements (`src/features/reimbursements/reimbursements-screen.tsx`)
+
+A sheet, opened from the "Settle" button in the group header. It reads **answer first,
+justification second**: "Suggested reimbursements" — one row per payment, a sentence
+("You pay Alan Turing", "Grace Hopper pays you", "Alan pays Grace") with the amount at
+the end, the viewer's own rows first — then a one-line count ("One payment clears
+everything."), then "Where everyone stands", the group's balances in the same colours and
+wording as `GroupBalances`.
+
+A payment row is **pressable and opens the pre-filled transfer form**; when it cannot be
+recorded (archived group, or a party who has left) the row is disabled and carries the
+reason underneath, never a silent dead tap. When nobody owes anybody, both lists are
+replaced by a single settled line — not two empty sections.
+
+The plan is **derived from the balances the group screen already loaded**
+(`planReimbursements` in `@splitcount/shared`), so the sheet has no fetch of its own: it
+shows the balances' own spinner while they load, their retry on failure, and never a
+"settled" state produced by a failed read. Scoped to the one group, like every balance
+figure here (`docs/specs/reimbursements.md`).
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 

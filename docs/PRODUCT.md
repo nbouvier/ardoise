@@ -46,8 +46,9 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   implicit pair group; an archived group is read-only for transactions. See
   `docs/specs/transactions.md`.
 - **Balances** — a group shows where each member stands against it, and the viewer's own
-  position sits on the group screen itself, rolled up over the group and every sub-group
-  nested inside it. The friend list goes further: next to each friend, the net of what
+  position sits on the group screen itself. Every figure is scoped to one group: a
+  sub-group keeps its own, so the number under a group's name is always exactly what its
+  own transactions say. The friend list goes further: next to each friend, the net of what
   they owe the user or the user owes them, summed across every group the two share. All
   are derived from the transactions on every read, never stored. See
   `docs/specs/balances.md`.
@@ -57,13 +58,12 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   viewer's own share, and, for a group with sub-groups, whether their transactions are
   included (on by default). Transfers between members are never counted. Derived from the
   transactions, like balances. See `docs/specs/group-statistics.md`.
-- **Reimbursements** — a group says who should pay whom to clear everything, in as few
-  payments as it can manage: a chain of debts becomes one payment rather than one per
-  pair. Tapping a suggestion records it as an ordinary transfer, pre-filled and still
-  editable. For a group with sub-groups the plan covers the whole sub-tree by default —
-  the one place where a sub-group the viewer has not joined still counts, so the plan
-  cannot disagree with what its own members see. Each person's position can be expanded
-  to the groups it comes from. See `docs/specs/reimbursements.md`.
+- **Reimbursements** — a group says who should pay whom to clear it, in as few payments
+  as it can manage: a chain of debts becomes one payment rather than one per pair.
+  Tapping a suggestion records it as an ordinary transfer, pre-filled and still editable.
+  Scoped to the one group, like its balances — a sub-group has its own plan — and derived
+  from those balances, so the two can never disagree. See
+  `docs/specs/reimbursements.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
 `/health`, auth, friends, invitations, groups, group transactions, per-category

@@ -238,11 +238,10 @@ Shared error codes:
 `GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
 is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
-position **rolled up over the group and every sub-group nested inside it** — positive means
-they are owed, negative means they owe (`docs/specs/balances.md`); for a group with no
-sub-groups this is simply its own balance, computed the same way as
-`GET /groups/:groupId/transactions/balances` but from the caller's own transactions across
-the whole sub-tree rather than the group's per-member list. `GroupDetail` adds `members` (a
+position **in that group alone** — positive means they are owed, negative means they owe
+(`docs/specs/balances.md`). It is the caller's own entry of
+`GET /groups/:groupId/transactions/balances`, and a sub-group is never folded into it.
+`GroupDetail` adds `members` (a
 `FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
 below), `ancestors`
 (root-first, empty for a root group), `readOnly` — `true` when the group itself is
@@ -261,8 +260,8 @@ through `POST /groups/:groupId/join` instead, same as any other unjoined sub-gro
 
 A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
 enough to decide whether to open it (already a member) or join it and show where the
-viewer stands, never a member list. `viewerBalanceCents` is rolled up over *that*
-sub-group's own sub-tree exactly like the top-level figure (see above), and is always `0`
+viewer stands, never a member list. `viewerBalanceCents` is the viewer's own balance in
+*that* sub-group, on the same terms as the top-level figure (see above), and is always `0`
 when `viewerIsMember` is `false`, since a non-member is on none of its transactions. An
 `ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own
 `subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when opened.
@@ -511,58 +510,13 @@ Response `200`:
 { "balances": [{ "userId": "<uuid>", "amountCents": 500 }] }
 ```
 
-### `GET /groups/:groupId/transactions/reimbursements`
-
-Who should pay whom to clear everything, and the net positions it is derived from
-(`docs/specs/reimbursements.md`). Derived on every read; nothing is stored.
-
-`?scope=` (`group`, the default, or `subtree`) controls whether sub-groups are included.
-An unrecognised value falls back to `group` rather than failing — the scope that
-discloses least.
-
-**`scope=subtree` includes every descendant at any depth, whether or not the caller has
-joined it** — the one sub-tree scope in this API that does not filter on the caller's
-membership, unlike `GET /groups/:groupId/transactions?scope=subtree` and the rolled-up
-`viewerBalanceCents`. A plan is about other people's debts too, so leaving a sub-group
-out would make it disagree with what that sub-group's own members see. What this
-discloses is bounded to net figures per person per group plus group names the caller can
-already see in the parent's sub-group list; it never exposes a transaction, a split, or a
-member list, and it cannot name a person the caller could not already see, since
-membership flows up from any descendant. See `docs/specs/reimbursements.md` for the
-decision and its limits.
-
-`positions` carries every current member, including at zero, plus anyone who left with
-something still owed — the same rule as the balances route — each with the per-group
-`sources` its position decomposes into (largest magnitude first; a group contributing
-nothing is absent). `reimbursements` is the plan: at most one payment fewer than the
-number of people with a non-zero position, largest payment first, ties broken on the
-parties' ids so every member reads the same plan. A suggestion carries **no** source
-group: a netted payment does not belong to one.
-
-Acting on a plan uses the ordinary `POST /groups/:groupId/transactions` with
-`kind: "transfer"`. There is no write route here, and no settlement record.
-
-Response `200`:
-
-```json
-{
-  "scope": "subtree",
-  "positions": [
-    {
-      "user": { "id": "<uuid>", "name": "Ada", "picture": null },
-      "amountCents": -1000,
-      "sources": [{ "groupId": "<uuid>", "groupName": "Corsica", "amountCents": -1000 }]
-    }
-  ],
-  "reimbursements": [
-    {
-      "from": { "id": "<uuid>", "name": "Ada", "picture": null },
-      "to": { "id": "<uuid>", "name": "Grace", "picture": null },
-      "amountCents": 1000
-    }
-  ]
-}
-```
+> **The reimbursement plan has no route.** Who should pay whom to clear a group is
+> derived from these balances by `planReimbursements` in `@splitcount/shared`, on the
+> client, so the plan and the balance list can never disagree
+> (`docs/specs/reimbursements.md`). Acting on it uses the ordinary
+> `POST /groups/:groupId/transactions` with `kind: "transfer"`; there is no settlement
+> record. An earlier `GET .../reimbursements` route existed while a plan could span a
+> group's sub-tree, and was removed with that scope.
 
 ## Planned
 
