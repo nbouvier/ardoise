@@ -104,6 +104,8 @@ A space shared by a set of people, and later the expenses they record in it.
 | `kind`          | text             | `standard` or `pair` (default `standard`)                 |
 | `name`          | text, null       | Set for a standard group, always `NULL` for a pair group  |
 | `friendship_id` | uuid FK, unique, null | → `friendships.id`, `ON DELETE CASCADE`; pair groups only |
+| `parent_id`     | uuid FK, null    | → `groups.id`, `ON DELETE CASCADE`; `NULL` for a root group |
+| `depth`         | integer          | `0` for a root group, `parent.depth + 1` otherwise; capped at `4` |
 | `archived_at`   | timestamptz null | Non-null → inactive. Reversible, loses nothing            |
 | `created_at`    | timestamptz      | `now()`                                                   |
 | `updated_at`    | timestamptz      | `now()`; refreshed on rename / archive                    |
@@ -120,6 +122,28 @@ has one" true in the database rather than in application code: the `UNIQUE` on
 (the insert uses `ON CONFLICT DO NOTHING`), and the cascade takes it away with the
 friendship. It stores no name — the API returns the *other* member's name, so each side
 sees who they share with.
+
+**Nesting** (`docs/specs/groups.md`): a standard group can have sub-groups through
+`parent_id`, a self-referential FK that cascades — deleting a group deletes its entire
+sub-tree for free, with no application-level cascade needed. Three more check constraints
+keep the tree well-formed:
+
+- `groups_pair_no_parent` — `kind <> 'pair' or parent_id is null`: a pair group can never
+  be nested (whether it can be *pointed at* as someone else's parent is a service-level
+  guard, `assertNotPairGroup`, not expressible as a single-row check).
+- `groups_root_depth` — `(parent_id is null) = (depth = 0)`: a root group is exactly the
+  ones at depth zero.
+- `groups_depth_valid` — `depth between 0 and 4`: five levels total (a root plus four
+  levels of nesting).
+
+`parent_id` is **immutable after creation** — there is no update path for it — which keeps
+the tree acyclic by construction rather than by cycle detection, and every tree query
+(ancestors, descendants) a bounded recursive `WITH RECURSIVE` walk instead of an
+open-ended graph problem, since depth is capped. `depth` is stored rather than computed on
+read because it is fixed at creation and makes the depth cap a plain check instead of a
+recursive query.
+
+Index: `groups_parent_id_idx` on `parent_id`.
 
 ### `group_members`
 
@@ -247,6 +271,10 @@ shared history.
 - Deleting a **group** removes its memberships and its invitation. A code pointing at a
   deleted group becomes simply unknown (`404`), which is a dead link like any other and
   does not confirm the group ever existed.
+- Deleting a **group** also removes **its entire sub-tree** — every sub-group nested
+  inside it, at any depth, with their own memberships, invitations and transactions —
+  through `groups.parent_id`'s own cascade, the same mechanism as every other cascade in
+  this schema, not an application-level loop.
 - Deleting a **user** removes their sessions, friendships (and therefore their pair
   groups), memberships and the invitations they issued. Standard groups they belonged to
   survive; one left with no members at all is deleted by the service when its last member
@@ -270,3 +298,7 @@ shared history.
 - Migration `0006_*` — backfills any `NULL` category to `'other'`, then makes the column
   `NOT NULL DEFAULT 'other'`: an uncategorised transaction is `'other'`, not the absence
   of a value.
+- Migration `0007_*` — adds `groups.parent_id` (self-referential, `ON DELETE CASCADE`) and
+  `groups.depth`, plus the three check constraints that keep the tree well-formed
+  (nested groups, `docs/specs/groups.md`). Every existing row backfills to a root
+  (`parent_id NULL`, `depth 0`) automatically, since the column defaults to `0`.

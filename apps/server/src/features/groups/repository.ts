@@ -64,6 +64,25 @@ export interface GroupsRepository {
    * guarantees there is only ever one.
    */
   createPairGroup(friendshipId: string, pair: FriendshipPair): Promise<GroupRow>;
+  /**
+   * Every ancestor of a group, root first (ascending `depth`) — nearest parent
+   * last. Empty for a root group. Used for breadcrumbs and for the
+   * "effectively archived" / "effectively active" checks a sub-group's write
+   * paths need (`docs/specs/groups.md`).
+   */
+  listAncestors(groupId: string): Promise<GroupRow[]>;
+  /**
+   * Every descendant of a group, at any depth, in no particular order. Empty
+   * for a group with no sub-groups. Used to cascade a membership change (leave,
+   * removal) down the tree — deleting a group itself cascades through the
+   * database's own foreign key instead, see `groups.parent_id`.
+   */
+  listDescendantIds(groupId: string): Promise<string[]>;
+  /**
+   * A group's direct sub-groups only (not their own sub-groups), each with its
+   * member count — what the group screen's sub-groups section lists.
+   */
+  listChildren(groupId: string): Promise<GroupWithCount[]>;
 }
 
 /** Postgres returns `count(*)` as a string; normalise at the boundary. */
@@ -244,6 +263,71 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .from(groups)
         .where(eq(groups.friendshipId, friendshipId));
       return existing!;
+    },
+
+    async listAncestors(groupId) {
+      // Depth is capped at 4 (`groups_depth_valid`), so this recursion is
+      // bounded by construction — no `parent_id` cycle can exist since it is
+      // immutable after creation (`docs/specs/groups.md`).
+      const { rows } = await db.execute<{ id: string }>(sql`
+        WITH RECURSIVE ancestors(id) AS (
+          SELECT parent_id FROM groups WHERE id = ${groupId} AND parent_id IS NOT NULL
+          UNION ALL
+          SELECT g.parent_id
+          FROM groups g
+          JOIN ancestors a ON g.id = a.id
+          WHERE g.parent_id IS NOT NULL
+        )
+        SELECT id FROM ancestors
+      `);
+      if (rows.length === 0) {
+        return [];
+      }
+      // One extra query rather than threading a `level` column through the
+      // recursion: `depth` is already stored on every row, so ordering by it
+      // gives root-first order for free.
+      return db
+        .select()
+        .from(groups)
+        .where(
+          inArray(
+            groups.id,
+            rows.map((row) => row.id),
+          ),
+        )
+        .orderBy(asc(groups.depth));
+    },
+
+    async listDescendantIds(groupId) {
+      const { rows } = await db.execute<{ id: string }>(sql`
+        WITH RECURSIVE descendants(id) AS (
+          SELECT id FROM groups WHERE parent_id = ${groupId}
+          UNION ALL
+          SELECT g.id
+          FROM groups g
+          JOIN descendants d ON g.parent_id = d.id
+        )
+        SELECT id FROM descendants
+      `);
+      return rows.map((row) => row.id);
+    },
+
+    async listChildren(groupId) {
+      // A left join, unlike `listGroupsForUser`'s: this starts from the
+      // sub-groups themselves rather than from a member's own row, so a
+      // (transiently) empty one must still be counted as zero, not dropped.
+      const rows = await db
+        .select({ group: groups, memberCount: sql<number>`count(${groupMembers.id})` })
+        .from(groups)
+        .leftJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+        .where(eq(groups.parentId, groupId))
+        .groupBy(groups.id)
+        .orderBy(asc(groups.name));
+
+      return rows.map((row) => ({
+        group: row.group,
+        memberCount: toCount(row.memberCount),
+      }));
     },
   };
 }

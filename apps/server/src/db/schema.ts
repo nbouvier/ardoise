@@ -9,6 +9,7 @@ import {
   timestamp,
   unique,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 /**
@@ -84,7 +85,14 @@ export const friendships = pgTable(
  * the implicit group two friends share: it carries no name (the API returns the
  * other member's name), it is never listed, and it is keyed by the friendship
  * itself — so the database guarantees exactly one per pair and takes it away
- * with the friendship. See `docs/specs/groups.md`.
+ * with the friendship.
+ *
+ * A standard group can have sub-groups, nested through `parent_id`, up to five
+ * levels deep (`depth` 0..4). The parent is fixed at creation — there is no
+ * re-parenting — which keeps the tree acyclic by construction and every tree
+ * computation (membership propagation, effective-archive, balance and
+ * statistics roll-up) a bounded walk instead of an open-ended graph problem. A
+ * pair group can neither have a parent nor be one. See `docs/specs/groups.md`.
  */
 export const groups = pgTable(
   'groups',
@@ -97,6 +105,10 @@ export const groups = pgTable(
     friendshipId: uuid('friendship_id')
       .unique()
       .references(() => friendships.id, { onDelete: 'cascade' }),
+    parentId: uuid('parent_id').references((): AnyPgColumn => groups.id, {
+      onDelete: 'cascade',
+    }),
+    depth: integer('depth').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -113,6 +125,13 @@ export const groups = pgTable(
       'groups_standard_named',
       sql`(${table.kind} = 'standard') = (${table.name} is not null)`,
     ),
+    // A pair group is always a root: it can never be nested nor have children
+    // point at it (the latter is a foreign-key concern, enforced in service —
+    // see assertNotPairGroup's use as a parent guard).
+    check('groups_pair_no_parent', sql`${table.kind} <> 'pair' or ${table.parentId} is null`),
+    check('groups_root_depth', sql`(${table.parentId} is null) = (${table.depth} = 0)`),
+    check('groups_depth_valid', sql`${table.depth} between 0 and 4`),
+    index('groups_parent_id_idx').on(table.parentId),
   ],
 );
 
