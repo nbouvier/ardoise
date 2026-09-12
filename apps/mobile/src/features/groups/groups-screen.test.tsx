@@ -148,17 +148,17 @@ describe('GroupsScreen', () => {
     await render(<GroupsScreen />);
     await screen.findByText('No groups yet');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Add a group' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'New group' }));
     await fireEvent.press(screen.getByText('Create a group'));
 
-    expect(await screen.findByText('New group')).toBeTruthy();
+    expect(await screen.findByLabelText('Group name')).toBeTruthy();
   });
 
   it('offers the same "got a code?" entry as the Friends tab, for a group code', async () => {
     await render(<GroupsScreen />);
     await screen.findByText('No groups yet');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Add a group' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'New group' }));
     await fireEvent.press(screen.getByText('Join a group'));
 
     await fireEvent.changeText(

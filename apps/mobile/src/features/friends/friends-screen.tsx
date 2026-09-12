@@ -161,15 +161,13 @@ export function FriendsScreen() {
           )}
         </View>
 
-        <View style={styles.footer}>
-          <AddMenuButton
-            accessibilityLabel="Add a friend"
-            options={[
-              { icon: 'plus', label: 'Invite a friend', onPress: () => setInviting(true) },
-              { icon: 'link', label: 'Enter a code', onPress: () => setJoining(true) },
-            ]}
-          />
-        </View>
+        <AddMenuButton
+          label="Add a friend"
+          options={[
+            { icon: 'plus', label: 'Invite a friend', onPress: () => setInviting(true) },
+            { icon: 'key', label: 'Enter a code', onPress: () => setJoining(true) },
+          ]}
+        />
       </SafeAreaView>
 
       <Modal
@@ -266,9 +264,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
-  },
-  footer: {
-    alignItems: 'flex-end',
   },
   sheetContent: {
     flex: 1,

@@ -2,14 +2,12 @@ import { Fragment, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Icon, type IconName } from '@/components/icon';
-import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const BUTTON_SIZE = 52;
 
 export interface AddMenuOption {
   icon: IconName;
@@ -18,11 +16,12 @@ export interface AddMenuOption {
 }
 
 export interface AddMenuButtonProps {
-  accessibilityLabel: string;
+  /** The full-width button's own label, e.g. "New group". */
+  label: string;
   options: AddMenuOption[];
 }
 
-/** One row of the "+" action menu: a small brand-washed glyph and a label. */
+/** One row of the menu sheet: a small brand-washed glyph and a label. */
 function MenuRow({ icon, label, onPress }: AddMenuOption) {
   const theme = useTheme();
   return (
@@ -39,44 +38,40 @@ function MenuRow({ icon, label, onPress }: AddMenuOption) {
 }
 
 /**
- * The footer's single action: a round "+" that opens a small menu of related
- * choices stacked directly above it — the button sits at the menu's
- * bottom-right corner, not its top-right, so it never appears to float above
- * or apart from the button it belongs to. The overlay mirrors the footer's
- * own `SafeAreaView` + padding exactly (see the Groups/Friends screens) so
- * it lands on the real device inset, not just the approximate tab-bar
- * constant. See "Rules of thumb" in docs/DESIGN.md.
+ * A screen's single, full-width footer action. Tapping it opens a small
+ * bottom sheet offering the couple of related choices behind it (e.g.
+ * create or join) as icon + label rows — the sheet sits exactly where the
+ * button was, so there is no separate anchor to get wrong. See "Rules of
+ * thumb" in docs/DESIGN.md.
  */
-export function AddMenuButton({ accessibilityLabel, options }: AddMenuButtonProps) {
+export function AddMenuButton({ label, options }: AddMenuButtonProps) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <IconButton icon="plus" accessibilityLabel={accessibilityLabel} onPress={() => setOpen(true)} />
+      <Button label={label} onPress={() => setOpen(true)} />
 
       <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
         <SafeAreaView style={styles.safeArea}>
           <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
-            <View style={styles.menuWrap}>
-              <Card style={styles.menu}>
-                {options.map((option, index) => (
-                  <Fragment key={option.label}>
-                    {index > 0 ? (
-                      <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
-                    ) : null}
-                    <MenuRow
-                      icon={option.icon}
-                      label={option.label}
-                      onPress={() => {
-                        setOpen(false);
-                        option.onPress();
-                      }}
-                    />
-                  </Fragment>
-                ))}
-              </Card>
-            </View>
+            <Card style={styles.menu}>
+              {options.map((option, index) => (
+                <Fragment key={option.label}>
+                  {index > 0 ? (
+                    <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+                  ) : null}
+                  <MenuRow
+                    icon={option.icon}
+                    label={option.label}
+                    onPress={() => {
+                      setOpen(false);
+                      option.onPress();
+                    }}
+                  />
+                </Fragment>
+              ))}
+            </Card>
           </Pressable>
         </SafeAreaView>
       </Modal>
@@ -91,12 +86,8 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    alignItems: 'flex-end',
     paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three + BUTTON_SIZE + Spacing.two,
-  },
-  menuWrap: {
-    width: 220,
+    paddingBottom: BottomTabInset + Spacing.three,
   },
   menu: {
     padding: Spacing.two,

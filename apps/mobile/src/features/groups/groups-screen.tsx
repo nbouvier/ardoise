@@ -114,15 +114,13 @@ export function GroupsScreen() {
 
         <View style={styles.body}>{body()}</View>
 
-        <View style={styles.footer}>
-          <AddMenuButton
-            accessibilityLabel="Add a group"
-            options={[
-              { icon: 'plus', label: 'Create a group', onPress: () => setCreating(true) },
-              { icon: 'link', label: 'Join a group', onPress: () => setJoining(true) },
-            ]}
-          />
-        </View>
+        <AddMenuButton
+          label="New group"
+          options={[
+            { icon: 'plus', label: 'Create a group', onPress: () => setCreating(true) },
+            { icon: 'key', label: 'Join a group', onPress: () => setJoining(true) },
+          ]}
+        />
       </SafeAreaView>
 
       <Modal
@@ -194,9 +192,6 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-  },
-  footer: {
-    alignItems: 'flex-end',
   },
   sheetContent: {
     flex: 1,
