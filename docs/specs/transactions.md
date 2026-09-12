@@ -117,12 +117,9 @@ concerns.
   same-day entries).
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
   at it — their own share, so "what do I owe on this one" never needs mental math.
-- Every entry shows its category as a small emoji badge to the right of its title —
-  always present, since every transaction has a category (`Other` when none was chosen).
-- **Tapping that badge lets the viewer change the category on the spot**, from the list,
-  without opening the full edit sheet — a list of the preset categories to pick from.
-  Everything else about the transaction is unchanged by this. On an archived group the
-  badge is not tappable, like the rest of the row.
+- Every entry shows its category's emoji next to its title — always present, since every
+  transaction has a category (`Other` when none was chosen). It is not interactive in the
+  list; changing it means opening the entry, as for any other field.
 
 ### Balances
 
@@ -219,9 +216,9 @@ feature establishes, which that spec builds on.
       group's balances.
 - [ ] A transaction can be given a category from the fixed preset list; leaving it unset
       records `Other`. An invalid or unknown category is refused, server-side.
-- [ ] Every transaction shows its category as an emoji badge next to its title in the
-      list, and tapping the badge changes the category without opening the full edit
-      sheet.
+- [ ] Every transaction shows its category's emoji next to its title in the list. In the
+      add/edit form, a category badge to the left of the title opens the picker sheet and
+      updates on selection, without a separate save step for that field alone.
 - [ ] A transaction recorded before categories existed, or before `Other` became the
       default, reads as `Other` — never as a missing or blank category.
 
@@ -288,20 +285,20 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - **Balances** show in that "Group details" sheet, alongside the member list: each
   member's name next to their balance, coloured (owed to them / owing) rather than just
   signed, zero shown neutrally.
-- **Add transaction** is a sheet: kind, title, amount, date, **category** (a grid of
-  emoji + label, single-select, `Other` picked by default), optional comment, payer
-  (defaulting to the signed-in member), a member picker for who it concerns (all members
-  pre-selected), and the split editor (shares with live-updating computed amounts, or a
-  toggle to fixed amounts with a running "remaining to allocate" indicator). A transfer
-  simplifies the same sheet to picking one other member instead of a split editor. The
-  date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
-  native pickers, it stays a plain `YYYY-MM-DD` text field (`docs/DESIGN.md`).
+- **Add transaction** is a sheet: kind, then a title row with a small square **category
+  badge** to the left of the title field, showing just the emoji (`Other` by default);
+  tapping it opens a small sheet with the category grid (emoji + label, single-select),
+  and picking one updates the badge and closes that sheet immediately — the transaction
+  itself is only saved when the form's own "Save" is pressed. Then amount, date, optional
+  comment, payer (defaulting to the signed-in member), a member picker for who it
+  concerns (all members pre-selected), and the split editor (shares with live-updating
+  computed amounts, or a toggle to fixed amounts with a running "remaining to allocate"
+  indicator). A transfer simplifies the same sheet to picking one other member instead of
+  a split editor. The date uses a native picker (inline on iOS, a dialog on Android); on
+  web, which has no native pickers, it stays a plain `YYYY-MM-DD` text field
+  (`docs/DESIGN.md`).
 - Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
   transaction" action, confirmed.
-- **The category badge in the list is a second, faster way to change it**: tapping it
-  opens just the category list, applies the choice immediately (a full-replace update
-  behind the scenes, everything else about the transaction unchanged), and closes —
-  no separate save step, unlike the full edit sheet.
 - Empty state: an explanation and the same "Add a transaction" action as the group's
   primary button.
 - On a pair group, the transaction list and "Add a transaction" are present exactly as on

@@ -75,7 +75,6 @@ const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchTransactions = jest.fn<() => Promise<Transaction[]>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<() => Promise<Transaction>>();
-const mockUpdateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
 
 const mockAuthContext = {
   authorizedFetch: jest.fn(),
@@ -100,7 +99,7 @@ jest.mock('@/lib/api/transactions', () => ({
   fetchTransactions: () => mockFetchTransactions(),
   fetchBalances: () => mockFetchBalances(),
   createTransaction: () => mockCreateTransaction(),
-  updateTransaction: (...args: unknown[]) => mockUpdateTransaction(...args),
+  updateTransaction: jest.fn(),
   deleteTransaction: jest.fn(),
 }));
 
@@ -118,7 +117,6 @@ beforeEach(() => {
   mockFetchTransactions.mockReset().mockResolvedValue([]);
   mockFetchBalances.mockReset().mockResolvedValue([]);
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
-  mockUpdateTransaction.mockReset().mockResolvedValue(groceries);
 });
 
 async function openDetails() {
@@ -132,33 +130,8 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={trip.id} />);
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
-    expect(await screen.findByText('Groceries')).toBeTruthy();
-    // The category badge, to the right of the title.
-    expect(screen.getByRole('button', { name: 'Category: Groceries' })).toBeTruthy();
-  });
-
-  it('changes a transaction’s category from its badge, without opening the full edit sheet', async () => {
-    mockFetchTransactions.mockResolvedValue([groceries]);
-    mockUpdateTransaction.mockResolvedValue({ ...groceries, category: 'restaurant' });
-
-    await render(<GroupScreen groupId={trip.id} />);
-    await screen.findByText('Groceries');
-
-    await fireEvent.press(screen.getByRole('button', { name: 'Category: Groceries' }));
-    // Just the category sheet opens — not the full transaction form.
-    expect(screen.queryByLabelText('Title')).toBeNull();
-
-    await fireEvent.press(screen.getByRole('button', { name: 'Bar & Restaurant' }));
-
-    expect(mockUpdateTransaction).toHaveBeenCalledWith(
-      expect.anything(),
-      trip.id,
-      groceries.id,
-      expect.objectContaining({ category: 'restaurant', title: 'Groceries' }),
-    );
-    // Applies immediately and closes the sheet, no separate save step.
-    expect(await screen.findByRole('button', { name: 'Category: Bar & Restaurant' })).toBeTruthy();
-    expect(screen.queryByText('Category')).toBeNull();
+    // The category emoji renders next to the title.
+    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
   });
 
   it('shows an empty state and an "Add a transaction" action', async () => {
@@ -190,8 +163,7 @@ describe('GroupScreen', () => {
     await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('Groceries')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Category: Groceries' })).toBeTruthy();
+    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
     expect(notify).toHaveBeenCalled();
   });
 

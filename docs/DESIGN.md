@@ -76,18 +76,12 @@ shows the toggle, not the empty state.
 Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
 the group's name, an "Archived" note when it applies, **the viewer's own balance**
 ("You are owed 21.25" / "You owe 8.00" / "You're all settled up" — said in words, so it
-never rests on spotting a minus sign), the transaction list (`TransactionRow`: title, a
-small square **category badge** to its right showing just the emoji, date, kind, payer,
-and the viewer's own share, coloured), and a primary "Add a transaction" button — absent
-on an archived group. A row opens the same add/edit sheet, pre-filled; on an archived
-group rows render but are not pressable, read only, including the badge. Empty state: an
-explanation and the same "Add a transaction" action.
-
-**Tapping the category badge** opens a small sheet with just the category grid
-(`CategoryPicker`) — a faster path than the full edit sheet for the one thing people
-change most often. Picking a category applies it immediately (a full-replace update
-behind the scenes, everything else about the transaction untouched — see
-`transaction-request.ts`) and closes the sheet; there is no separate save step.
+never rests on spotting a minus sign), the transaction list (`TransactionRow`: the
+category emoji next to the title, date, kind, payer, and the viewer's own share,
+coloured), and a primary "Add a transaction" button — absent on an archived group. A row
+opens the same add/edit sheet, pre-filled; on an archived group rows render but are not
+pressable, read only. Empty state: an explanation and the same "Add a transaction"
+action.
 
 Group management — everything that used to sit directly on this screen — moved behind a
 small "Details" button in the header, opening a sheet: the member list (avatar + name,
@@ -116,11 +110,15 @@ a way back), and a retryable connection error.
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 
 One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
-"Delete this transaction". Kind picker (Expense / Income / Transfer), title, amount, date
-(`DatePickerField` — see below), a category grid (`CategoryPicker` — see below, defaulting
-to Other), optional comment, then "Who paid" (`MemberSelect`, defaulting to the signed-in
-member). An expense or income continues with "Who it concerns" (`SplitEditor`); a
-transfer replaces it with a single "To" picker instead, excluding the payer. "Save" is
+"Delete this transaction". Kind picker (Expense / Income / Transfer), then a title row: a
+small square **category badge** to the left of the title field, showing just the emoji
+(`Other` by default), then the title itself. Tapping the badge opens a small sheet with
+just the category grid (`CategoryPicker`); picking one updates the badge and closes the
+sheet immediately — no separate save step for it, though the transaction itself is only
+persisted when the form's own "Save" is pressed. Then amount, date (`DatePickerField` —
+see below), optional comment, then "Who paid" (`MemberSelect`, defaulting to the
+signed-in member). An expense or income continues with "Who it concerns" (`SplitEditor`);
+a transfer replaces it with a single "To" picker instead, excluding the payer. "Save" is
 disabled until the title, amount, date and split are all valid — the category always has
 a value, so it never blocks saving.
 
@@ -130,8 +128,8 @@ Every preset as an emoji + label pill (`CategoryPicker`), wrapping into a grid �
 pill styling as the split editor's mode toggle, filled when selected. Single-select: every
 transaction has a category (`Other` by default), so there is no "clear" gesture — picking
 `Other` itself is the neutral choice. No way to add, rename or reorder a category here —
-the list is fixed (`@splitcount/shared`'s `categories.ts`). Used both in the full add/edit
-sheet and, alone, in the category badge's quick-edit sheet.
+the list is fixed (`@splitcount/shared`'s `categories.ts`). Used inside the add/edit
+form's category badge sheet.
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 

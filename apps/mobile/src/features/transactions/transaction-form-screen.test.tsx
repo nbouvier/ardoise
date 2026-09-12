@@ -136,14 +136,20 @@ describe('TransactionFormScreen — recording', () => {
       />,
     );
 
+    expect(screen.getByRole('button', { name: 'Category: Other' })).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Groceries');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
+    await fireEvent.press(screen.getByRole('button', { name: 'Category: Other' }));
     expect(screen.getByRole('button', { name: 'Other' })).toHaveProp(
       'accessibilityState',
       expect.objectContaining({ selected: true }),
     );
-
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Groceries');
-    await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
     await fireEvent.press(screen.getByRole('button', { name: 'Groceries' }));
+    // Picking a category closes the sheet immediately, no separate save step.
+    expect(screen.queryByRole('button', { name: 'Other' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Category: Groceries' })).toBeTruthy();
+
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     expect(mockCreateTransaction).toHaveBeenCalledWith(
@@ -202,10 +208,7 @@ describe('TransactionFormScreen — editing', () => {
     expect(screen.getByLabelText('Title').props.value).toBe('Groceries');
     expect(screen.getByLabelText('Amount').props.value).toBe('10.00');
     expect(screen.getByLabelText('Comment').props.value).toBe('Weekly run');
-    expect(screen.getByRole('button', { name: 'Groceries' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ selected: true }),
-    );
+    expect(screen.getByRole('button', { name: 'Category: Groceries' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete this transaction' })).toBeTruthy();
   });
 

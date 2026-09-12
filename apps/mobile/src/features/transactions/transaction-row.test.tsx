@@ -15,7 +15,7 @@ const expense: Transaction = {
   amountCents: 1000,
   occurredOn: '2026-09-11',
   comment: null,
-  category: 'groceries',
+  category: 'other',
   payer: ada,
   splitMode: 'shares',
   participants: [
@@ -31,7 +31,7 @@ describe('TransactionRow', () => {
   it('shows a positive share for the payer', async () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
 
-    expect(screen.getByText('Groceries')).toBeTruthy();
+    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
     expect(screen.getByText('+5.00')).toBeTruthy();
   });
 
@@ -60,44 +60,24 @@ describe('TransactionRow', () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} />);
 
     expect(screen.queryByRole('button', { name: 'Groceries' })).toBeNull();
-    expect(screen.getByText('Groceries')).toBeTruthy();
+    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
   });
 
-  it('always shows the category badge, defaulting to Other', async () => {
-    await render(
-      <TransactionRow transaction={{ ...expense, category: 'other' }} viewerId={ada.id} onPress={jest.fn()} />,
-    );
-
-    expect(screen.getByText('🧾')).toBeTruthy();
-  });
-
-  it('shows the emoji for a specific category', async () => {
-    await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
-
-    expect(screen.getByText('🛒')).toBeTruthy();
-  });
-
-  it('reports a tap on the category badge, separately from the row', async () => {
-    const onPress = jest.fn();
-    const onCategoryPress = jest.fn();
+  it('shows the category emoji next to the title', async () => {
     await render(
       <TransactionRow
-        transaction={expense}
+        transaction={{ ...expense, category: 'groceries' }}
         viewerId={ada.id}
-        onPress={onPress}
-        onCategoryPress={onCategoryPress}
+        onPress={jest.fn()}
       />,
     );
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Category: Groceries' }));
-
-    expect(onCategoryPress).toHaveBeenCalledWith(expense);
-    expect(onPress).not.toHaveBeenCalled();
+    expect(screen.getByText('🛒 Groceries')).toBeTruthy();
   });
 
-  it('renders the badge as non-interactive when no onCategoryPress is given', async () => {
+  it('defaults to the Other emoji', async () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
 
-    expect(screen.queryByRole('button', { name: 'Category: Groceries' })).toBeNull();
+    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
   });
 });

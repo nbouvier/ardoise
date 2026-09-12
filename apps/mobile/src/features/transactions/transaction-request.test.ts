@@ -1,7 +1,7 @@
 import type { Transaction } from '@splitcount/shared';
 import { describe, expect, it } from '@jest/globals';
 
-import { splitFrom, toUpdateRequest } from './transaction-request';
+import { splitFrom } from './transaction-request';
 
 const ada = { id: 'ada', name: 'Ada Lovelace', picture: null };
 const grace = { id: 'grace', name: 'Grace Hopper', picture: null };
@@ -24,13 +24,6 @@ const sharesExpense: Transaction = {
   createdBy: ada.id,
   createdAt: '2026-09-11T12:00:00.000Z',
   updatedAt: '2026-09-11T12:00:00.000Z',
-};
-
-const transfer: Transaction = {
-  ...sharesExpense,
-  kind: 'transfer',
-  splitMode: 'amount',
-  participants: [{ user: grace, shareCents: 1000, weight: null }],
 };
 
 describe('splitFrom', () => {
@@ -60,40 +53,6 @@ describe('splitFrom', () => {
         { userId: ada.id, amount: 700 },
         { userId: grace.id, amount: 300 },
       ],
-    });
-  });
-});
-
-describe('toUpdateRequest', () => {
-  it('carries every field over unchanged, with the category overridden', () => {
-    expect(toUpdateRequest(sharesExpense, { category: 'restaurant' })).toEqual({
-      kind: 'expense',
-      title: 'Groceries',
-      amount: 1000,
-      occurredOn: '2026-09-11',
-      comment: 'Weekly run',
-      category: 'restaurant',
-      payerId: ada.id,
-      split: {
-        mode: 'shares',
-        participants: [
-          { userId: ada.id, weight: 2 },
-          { userId: grace.id, weight: 1 },
-        ],
-      },
-    });
-  });
-
-  it('rebuilds a transfer with its single recipient instead of a split', () => {
-    expect(toUpdateRequest(transfer, { category: 'other' })).toEqual({
-      kind: 'transfer',
-      title: 'Groceries',
-      amount: 1000,
-      occurredOn: '2026-09-11',
-      comment: 'Weekly run',
-      category: 'other',
-      payerId: ada.id,
-      toUserId: grace.id,
     });
   });
 });

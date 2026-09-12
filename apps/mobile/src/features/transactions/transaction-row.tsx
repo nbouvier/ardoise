@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 import { centsToText } from './amount-input';
 import { balanceTone } from './balance-display';
@@ -14,8 +13,6 @@ export interface TransactionRowProps {
   viewerId: string;
   /** Omitted (e.g. on an archived, read-only group) renders a plain, unpressable row. */
   onPress?: (transaction: Transaction) => void;
-  /** Tapping the category badge — a faster path than opening the full edit sheet. Omitted disables it, same as `onPress`. */
-  onCategoryPress?: (transaction: Transaction) => void;
 }
 
 const kindLabels: Record<Transaction['kind'], string> = {
@@ -50,34 +47,17 @@ function myShareCents(transaction: Transaction, viewerId: string): number {
 }
 
 /** One row of a group's transaction list. */
-export function TransactionRow({ transaction, viewerId, onPress, onCategoryPress }: TransactionRowProps) {
-  const theme = useTheme();
+export function TransactionRow({ transaction, viewerId, onPress }: TransactionRowProps) {
   const myShare = myShareCents(transaction, viewerId);
-  // Every transaction has a category (`other` when none was chosen); the
-  // fallback emoji only guards against a key this build doesn't recognise.
   const category = categoryDefinition(transaction.category);
 
   const content = (
     <>
       <View style={styles.text}>
-        <View style={styles.titleRow}>
-          <ThemedText numberOfLines={1} style={styles.title}>
-            {transaction.title}
-          </ThemedText>
-          {onCategoryPress ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Category: ${category?.label ?? 'Other'}`}
-              onPress={() => onCategoryPress(transaction)}
-              style={[styles.categoryBadge, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText style={styles.categoryEmoji}>{category?.emoji ?? '🧾'}</ThemedText>
-            </Pressable>
-          ) : (
-            <View style={[styles.categoryBadge, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText style={styles.categoryEmoji}>{category?.emoji ?? '🧾'}</ThemedText>
-            </View>
-          )}
-        </View>
+        <ThemedText numberOfLines={1}>
+          {category ? `${category.emoji} ` : ''}
+          {transaction.title}
+        </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {formatOccurredOn(transaction.occurredOn)} · {kindLabels[transaction.kind]} ·{' '}
           {transaction.payer.name}
@@ -114,24 +94,6 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
     gap: Spacing.half,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  title: {
-    flexShrink: 1,
-  },
-  categoryBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryEmoji: {
-    fontSize: 13,
   },
   pressed: {
     opacity: 0.6,

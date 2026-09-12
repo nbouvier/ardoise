@@ -1,4 +1,4 @@
-import type { GroupDetail, GroupMember, Transaction, TransactionCategory } from '@splitcount/shared';
+import type { GroupDetail, GroupMember, Transaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -19,9 +19,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
-import { CategoryPicker } from '@/features/transactions/category-picker';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
-import { toUpdateRequest } from '@/features/transactions/transaction-request';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { useBalances, type UseBalancesResult } from '@/features/transactions/use-balances';
@@ -33,7 +31,6 @@ import {
   removeGroupMember,
   updateGroup,
 } from '@/lib/api/groups';
-import { updateTransaction } from '@/lib/api/transactions';
 import { errorFields, logger } from '@/lib/logger';
 
 import { FriendPicker } from './friend-picker';
@@ -58,11 +55,6 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [busy, setBusy] = useState(false);
-  // The category badge's quick edit is its own small sheet, independent of
-  // the `sheet` state machine above — it opens from the list, not from
-  // within another sheet, so the two never need to coexist.
-  const [quickCategoryFor, setQuickCategoryFor] = useState<Transaction | null>(null);
-  const [categoryBusy, setCategoryBusy] = useState(false);
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the details sheet: the summary above the
   // transaction list and the per-member list in the sheet are the same figures.
@@ -199,33 +191,6 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     setSheet('transaction');
   }
 
-  /**
-   * Applies a category picked from the list's badge and closes on success —
-   * a full-replace `PATCH` under the hood (see `toUpdateRequest`), but the
-   * only thing that visibly changes is the category.
-   */
-  async function handleQuickCategoryChange(category: TransactionCategory) {
-    if (!quickCategoryFor) {
-      return;
-    }
-    setCategoryBusy(true);
-    try {
-      const updated = await updateTransaction(
-        authorizedFetch,
-        groupId,
-        quickCategoryFor.id,
-        toUpdateRequest(quickCategoryFor, { category }),
-      );
-      transactionsResult.upsert(updated);
-      setQuickCategoryFor(null);
-    } catch (error: unknown) {
-      logger.warn('transactions.category.failed', errorFields(error));
-      Alert.alert('That didn’t work', 'Check your connection and try again.');
-    } finally {
-      setCategoryBusy(false);
-    }
-  }
-
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.content}>
@@ -257,7 +222,6 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           viewerId={viewerId}
           archived={archived}
           onOpen={openTransaction}
-          onCategoryPress={setQuickCategoryFor}
         />
 
         {archived ? null : (
@@ -357,35 +321,6 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           </SafeAreaView>
         </ThemedView>
       </Modal>
-
-      <Modal
-        visible={quickCategoryFor !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setQuickCategoryFor(null)}>
-        <ThemedView style={styles.container}>
-          <SafeAreaView style={styles.container}>
-            <ThemedView style={styles.sheet}>
-              <ThemedText type="subtitle">Category</ThemedText>
-              {quickCategoryFor ? (
-                <CategoryPicker
-                  value={quickCategoryFor.category}
-                  onChange={(category) => void handleQuickCategoryChange(category)}
-                />
-              ) : null}
-              {categoryBusy ? <ActivityIndicator testID="category-busy" color={theme.text} /> : null}
-              <ThemedView style={styles.sheetFooter}>
-                <Button
-                  label="Close"
-                  variant="secondary"
-                  disabled={categoryBusy}
-                  onPress={() => setQuickCategoryFor(null)}
-                />
-              </ThemedView>
-            </ThemedView>
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
     </ThemedView>
   );
 }
@@ -395,13 +330,11 @@ function TransactionList({
   viewerId,
   archived,
   onOpen,
-  onCategoryPress,
 }: {
   result: ReturnType<typeof useTransactions>;
   viewerId: string | null;
   archived: boolean;
   onOpen: (transaction: Transaction) => void;
-  onCategoryPress: (transaction: Transaction) => void;
 }) {
   const theme = useTheme();
   const { status, transactions, refresh } = result;
@@ -451,7 +384,6 @@ function TransactionList({
           transaction={item}
           viewerId={viewerId}
           onPress={archived ? undefined : onOpen}
-          onCategoryPress={archived ? undefined : onCategoryPress}
         />
       )}
     />
