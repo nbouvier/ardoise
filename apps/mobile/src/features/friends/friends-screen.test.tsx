@@ -109,6 +109,9 @@ describe('FriendsScreen', () => {
     await render(<FriendsScreen />);
     await screen.findByText('No friends yet');
 
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a friend' }));
+    await fireEvent.press(screen.getByText('Enter a code'));
+
     await fireEvent.changeText(
       screen.getByLabelText('Invitation code'),
       'Zx3k9QpL2mN7vR1sT4uW8g',
@@ -118,11 +121,12 @@ describe('FriendsScreen', () => {
     expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
   });
 
-  it('opens the invite sheet', async () => {
+  it('opens the invite sheet from the add menu', async () => {
     await render(<FriendsScreen />);
     await screen.findByText('No friends yet');
 
-    await fireEvent.press(screen.getByRole('button', { name: /invite a friend/i }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a friend' }));
+    await fireEvent.press(screen.getByText('Invite a friend'));
 
     expect(await screen.findByText(/Send this link/)).toBeTruthy();
   });

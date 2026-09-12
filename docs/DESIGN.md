@@ -121,10 +121,14 @@ or box**; a screen that styles its own is a bug in this document.
 - **`IconButton`** — a round, label-less action for a single unambiguous glyph: `primary`
   (brand-filled circle) or `ghost` (soft brand wash), same two surfaces as `Button`.
 - **`ScreenHeader`** — the top of a tab screen: **SplitCount's own identity first** — the
-  `BrandMark` and wordmark, small — the current page named underneath in smaller,
-  secondary-coloured type, with an optional trailing caption and room for one screen-level
-  action. Every tab opens the same way, and reads as SplitCount before it reads as "Groups"
-  or "Friends".
+  `BrandMark`, sized to stand as tall as the two text lines beside it, next to the
+  wordmark and, directly under it, the current page named in smaller, secondary-coloured
+  type, with an optional trailing caption and room for one screen-level action. Every tab
+  opens the same way, and reads as SplitCount before it reads as "Groups" or "Friends".
+- **`AddMenuButton`** — the footer's single action on a list screen: a round "+"
+  `IconButton` that opens a small **action menu** (a `Card` of icon + label rows) anchored
+  above the button, so the button itself stays pinned to the bottom of the screen and the
+  menu grows upward into the free space rather than pushing content around.
 - **`ThemedText`** — `title`, `subtitle` (a screen's own name), `sectionTitle` (a block
   inside a screen), `overline` (a small all-caps label above a block — quiet structure,
   never a sentence), `amount` (a figure that must read as a figure), `default`, `small`,
@@ -142,9 +146,12 @@ or box**; a screen that styles its own is a bug in this document.
 - Colour never carries meaning alone: a balance is said in words ("You owe 8.00"), a
   chart slice is repeated in a legend with its emoji and label.
 - An action that branches into a couple of related choices (add → create or join) is a
-  single **`IconButton`** opening a small **action menu** — a `Card` of `MenuRow`s
-  (a soft brand icon + a label) anchored near the button — rather than a text button per
+  single **`AddMenuButton`** (a round `IconButton` opening a small **action menu** — a
+  `Card` of icon + label rows anchored above the button) rather than a text button per
   choice or a label-less button whose single meaning has to be guessed.
+- A list screen's footer action sits **pinned to the bottom of the screen** (the body
+  above it takes `flex: 1`), not just after whatever content happens to be there — so the
+  button's position, and the menu that opens above it, never move with the list's length.
 
 ## Screens
 
@@ -174,11 +181,12 @@ viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
 `docs/specs/balances.md`). Empty state: a brand card with a glyph, "No groups yet" and
 what a group is for.
 
-A footer holds a single primary **`IconButton`** (`plus`, bottom-right) rather than a
-"Create a group" text button: it opens an **action menu** with "Create a group" and "Join
-a group" (`link` icon). "Create a group" opens the same creation sheet as before; "Join a
-group" opens a sheet holding the invitation-code entry — submitting a code closes the
-sheet and hands off to `InvitePrompt`, which is what actually confirms and joins.
+A footer holds a single **`AddMenuButton`** (bottom-right, pinned to the bottom of the
+screen) rather than a "Create a group" text button: it opens an **action menu** with
+"Create a group" (`plus` icon) and "Join a group" (`link` icon). "Create a group" opens
+the same creation sheet as before; "Join a group" opens a sheet holding the
+invitation-code entry — submitting a code closes the sheet and hands off to
+`InvitePrompt`, which is what actually confirms and joins.
 
 **Archived groups** sit under a "Show archived (n)" brand-coloured toggle at the bottom,
 rendered `muted` with "n members · archived" when revealed — hidden rather than greyed
@@ -328,17 +336,18 @@ two of them stand** — "owes you 12.50" / "you owe 12.50" / "settled up", colou
 across every group they share. No grand total above the list: members of shared groups who
 are not friends are absent from it, so a sum of the rows would not be the viewer's overall
 position. **Tapping a card opens the group shared with that friend**; "Remove" stays a
-separate hit area at the end. Empty state: a brand card. A footer holds the primary
-"Invite a friend" and the code entry.
+separate hit area at the end. Empty state: a brand card. A footer holds the same
+**`AddMenuButton`** pattern as Groups: "Invite a friend" (`plus` icon) opens the invite
+sheet, "Enter a code" (`link` icon) opens a sheet holding the invitation-code entry.
 
 ### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
 
 An `overline` "Got an invitation code?", a `TextField` and a secondary "Open" (disabled
 until something is typed, submittable from the keyboard). **The same component on both
 the Friends and Groups tabs** — neither has to know which kind of code the visitor is
-holding — rendered at the bottom of the Friends tab and inside the Groups tab's "Join a
-group" sheet. An optional `onSubmitted` callback lets a host sheet close itself once the
-code is handed off.
+holding — rendered inside the Friends tab's "Enter a code" sheet and the Groups tab's
+"Join a group" sheet. An optional `onSubmitted` callback lets the host sheet close itself
+once the code is handed off.
 
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 
