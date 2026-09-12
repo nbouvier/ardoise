@@ -32,7 +32,11 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   Groups can be archived (reversible, hidden behind a toggle in the list) or deleted
   (permanent). Every pair of friends also shares an **implicit group**, opened by tapping
   that friend: unlisted, two people forever, otherwise a normal group.
-  See `docs/specs/groups.md`.
+  A standard group can also have **sub-groups**, nested up to five levels deep, for a
+  side trip or a recurring sub-budget that still belongs to the group it lives under.
+  Belonging to a group always implies belonging to every one of its ancestors; a member
+  can see (and join) the sub-groups of any group they belong to, hidden behind a toggle
+  when they have not joined them. See `docs/specs/groups.md`.
 - **Group transactions** — any member records an expense, an income, or a transfer in a
   group: a title, an amount, a date, an optional comment, an optional **category** (a
   fixed preset list, each with an emoji shown next to the transaction in the list), who
@@ -42,14 +46,16 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   implicit pair group; an archived group is read-only for transactions. See
   `docs/specs/transactions.md`.
 - **Balances** — a group shows where each member stands against it, and the viewer's own
-  position sits on the group screen itself. The friend list goes further: next to each
-  friend, the net of what they owe the user or the user owes them, summed across every
-  group the two share. Both are derived from the transactions on every read, never stored.
-  See `docs/specs/balances.md`.
+  position sits on the group screen itself, rolled up over the group and every sub-group
+  nested inside it. The friend list goes further: next to each friend, the net of what
+  they owe the user or the user owes them, summed across every group the two share. All
+  are derived from the transactions on every read, never stored. See
+  `docs/specs/balances.md`.
 - **Group statistics** — a group shows where its money went: a donut chart of its
   transactions broken down by category, with each category's amount and share of the
-  total. Two toggles switch what is measured — spending or income, and the whole group or
-  the viewer's own share. Transfers between members are never counted. Derived from the
+  total. Toggles switch what is measured — spending or income, the whole group or the
+  viewer's own share, and, for a group with sub-groups, whether their transactions are
+  included (on by default). Transfers between members are never counted. Derived from the
   transactions, like balances. See `docs/specs/group-statistics.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
@@ -70,6 +76,7 @@ statistics, tooling and documentation.
 - Notifying the inviter when someone accepts an invitation (needs push notifications).
 - Whether group ownership can be transferred, and whether a pair group can be cleared
   without removing the friend.
+- Whether a sub-group can be re-parented or promoted to a root group after creation.
 - Whether transactions need an edit history, given any member can change or remove
   another member's entry with no trace kept.
 

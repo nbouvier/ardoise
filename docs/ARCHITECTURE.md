@@ -144,6 +144,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@splitcount/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
 | 2026-09-12 | Each category carries its own colour in the shared preset list | A chart and its legend describing different colours for the same category is a defect the type system can prevent; the colour is part of the category, not of the screen |
 | 2026-09-12 | The donut is drawn with `react-native-svg` rather than stacked views | Thirteen arcs, exact hit-testing per slice and one implementation across iOS, Android and web. It is a native dependency, so it costs a dev-build rebuild (`docs/MOBILE.md`) |
+| 2026-09-12 | Groups can nest via a single nullable `groups.parent_id`, not a materialised path or a closure table | The write path (create, delete) is simple and the read path (ancestors, descendants) is a bounded recursive query, since depth is capped; a closure table would trade that simplicity for write-time upkeep this scale does not need yet |
+| 2026-09-12 | A group's parent is immutable after creation — no re-parenting endpoint | Removes cycle detection entirely: the tree is acyclic by construction, not by validation. Every tree computation (membership propagation, effective-archive, balance/statistics roll-up) is then a straightforward top-down or bottom-up walk instead of an open-ended graph problem |
+| 2026-09-12 | Nesting depth is capped at five levels (`groups.depth`, 0-4), enforced at creation | Bounds every recursive tree query and rules out pathological chains, at a depth generous enough for any real trip/household structure; `depth` is stored (not recomputed) because it is fixed at creation and lets the cap be a simple check rather than a query |
+| 2026-09-12 | Membership in a group implies membership in every ancestor, enforced at every write path (add, invite acceptance, join) rather than checked lazily on read | Makes "who can see this group's transactions" answerable from that group's own membership row alone, with no need to walk up the tree on every read — the invariant is paid for once, at the few places membership changes, not on every access |
+| 2026-09-12 | A member of a group's immediate parent who has not joined it gets `403 join_required`, not `404`, when asking for that group | The one deliberate exception to "non-membership is always 404": the caller already legitimately knows the group exists, because it is shown to them in the parent's own sub-group list. Kept narrow — it never applies transitively to a sibling's or grandchild's existence |
+| 2026-09-12 | A group's rolled-up balance and its statistics' "including sub-groups" scope are both resolved to "the group plus only the descendants the caller is a member of", entirely server-side | Consistent with `docs/specs/groups.md`'s visibility rule: a sub-group being *visible* must never leak into what its balance or statistics disclose about it |
 
 ## Open items
 
@@ -186,5 +192,17 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   a group's history grows large enough to matter. **Paginating it breaks the group
   statistics silently**: the client-side breakdown would then describe only the loaded
   page while still reading as the whole group. Whoever paginates the list moves
-  `categoryBreakdown` behind a `GET /groups/:groupId/transactions/statistics` route in the
-  same change — the function is already shared and server-ready.
+  `categoryBreakdown` behind a `GET /groups/:groupId/transactions/statistics` route,
+  carrying the same `scope` parameter nesting adds, in the same change — the function is
+  already shared and server-ready.
+- **Nested groups, added 2026-09-12** (`docs/specs/groups.md`): re-parenting a sub-group
+  and promoting one to a root group are both deliberately out of scope. Adding either
+  later needs cycle detection (parent is no longer fixed at creation) and a rule for what
+  happens to a sub-group's existing memberships when its ancestor set changes — someone
+  could end up a member of a sub-group without being a member of its new parent, which
+  the current design makes structurally impossible.
+- **`GET /groups`'s balance roll-up** scans, for every root group, the caller's
+  transactions across that group's entire sub-tree — bounded by how deep one user's own
+  groups nest (capped at five levels), not by the account's whole history, so it does not
+  carry the same growth risk as the per-friend aggregate above. Revisit together with it
+  if it is ever measured slow.
