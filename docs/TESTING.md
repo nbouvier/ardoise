@@ -87,8 +87,13 @@ interaction is a device concern.
   (round-trips, defaults to Other, an unknown value is refused, resets to Other when none
   is given).
 - `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
-  many generated totals/weights/group sizes, rounding determinism, tie-breaking — and the
-  transaction request schema's shape per kind.
+  many generated totals/weights/group sizes, rounding determinism, tie-breaking — the
+  transaction request schema's shape per kind, the category preset list (unique keys,
+  emoji, label and a distinct colour each), and the statistics breakdown
+  (`categoryBreakdown`): kind filtering (transfers never count), a selected subset of
+  participants using their own shares rather than what they paid (single member, several
+  summed, and an empty selection), ordering, and the two sum invariants — amounts to the
+  total and percentages to exactly 100 — across many generated shapes.
 - `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation
@@ -105,13 +110,21 @@ interaction is a device concern.
   save step), the category picker (selection; every category is reachable, none has a
   "clear" behaviour), `transaction-request.ts` (rebuilding a split for the form),
   the transaction row's "my share" calculation and category emoji, and the date field's
-  local-date conversion (no time-zone shift) and its iOS/Android wiring.
+  local-date conversion (no time-zone shift) and its iOS/Android wiring; and the
+  statistics feature (`src/features/statistics/`): the donut geometry (the ring always
+  closes, a sliver stays visible, a full ring is drawn as two halves) and the statistics
+  sheet (totals and legend, one arc per category, the type toggle, narrowing and summing
+  the per-member selection, the "select at least one" empty state, selecting and
+  deselecting a slice, and each empty state saying *which* view is empty).
 
 ### Gotchas
 
 - When faking `useAuth`, return **the same object on every render**. The real context
   memoises its value, so `authorizedFetch` is stable; a fresh `jest.fn()` per render makes
   every `useCallback`/`useEffect` that depends on it re-run, and data-loading screens loop.
+- `toHaveTextContent('…')` compares the element's **whole** text, not a substring (RNTL
+  v14). Pass a regex (`toHaveTextContent(/Travel/)`) when the element also renders an
+  emoji or a suffix.
 - Server tests that depend on time inject a clock (`invites: { now }` / `groups: { now }`
   in `createTestContext`) rather than waiting.
 - A screen that navigates needs `expo-router` mocked (`useRouter: () => ({ push })`).

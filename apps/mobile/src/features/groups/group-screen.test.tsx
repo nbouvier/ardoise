@@ -151,6 +151,21 @@ describe('GroupScreen', () => {
     expect(await screen.findByLabelText('Title')).toBeTruthy();
   });
 
+  it('opens the statistics on the transactions it already loaded', async () => {
+    mockFetchTransactions.mockResolvedValue([groceries]);
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Group statistics' }));
+
+    expect(await screen.findByTestId('statistics-centre-label')).toHaveTextContent(
+      'Total spending',
+    );
+    // The list is read once by the screen: opening the sheet asks for nothing more.
+    expect(mockFetchTransactions).toHaveBeenCalledTimes(1);
+  });
+
   it('tells the Friends tab to reload after a transaction is saved', async () => {
     // A friend's per-group balance changed here has no other way to reach the
     // Friends tab's own per-friend total — it can only find out by asking.

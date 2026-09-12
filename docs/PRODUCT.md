@@ -46,10 +46,15 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   friend, the net of what they owe the user or the user owes them, summed across every
   group the two share. Both are derived from the transactions on every read, never stored.
   See `docs/specs/balances.md`.
+- **Group statistics** — a group shows where its money went: a donut chart of its
+  transactions broken down by category, with each category's amount and share of the
+  total. Two toggles switch what is measured — spending or income, and the whole group or
+  the viewer's own share. Transfers between members are never counted. Derived from the
+  transactions, like balances. See `docs/specs/group-statistics.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
-`/health`, auth, friends, invitations, groups and group transactions, tooling and
-documentation.
+`/health`, auth, friends, invitations, groups, group transactions and per-category
+statistics, tooling and documentation.
 
 ## Planned direction
 

@@ -85,6 +85,21 @@ npm run mobile:android   # or: npm run mobile:ios
 A fresh `expo run:*` (which does this automatically) also works. No `app.json` change was
 needed — `@expo/ui` has no config plugin, only autolinking.
 
+## Charts (`react-native-svg`)
+
+Added 2026-09-12 for the group statistics donut
+(`src/features/statistics/donut-chart.tsx`). It is a **native module**, so a dev build
+installed before that date does not have it linked and the statistics sheet will fail at
+runtime. Same fix as above:
+
+```bash
+npm run prebuild --workspace @splitcount/mobile
+npm run mobile:android   # or: npm run mobile:ios
+```
+
+The web target needs nothing — `react-native-svg` renders real SVG there. No config
+plugin, only autolinking.
+
 ## Cloud builds (EAS) — alternative
 
 For a dev build without local native toolchains (e.g. iOS from Windows), use EAS Build.
