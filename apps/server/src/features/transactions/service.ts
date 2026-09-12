@@ -4,6 +4,10 @@ import type {
   CreateTransactionRequest,
   FriendSummary,
   GroupDetail,
+  NetPosition,
+  ReimbursementPlanResponse,
+  ReimbursementScope,
+  ReimbursementSource,
   SplitMode,
   Transaction,
   TransactionCategory,
@@ -18,8 +22,13 @@ import type { GroupsService } from '../groups/service.js';
 import type { UsersRepository } from '../users/repository.js';
 import { toUserSummary } from '../users/repository.js';
 
-import { computeBalances, groupParticipantsByTransaction } from './balances.js';
+import {
+  computeBalances,
+  computeBalancesByGroup,
+  groupParticipantsByTransaction,
+} from './balances.js';
 import { TransactionError } from './errors.js';
+import { planReimbursements } from './reimbursements.js';
 import type { ParticipantInput, TransactionFields, TransactionsRepository } from './repository.js';
 
 export interface TransactionsListResult {
@@ -47,6 +56,17 @@ export interface TransactionsService {
   remove(userId: string, groupId: string, transactionId: string): Promise<void>;
   /** Every current (and formerly-owing) member's net balance. Sums to zero. */
   balances(userId: string, groupId: string): Promise<Balance[]>;
+  /**
+   * Who should pay whom to clear everything, and the net positions it is
+   * derived from (`docs/specs/reimbursements.md`). `scope: 'subtree'` covers
+   * the group and every descendant at any depth — **including ones the
+   * caller has not joined**, unlike every other sub-tree scope here.
+   */
+  reimbursements(
+    userId: string,
+    groupId: string,
+    scope?: ReimbursementScope,
+  ): Promise<ReimbursementPlanResponse>;
 }
 
 export interface TransactionsServiceDeps {
@@ -304,5 +324,91 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
         amountCents,
       }));
     },
+
+    async reimbursements(userId, groupId, scope = 'group') {
+      const group = await requireMembership(userId, groupId);
+
+      // The group itself first, named the way it already renders (a pair
+      // group is named after the other person, so its name cannot be read
+      // off the row). Then, for a sub-tree plan, every descendant — the
+      // caller's membership in them deliberately not consulted; see
+      // `groups.reimbursementScope`.
+      const scopeGroups = [{ id: group.id, name: group.name }];
+      if (scope === 'subtree') {
+        scopeGroups.push(...(await groups.reimbursementScope(userId, groupId)));
+      }
+
+      const rows = await repository.listByGroups(scopeGroups.map((inScope) => inScope.id));
+      const participants = await repository.listParticipants(rows.map((row) => row.id));
+      const balancesByGroup = computeBalancesByGroup(
+        rows,
+        groupParticipantsByTransaction(participants),
+      );
+
+      const netByUser = new Map<string, number>();
+      const sourcesByUser = new Map<string, ReimbursementSource[]>();
+      for (const inScope of scopeGroups) {
+        for (const [personId, amountCents] of balancesByGroup.get(inScope.id) ?? []) {
+          netByUser.set(personId, (netByUser.get(personId) ?? 0) + amountCents);
+          if (amountCents === 0) {
+            // Nothing to justify: a group someone came out even in explains
+            // nothing about where their position comes from.
+            continue;
+          }
+          const sources = sourcesByUser.get(personId);
+          const source = { groupId: inScope.id, groupName: inScope.name, amountCents };
+          if (sources) {
+            sources.push(source);
+          } else {
+            sourcesByUser.set(personId, [source]);
+          }
+        }
+      }
+
+      // Every current member appears, including at zero — the same rule the
+      // per-member balance list follows, so the two never disagree about
+      // who is in the group.
+      for (const member of group.members) {
+        if (!netByUser.has(member.id)) {
+          netByUser.set(member.id, 0);
+        }
+      }
+
+      const plan = planReimbursements(netByUser);
+      const userMap = await buildUserMap([...netByUser.keys()]);
+
+      const positions: NetPosition[] = [...netByUser.entries()]
+        .map(([personId, amountCents]) => ({
+          user: resolveUser(userMap, personId),
+          amountCents,
+          sources: [...(sourcesByUser.get(personId) ?? [])].sort(
+            (a, b) =>
+              Math.abs(b.amountCents) - Math.abs(a.amountCents) ||
+              compare(a.groupId, b.groupId),
+          ),
+        }))
+        // Owed first, owing next, settled last — and deterministic, so two
+        // members read the same list in the same order.
+        .sort(
+          (a, b) =>
+            Number(a.amountCents === 0) - Number(b.amountCents === 0) ||
+            b.amountCents - a.amountCents ||
+            compare(a.user.id, b.user.id),
+        );
+
+      return {
+        scope,
+        positions,
+        reimbursements: plan.map((payment) => ({
+          from: resolveUser(userMap, payment.fromUserId),
+          to: resolveUser(userMap, payment.toUserId),
+          amountCents: payment.amountCents,
+        })),
+      };
+    },
   };
+}
+
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

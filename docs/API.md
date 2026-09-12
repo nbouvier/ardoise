@@ -502,7 +502,8 @@ left with an unsettled balance still appears too. Computed on the fly from the
 transactions, not stored — see `docs/ARCHITECTURE.md`.
 
 This is a net against the **group**, not against a person: it cannot say who owes whom.
-For that, see `balanceCents` on `GET /friends` and `docs/specs/balances.md`.
+For that, see `balanceCents` on `GET /friends` and `docs/specs/balances.md`; for who
+should pay whom to clear the group, see the reimbursement plan below.
 
 Response `200`:
 
@@ -510,6 +511,60 @@ Response `200`:
 { "balances": [{ "userId": "<uuid>", "amountCents": 500 }] }
 ```
 
+### `GET /groups/:groupId/transactions/reimbursements`
+
+Who should pay whom to clear everything, and the net positions it is derived from
+(`docs/specs/reimbursements.md`). Derived on every read; nothing is stored.
+
+`?scope=` (`group`, the default, or `subtree`) controls whether sub-groups are included.
+An unrecognised value falls back to `group` rather than failing — the scope that
+discloses least.
+
+**`scope=subtree` includes every descendant at any depth, whether or not the caller has
+joined it** — the one sub-tree scope in this API that does not filter on the caller's
+membership, unlike `GET /groups/:groupId/transactions?scope=subtree` and the rolled-up
+`viewerBalanceCents`. A plan is about other people's debts too, so leaving a sub-group
+out would make it disagree with what that sub-group's own members see. What this
+discloses is bounded to net figures per person per group plus group names the caller can
+already see in the parent's sub-group list; it never exposes a transaction, a split, or a
+member list, and it cannot name a person the caller could not already see, since
+membership flows up from any descendant. See `docs/specs/reimbursements.md` for the
+decision and its limits.
+
+`positions` carries every current member, including at zero, plus anyone who left with
+something still owed — the same rule as the balances route — each with the per-group
+`sources` its position decomposes into (largest magnitude first; a group contributing
+nothing is absent). `reimbursements` is the plan: at most one payment fewer than the
+number of people with a non-zero position, largest payment first, ties broken on the
+parties' ids so every member reads the same plan. A suggestion carries **no** source
+group: a netted payment does not belong to one.
+
+Acting on a plan uses the ordinary `POST /groups/:groupId/transactions` with
+`kind: "transfer"`. There is no write route here, and no settlement record.
+
+Response `200`:
+
+```json
+{
+  "scope": "subtree",
+  "positions": [
+    {
+      "user": { "id": "<uuid>", "name": "Ada", "picture": null },
+      "amountCents": -1000,
+      "sources": [{ "groupId": "<uuid>", "groupName": "Corsica", "amountCents": -1000 }]
+    }
+  ],
+  "reimbursements": [
+    {
+      "from": { "id": "<uuid>", "name": "Ada", "picture": null },
+      "to": { "id": "<uuid>", "name": "Grace", "picture": null },
+      "amountCents": 1000
+    }
+  ]
+}
+```
+
 ## Planned
 
-- Settle-up suggestions (minimising the number of payments to clear a group's balances).
+- Settling with one person across every group they share, from the friend list
+  (`docs/specs/reimbursements.md`, Open questions).

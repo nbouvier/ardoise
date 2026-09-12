@@ -75,6 +75,20 @@ export interface GroupsService {
     userId: string,
     groupId: string,
   ): Promise<{ memberDescendantIds: string[]; excludedCount: number }>;
+  /**
+   * What a reimbursement plan's `subtree` scope covers
+   * (`docs/specs/reimbursements.md`): every descendant of `groupId`, at any
+   * depth, with the name to show it under — **including ones the caller has
+   * not joined**, which is exactly what `subtreeScope` above refuses to do.
+   *
+   * The two are intentionally different and must not be merged. A plan is
+   * about other people's debts too, so a sub-group left out of it would make
+   * the plan disagree with what that sub-group's own members see; the price
+   * is a bounded disclosure of net figures, taken knowingly. Membership in
+   * `groupId` itself is still required, and `groupId` is not in the result —
+   * its caller already holds it, with its name resolved.
+   */
+  reimbursementScope(userId: string, groupId: string): Promise<{ id: string; name: string }[]>;
 }
 
 /**
@@ -520,6 +534,18 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         (await repository.createPairGroup(friendshipId, orderPair(userId, friendId)));
 
       return detailOf(group, userId, 'member');
+    },
+
+    async reimbursementScope(userId, groupId) {
+      await requireMembership(userId, groupId);
+      const descendants = await repository.listDescendants(groupId);
+      // No membership filter, unlike `subtreeScope` right below: that is
+      // this feature's one deliberate departure, and the reason the two
+      // methods exist side by side instead of sharing an implementation.
+      return descendants.map((descendant) => ({
+        id: descendant.id,
+        name: descendant.name ?? 'Untitled group',
+      }));
     },
 
     async subtreeScope(userId, groupId) {

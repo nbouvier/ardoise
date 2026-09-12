@@ -124,6 +124,14 @@ export interface GroupsRepository {
    */
   listDescendantIds(groupId: string): Promise<string[]>;
   /**
+   * The same set, with each descendant's own name, nearest depth first — for
+   * a reimbursement plan's attribution, which has to *name* the group a debt
+   * came from (`docs/specs/reimbursements.md`). Membership is not considered
+   * here, deliberately; the caller is the one that decides what it may
+   * disclose.
+   */
+  listDescendants(groupId: string): Promise<{ id: string; name: string | null }[]>;
+  /**
    * A group's direct sub-groups only (not their own sub-groups), each with its
    * member count — what the group screen's sub-groups section lists.
    */
@@ -519,6 +527,18 @@ export function createGroupsRepository(db: Database): GroupsRepository {
 
     async listDescendantIds(groupId) {
       return fetchDescendantIds(db, groupId);
+    },
+
+    async listDescendants(groupId) {
+      const ids = await fetchDescendantIds(db, groupId);
+      if (ids.length === 0) {
+        return [];
+      }
+      return db
+        .select({ id: groups.id, name: groups.name })
+        .from(groups)
+        .where(inArray(groups.id, ids))
+        .orderBy(asc(groups.depth), asc(groups.name));
     },
 
     async listChildren(groupId) {
