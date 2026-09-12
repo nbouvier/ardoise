@@ -54,6 +54,7 @@ const groceries: Transaction = {
   amountCents: 4250,
   occurredOn: '2026-09-11',
   comment: null,
+  category: 'groceries',
   payer: ada,
   splitMode: 'shares',
   participants: [
@@ -129,7 +130,8 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={trip.id} />);
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
-    expect(await screen.findByText('Groceries')).toBeTruthy();
+    // The category emoji renders next to the title.
+    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
   });
 
   it('shows an empty state and an "Add a transaction" action', async () => {
@@ -161,7 +163,7 @@ describe('GroupScreen', () => {
     await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('Groceries')).toBeTruthy();
+    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
     expect(notify).toHaveBeenCalled();
   });
 

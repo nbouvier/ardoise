@@ -158,6 +158,33 @@ describe('transactions routes', () => {
       expect(adaShare + graceShare).toBe(1001);
     });
 
+    it('records a category, and defaults to "other" when none is given', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+
+      const categorised = await createdTx(ada, group.id, {
+        ...expense(ada.userId, [ada.userId]),
+        category: 'groceries',
+      });
+      expect(categorised.category).toBe('groceries');
+
+      const uncategorised = await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
+      expect(uncategorised.category).toBe('other');
+    });
+
+    it('rejects an unknown category', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+
+      const response = await createTx(ada, group.id, {
+        ...expense(ada.userId, [ada.userId]),
+        category: 'crypto',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'invalid_request' });
+    });
+
     it('records a transaction in the implicit pair group, unlike every membership action', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
@@ -406,6 +433,21 @@ describe('transactions routes', () => {
       const updated = response.json().transaction;
       expect(updated.title).toBe('Groceries (corrected)');
       expect(updated.amountCents).toBe(2000);
+    });
+
+    it('changes the category, and resets to "other" when none is given', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      const tx = await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
+
+      const categorised = await updateTx(ada, group.id, tx.id, {
+        ...expense(ada.userId, [ada.userId]),
+        category: 'restaurant',
+      });
+      expect(categorised.json().transaction.category).toBe('restaurant');
+
+      const reset = await updateTx(ada, group.id, tx.id, expense(ada.userId, [ada.userId]));
+      expect(reset.json().transaction.category).toBe('other');
     });
 
     it('refuses editing on an archived group', async () => {

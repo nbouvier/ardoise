@@ -33,6 +33,7 @@ A transaction has:
 - a **kind**: `expense`, `income`, or `transfer`;
 - a **title** (required), an **amount** (required, strictly positive), a **date**
   (required, a calendar date — not a timestamp), and an optional **comment**;
+- an optional **category** — see below;
 - a **payer** — who the transaction is attributed to. Defaults to the person recording
   it, but any member can be picked as the payer;
 - a **split**: the set of members it concerns, and how the amount is divided among them.
@@ -49,6 +50,37 @@ move money:
 
 The payer does not have to be one of the people the transaction concerns (e.g. "Alice
 paid, split between Bob and Carole").
+
+### Categories
+
+- A transaction can be tagged with a **category**, picked from a fixed, preset list —
+  there is no way to create a new one yet. Each category has a short label and an
+  **emoji**, which is what actually identifies it at a glance in the transaction list.
+- The preset list (subject to change without a migration of existing data, since removing
+  one only means new transactions can't pick it — see Data / API considerations):
+
+  | Emoji | Category            |
+  | ----- | -------------------- |
+  | 🛒    | Groceries             |
+  | 🍽️    | Bar & Restaurant      |
+  | 🎉    | Leisure               |
+  | 🏠    | Housing               |
+  | 🚗    | Transport             |
+  | ✈️    | Travel                |
+  | 💊    | Health                |
+  | 🛍️    | Shopping              |
+  | 💡    | Bills & Utilities     |
+  | 🎁    | Gifts                 |
+  | 📚    | Education             |
+  | 🐾    | Pets                  |
+  | 🧾    | Other                 |
+
+- **Every transaction has a category — `Other` is the default**, not a stand-in for "no
+  category". Recording one without explicitly picking a category is the common case and
+  simply means it stays `Other`; there is no separate "uncategorised" state to display or
+  reason about.
+- Any member can change a transaction's category the same way they edit anything else
+  about it.
 
 ### Splitting
 
@@ -85,6 +117,9 @@ concerns.
   same-day entries).
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
   at it — their own share, so "what do I owe on this one" never needs mental math.
+- Every entry shows its category's emoji next to its title — always present, since every
+  transaction has a category (`Other` when none was chosen). It is not interactive in the
+  list; changing it means opening the entry, as for any other field.
 
 ### Balances
 
@@ -114,7 +149,10 @@ feature establishes, which that spec builds on.
 - Multiple currencies, or a currency at all (inherited from groups: none exists yet).
 - Recurring transactions.
 - Receipt photos or any attachment.
-- Categories or tags.
+- **Creating, renaming, reordering or hiding a category.** The preset list is fixed;
+  changing it is a code change, not a product feature, for now.
+- **Tags**, or more than one category per transaction.
+- Filtering, grouping or totalling the transaction list by category.
 - Comments/discussion on a transaction beyond the single optional comment field.
 - An edit history or audit trail of who changed what.
 - Notifying members when a transaction is added, edited or deleted.
@@ -176,6 +214,13 @@ feature establishes, which that spec builds on.
 - [ ] A group's balances always sum to zero.
 - [ ] A member who left the group with an unsettled balance still appears among the
       group's balances.
+- [ ] A transaction can be given a category from the fixed preset list; leaving it unset
+      records `Other`. An invalid or unknown category is refused, server-side.
+- [ ] Every transaction shows its category's emoji next to its title in the list. In the
+      add/edit form, a category badge to the left of the title opens the picker sheet and
+      updates on selection, without a separate save step for that field alone.
+- [ ] A transaction recorded before categories existed, or before `Other` became the
+      default, reads as `Other` — never as a missing or blank category.
 
 ## Testing considerations
 
@@ -203,8 +248,17 @@ feature establishes, which that spec builds on.
 
 See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the schema.
 
-- A **transaction** persists: kind, title, amount, date, optional comment, payer,
-  the group it belongs to, split mode, who recorded it, and timestamps.
+- A **transaction** persists: kind, title, amount, date, optional comment, a **category**
+  (always set, `Other` by default), payer, the group it belongs to, split mode, who
+  recorded it, and timestamps.
+- The **category list is a fixed, closed set** (key, label, emoji) defined once in code
+  (`@splitcount/shared`) and validated the same way on both sides — not a database table,
+  since nothing today creates, renames or reorders one. If custom categories are ever
+  added, that is the point to promote it to a table; until then a table would be
+  unused flexibility.
+- **Transactions recorded before `Other` became the default** are backfilled to it by a
+  migration, so the column can become `NOT NULL` — there is no `NULL` category to handle
+  anywhere above the database layer.
 - A **participant** row per concerned member persists the transaction, the member, and
   their share of the amount (plus their weight, when the split is by shares).
 - Participants reference the user directly, not their membership row, so a transaction
@@ -231,13 +285,18 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - **Balances** show in that "Group details" sheet, alongside the member list: each
   member's name next to their balance, coloured (owed to them / owing) rather than just
   signed, zero shown neutrally.
-- **Add transaction** is a sheet: kind, title, amount, date, optional comment, payer
-  (defaulting to the signed-in member), a member picker for who it concerns (all members
-  pre-selected), and the split editor (shares with live-updating computed amounts, or a
-  toggle to fixed amounts with a running "remaining to allocate" indicator). A transfer
-  simplifies the same sheet to picking one other member instead of a split editor. The
-  date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
-  native pickers, it stays a plain `YYYY-MM-DD` text field (`docs/DESIGN.md`).
+- **Add transaction** is a sheet: kind, then a title row with a small square **category
+  badge** to the left of the title field, showing just the emoji (`Other` by default);
+  tapping it opens a small sheet with the category grid (emoji + label, single-select),
+  and picking one updates the badge and closes that sheet immediately — the transaction
+  itself is only saved when the form's own "Save" is pressed. Then amount, date, optional
+  comment, payer (defaulting to the signed-in member), a member picker for who it
+  concerns (all members pre-selected), and the split editor (shares with live-updating
+  computed amounts, or a toggle to fixed amounts with a running "remaining to allocate"
+  indicator). A transfer simplifies the same sheet to picking one other member instead of
+  a split editor. The date uses a native picker (inline on iOS, a dialog on Android); on
+  web, which has no native pickers, it stays a plain `YYYY-MM-DD` text field
+  (`docs/DESIGN.md`).
 - Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
   transaction" action, confirmed.
 - Empty state: an explanation and the same "Add a transaction" action as the group's
@@ -278,3 +337,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - Should recording, editing or deleting later require confirmation from the payer or
   other concerned members before applying, given real money is implied? Current answer:
   no, trust within the group is assumed, as it already is for group membership changes.
+- **Custom categories**: should users eventually be able to add their own, alongside or
+  instead of the preset list? Would move the list from code into a table (see Data / API
+  considerations) and likely needs per-group or per-user scoping. Not requested yet.
+- **Filtering or totalling by category**: a natural next step once enough transactions
+  carry one, explicitly out of scope for this pass.

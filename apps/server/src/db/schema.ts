@@ -210,6 +210,11 @@ export const transactions = pgTable(
     // by a day depending on time zone.
     occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
     comment: text('comment'),
+    // A fixed, closed preset list (`@splitcount/shared`'s categories.ts) kept
+    // in code, not a table — nothing creates, renames or reorders one today.
+    // This CHECK is the one place that list is duplicated; keep both in sync.
+    // Always set — an uncategorised transaction is recorded as 'other'.
+    category: text('category').notNull().default('other'),
     payerId: uuid('payer_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -224,6 +229,13 @@ export const transactions = pgTable(
     check('transactions_kind_valid', sql`${table.kind} in ('expense', 'income', 'transfer')`),
     check('transactions_split_mode_valid', sql`${table.splitMode} in ('shares', 'amount')`),
     check('transactions_amount_positive', sql`${table.amountCents} > 0`),
+    check(
+      'transactions_category_valid',
+      sql`${table.category} in (
+        'groceries', 'restaurant', 'leisure', 'housing', 'transport', 'travel',
+        'health', 'shopping', 'bills', 'gifts', 'education', 'pets', 'other'
+      )`,
+    ),
     index('transactions_group_id_occurred_on_idx').on(table.groupId, table.occurredOn),
     index('transactions_payer_id_idx').on(table.payerId),
   ],

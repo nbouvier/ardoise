@@ -1,12 +1,15 @@
-import type {
-  CreateTransactionRequest,
-  GroupDetail,
-  SplitInput,
-  Transaction,
-  TransactionKind,
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  categoryDefinition,
+  type CreateTransactionRequest,
+  type GroupDetail,
+  type SplitInput,
+  type Transaction,
+  type TransactionCategory,
+  type TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
@@ -18,9 +21,11 @@ import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/a
 import { errorFields, logger } from '@/lib/logger';
 
 import { AmountInput } from './amount-input';
+import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
 import { MemberSelect } from './member-select';
 import { SplitEditor } from './split-editor';
+import { splitFrom } from './transaction-request';
 
 export interface TransactionFormScreenProps {
   group: GroupDetail;
@@ -49,22 +54,6 @@ function defaultSplit(memberIds: string[]): SplitInput {
   return { mode: 'shares', participants: memberIds.map((userId) => ({ userId, weight: 1 })) };
 }
 
-function splitFrom(transaction: Transaction): SplitInput {
-  if (transaction.splitMode === 'shares') {
-    return {
-      mode: 'shares',
-      participants: transaction.participants.map((p) => ({
-        userId: p.user.id,
-        weight: p.weight ?? 1,
-      })),
-    };
-  }
-  return {
-    mode: 'amount',
-    participants: transaction.participants.map((p) => ({ userId: p.user.id, amount: p.shareCents })),
-  };
-}
-
 /** Add or edit a transaction — one form for both, pre-filled when editing. */
 export function TransactionFormScreen({
   group,
@@ -83,6 +72,9 @@ export function TransactionFormScreen({
   const [amountCents, setAmountCents] = useState<number | null>(initial?.amountCents ?? 0);
   const [occurredOn, setOccurredOn] = useState(initial?.occurredOn ?? today());
   const [comment, setComment] = useState(initial?.comment ?? '');
+  const [category, setCategory] = useState<TransactionCategory>(
+    initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
+  );
   const [payerId, setPayerId] = useState(initial?.payer.id ?? viewerId);
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
@@ -94,6 +86,8 @@ export function TransactionFormScreen({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const selectedCategory = categoryDefinition(category);
 
   const amountValid = amountCents !== null && amountCents > 0;
   const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(occurredOn) && !Number.isNaN(Date.parse(occurredOn));
@@ -111,6 +105,7 @@ export function TransactionFormScreen({
       amount: amountCents ?? 0,
       occurredOn,
       comment: comment.trim() === '' ? null : comment.trim(),
+      category,
       payerId,
     };
     if (kind === 'transfer') {
@@ -182,15 +177,24 @@ export function TransactionFormScreen({
         ))}
       </View>
 
-      <TextInput
-        accessibilityLabel="Title"
-        placeholder="Groceries, taxi, rent…"
-        placeholderTextColor={theme.textSecondary}
-        value={title}
-        onChangeText={setTitle}
-        maxLength={80}
-        style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-      />
+      <View style={styles.titleRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Category: ${selectedCategory?.label ?? 'Other'}`}
+          onPress={() => setCategoryPickerOpen(true)}
+          style={[styles.categoryBadge, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText style={styles.categoryEmoji}>{selectedCategory?.emoji ?? '🧾'}</ThemedText>
+        </Pressable>
+        <TextInput
+          accessibilityLabel="Title"
+          placeholder="Groceries, taxi, rent…"
+          placeholderTextColor={theme.textSecondary}
+          value={title}
+          onChangeText={setTitle}
+          maxLength={80}
+          style={[styles.input, styles.titleInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
+        />
+      </View>
 
       <ThemedView style={styles.fieldRow}>
         <View style={styles.amountField}>
@@ -261,6 +265,28 @@ export function TransactionFormScreen({
           </Pressable>
         ) : null}
       </ThemedView>
+
+      <Modal
+        visible={categoryPickerOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCategoryPickerOpen(false)}>
+        <ThemedView style={styles.sheet}>
+          <SafeAreaView style={styles.sheet}>
+            <ThemedView style={styles.sheetContent}>
+              <ThemedText type="subtitle">Category</ThemedText>
+              <CategoryPicker
+                value={category}
+                onChange={(next) => {
+                  setCategory(next);
+                  setCategoryPickerOpen(false);
+                }}
+              />
+              <Button label="Close" variant="secondary" onPress={() => setCategoryPickerOpen(false)} />
+            </ThemedView>
+          </SafeAreaView>
+        </ThemedView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -286,6 +312,32 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     paddingHorizontal: Spacing.three,
     fontSize: 16,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  titleInput: {
+    flex: 1,
+  },
+  categoryBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: Spacing.three,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryEmoji: {
+    fontSize: 20,
+  },
+  sheet: {
+    flex: 1,
+  },
+  sheetContent: {
+    flex: 1,
+    gap: Spacing.three,
+    padding: Spacing.four,
   },
   commentInput: {
     height: 80,

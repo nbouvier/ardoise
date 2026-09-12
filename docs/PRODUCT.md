@@ -34,11 +34,13 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   that friend: unlisted, two people forever, otherwise a normal group.
   See `docs/specs/groups.md`.
 - **Group transactions** — any member records an expense, an income, or a transfer in a
-  group: a title, an amount, a date, an optional comment, who it's attributed to
-  (defaulting to the recorder), and who it concerns. Splitting defaults to equal shares
-  and can be changed to weighted shares or fixed amounts per person. Any member can edit
-  or delete any transaction. Works identically in the implicit pair group; an archived
-  group is read-only for transactions. See `docs/specs/transactions.md`.
+  group: a title, an amount, a date, an optional comment, an optional **category** (a
+  fixed preset list, each with an emoji shown next to the transaction in the list), who
+  it's attributed to (defaulting to the recorder), and who it concerns. Splitting
+  defaults to equal shares and can be changed to weighted shares or fixed amounts per
+  person. Any member can edit or delete any transaction. Works identically in the
+  implicit pair group; an archived group is read-only for transactions. See
+  `docs/specs/transactions.md`.
 - **Balances** — a group shows where each member stands against it, and the viewer's own
   position sits on the group screen itself. The friend list goes further: next to each
   friend, the net of what they owe the user or the user owes them, summed across every
