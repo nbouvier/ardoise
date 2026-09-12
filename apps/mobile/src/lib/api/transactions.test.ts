@@ -17,10 +17,28 @@ afterEach(() => {
 
 describe('fetchTransactions', () => {
   it('parses the list', async () => {
-    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { transactions: [transaction] } }));
+    const fetcher = fakeAuthorizedFetch(
+      response({ jsonBody: { transactions: [transaction], excludedSubgroupCount: 0 } }),
+    );
 
-    await expect(fetchTransactions(fetcher, transaction.groupId)).resolves.toEqual([transaction]);
+    await expect(fetchTransactions(fetcher, transaction.groupId)).resolves.toEqual({
+      transactions: [transaction],
+      excludedSubgroupCount: 0,
+    });
     expect(fetcher).toHaveBeenCalledWith(`/groups/${transaction.groupId}/transactions`);
+  });
+
+  it('asks for the sub-group scope, and surfaces the excluded count', async () => {
+    const fetcher = fakeAuthorizedFetch(
+      response({ jsonBody: { transactions: [transaction], excludedSubgroupCount: 2 } }),
+    );
+
+    await expect(
+      fetchTransactions(fetcher, transaction.groupId, 'subtree'),
+    ).resolves.toEqual({ transactions: [transaction], excludedSubgroupCount: 2 });
+    expect(fetcher).toHaveBeenCalledWith(
+      `/groups/${transaction.groupId}/transactions?scope=subtree`,
+    );
   });
 });
 

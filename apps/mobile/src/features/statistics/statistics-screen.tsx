@@ -3,8 +3,8 @@ import {
   categoryDefinition,
   type GroupMember,
   type StatisticsType,
-  type Transaction,
   type TransactionCategory,
+  type TransactionsListScope,
 } from '@splitcount/shared';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -14,15 +14,19 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
+import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 
 import { DonutChart } from './donut-chart';
 
 export interface StatisticsScreenProps {
-  /** The group's transactions, as the group screen already holds them. */
-  transactions: readonly Transaction[];
-  status: 'loading' | 'ready' | 'error';
-  onRetry: () => void;
+  groupId: string;
+  /**
+   * Whether the group has any sub-groups at all — drives whether the
+   * "Include sub-groups" toggle shows. A group with none has nothing for it
+   * to change (`docs/specs/group-statistics.md`).
+   */
+  hasSubgroups: boolean;
   /** Who can be selected, everyone included by default. */
   members: readonly GroupMember[];
   /** The signed-in member, labelled "You" in the participant list. */
@@ -55,14 +59,21 @@ function emptyMessage(type: StatisticsType, everyoneSelected: boolean): string {
 
 /** A group's money, broken down by category (`docs/specs/group-statistics.md`). */
 export function StatisticsScreen({
-  transactions,
-  status,
-  onRetry,
+  groupId,
+  hasSubgroups,
   members,
   viewerId,
   onClose,
 }: StatisticsScreenProps) {
   const [type, setType] = useState<StatisticsType>('spending');
+  // Sub-groups are included by default — the natural reading of "this trip's
+  // spending" is the whole trip, and it matches the rolled-up balance the
+  // group screen already shows (`docs/specs/balances.md`).
+  const [scope, setScope] = useState<TransactionsListScope>(hasSubgroups ? 'subtree' : 'group');
+  const { status, transactions, excludedSubgroupCount, refresh } = useTransactions(
+    groupId,
+    scope,
+  );
   // Everyone is selected by default — this is what makes the group's total
   // match "the group" scope the feature started with.
   const [selectedMemberIds, setSelectedMemberIds] = useState<ReadonlySet<string>>(
@@ -88,6 +99,11 @@ export function StatisticsScreen({
   function changeType(value: StatisticsType) {
     setSelected(null);
     setType(value);
+  }
+
+  function toggleScope() {
+    setSelected(null);
+    setScope((current) => (current === 'subtree' ? 'group' : 'subtree'));
   }
 
   function toggleMember(memberId: string) {
@@ -119,6 +135,13 @@ export function StatisticsScreen({
               onPress={() => changeType(option)}
             />
           ))}
+          {hasSubgroups ? (
+            <Toggle
+              label="Include sub-groups"
+              active={scope === 'subtree'}
+              onPress={toggleScope}
+            />
+          ) : null}
         </View>
         <View style={styles.toggleRow}>
           {members.map((member) => (
@@ -130,6 +153,13 @@ export function StatisticsScreen({
             />
           ))}
         </View>
+        {excludedSubgroupCount > 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {excludedSubgroupCount === 1
+              ? '1 sub-group you’re not in isn’t included.'
+              : `${excludedSubgroupCount} sub-groups you’re not in aren’t included.`}
+          </ThemedText>
+        ) : null}
       </View>
 
       {status === 'loading' ? (
@@ -142,7 +172,7 @@ export function StatisticsScreen({
             We couldn’t load this group’s transactions. Check your connection and try
             again.
           </ThemedText>
-          <Button label="Try again" variant="secondary" onPress={onRetry} />
+          <Button label="Try again" variant="secondary" onPress={refresh} />
         </View>
       ) : selectedMemberIds.size === 0 ? (
         <View style={styles.centeredBody}>

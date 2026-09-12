@@ -353,9 +353,8 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
             {sheet === 'statistics' ? (
               <StatisticsScreen
-                transactions={transactionsResult.transactions}
-                status={transactionsResult.status}
-                onRetry={transactionsResult.refresh}
+                groupId={groupId}
+                hasSubgroups={hasSubgroups}
                 members={group.members}
                 viewerId={viewerId}
                 onClose={() => setSheet(null)}

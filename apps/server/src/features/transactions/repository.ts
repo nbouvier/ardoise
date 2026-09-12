@@ -37,6 +37,13 @@ export interface TransactionsRepository {
   findById(transactionId: string): Promise<TransactionRow | undefined>;
   /** A group's transactions, most recent first (by date, then by creation). */
   listByGroup(groupId: string): Promise<TransactionRow[]>;
+  /**
+   * The transactions of several groups at once, most recent first — the
+   * `scope=subtree` statistics view (`docs/specs/group-statistics.md`), which
+   * reads a group's own transactions together with those of its
+   * member-visible descendants in one call rather than one per group.
+   */
+  listByGroups(groupIds: readonly string[]): Promise<TransactionRow[]>;
   /** Every participant of the given transactions, in one query. */
   listParticipants(transactionIds: readonly string[]): Promise<TransactionParticipantRow[]>;
   create(
@@ -94,6 +101,17 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
         .select()
         .from(transactions)
         .where(eq(transactions.groupId, groupId))
+        .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+    },
+
+    async listByGroups(groupIds) {
+      if (groupIds.length === 0) {
+        return [];
+      }
+      return db
+        .select()
+        .from(transactions)
+        .where(inArray(transactions.groupId, [...groupIds]))
         .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
     },
 

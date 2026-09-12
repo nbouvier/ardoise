@@ -4,6 +4,7 @@ import type {
   GroupDetail,
   SubgroupSummary,
   Transaction,
+  TransactionsListResponse,
 } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
@@ -86,7 +87,7 @@ const balances: Balance[] = [
 ];
 
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
-const mockFetchTransactions = jest.fn<() => Promise<Transaction[]>>();
+const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<() => Promise<Transaction>>();
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
@@ -133,7 +134,10 @@ jest.mock('expo-router', () => ({
 
 beforeEach(() => {
   mockFetchGroup.mockReset().mockResolvedValue(trip);
-  mockFetchTransactions.mockReset().mockResolvedValue([]);
+  mockFetchTransactions.mockReset().mockResolvedValue({
+    transactions: [],
+    excludedSubgroupCount: 0,
+  });
   mockFetchBalances.mockReset().mockResolvedValue([]);
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
   mockJoinGroup.mockReset().mockResolvedValue(trip);
@@ -147,7 +151,10 @@ async function openDetails() {
 
 describe('GroupScreen', () => {
   it('shows the group name and its transactions', async () => {
-    mockFetchTransactions.mockResolvedValue([groceries]);
+    mockFetchTransactions.mockResolvedValue({
+      transactions: [groceries],
+      excludedSubgroupCount: 0,
+    });
 
     await render(<GroupScreen groupId={trip.id} />);
 
@@ -173,8 +180,11 @@ describe('GroupScreen', () => {
     expect(await screen.findByLabelText('Title')).toBeTruthy();
   });
 
-  it('opens the statistics on the transactions it already loaded', async () => {
-    mockFetchTransactions.mockResolvedValue([groceries]);
+  it('opens the statistics, which fetch their own data', async () => {
+    mockFetchTransactions.mockResolvedValue({
+      transactions: [groceries],
+      excludedSubgroupCount: 0,
+    });
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -184,8 +194,10 @@ describe('GroupScreen', () => {
     expect(await screen.findByTestId('statistics-centre-label')).toHaveTextContent(
       'Total spending',
     );
-    // The list is read once by the screen: opening the sheet asks for nothing more.
-    expect(mockFetchTransactions).toHaveBeenCalledTimes(1);
+    // The statistics view defaults to including sub-groups — a scope the
+    // plain transaction list never requests — so it fetches on its own
+    // rather than reusing the list's call (docs/specs/group-statistics.md).
+    expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
   });
 
   it('tells the Friends tab to reload after a transaction is saved', async () => {

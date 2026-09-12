@@ -63,6 +63,17 @@ export interface GroupsService {
   revokeInvite(userId: string, groupId: string): Promise<void>;
   /** The group the caller shares with a friend, created on first access. */
   getPairGroup(userId: string, friendId: string): Promise<GroupDetail>;
+  /**
+   * What the statistics "including sub-groups" scope needs
+   * (`docs/specs/group-statistics.md`): of `groupId`'s descendants, at any
+   * depth, the ones `userId` belongs to — and how many they do not, so the
+   * view can say when it is leaving some out. A sub-group's mere visibility
+   * must never leak into this: an unjoined one is excluded, full stop.
+   */
+  subtreeScope(
+    userId: string,
+    groupId: string,
+  ): Promise<{ memberDescendantIds: string[]; excludedCount: number }>;
 }
 
 /**
@@ -433,6 +444,16 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         (await repository.createPairGroup(friendshipId, orderPair(userId, friendId)));
 
       return detailOf(group, userId, 'member');
+    },
+
+    async subtreeScope(userId, groupId) {
+      await requireMembership(userId, groupId);
+      const descendantIds = await repository.listDescendantIds(groupId);
+      const memberDescendantIds = await repository.filterMemberGroupIds(userId, descendantIds);
+      return {
+        memberDescendantIds,
+        excludedCount: descendantIds.length - memberDescendantIds.length,
+      };
     },
   };
 }

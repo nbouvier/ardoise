@@ -1,4 +1,4 @@
-import type { Transaction } from '@splitcount/shared';
+import type { Transaction, TransactionsListScope } from '@splitcount/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
@@ -10,6 +10,8 @@ export type TransactionsStatus = 'loading' | 'ready' | 'error';
 export interface UseTransactionsResult {
   status: TransactionsStatus;
   transactions: Transaction[];
+  /** Sub-groups left out of `scope: 'subtree'` because the viewer isn't in them; `0` otherwise. */
+  excludedSubgroupCount: number;
   refresh: () => void;
   /** Apply a transaction the caller just recorded or edited, without a round trip. */
   upsert: (transaction: Transaction) => void;
@@ -17,20 +19,33 @@ export interface UseTransactionsResult {
   remove: (transactionId: string) => void;
 }
 
-/** A group's transactions, most recent first — the server does the ordering. */
-export function useTransactions(groupId: string): UseTransactionsResult {
+/**
+ * A group's transactions, most recent first — the server does the ordering.
+ * `scope: 'subtree'` (statistics only, `docs/specs/group-statistics.md`) adds
+ * every sub-group the viewer belongs to; the default, `'group'`, is what the
+ * plain transaction list always uses. Refetches whenever `scope` itself
+ * changes, keeping the last-known data visible (rather than resetting to
+ * `'loading'`) while that happens — the same "don't blink" choice already
+ * made for balances elsewhere in this feature.
+ */
+export function useTransactions(
+  groupId: string,
+  scope: TransactionsListScope = 'group',
+): UseTransactionsResult {
   const { authorizedFetch } = useAuth();
   const [status, setStatus] = useState<TransactionsStatus>('loading');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [excludedSubgroupCount, setExcludedSubgroupCount] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
 
-    fetchTransactions(authorizedFetch, groupId)
+    fetchTransactions(authorizedFetch, groupId, scope)
       .then((loaded) => {
         if (active) {
-          setTransactions(loaded);
+          setTransactions(loaded.transactions);
+          setExcludedSubgroupCount(loaded.excludedSubgroupCount);
           setStatus('ready');
         }
       })
@@ -45,7 +60,7 @@ export function useTransactions(groupId: string): UseTransactionsResult {
     return () => {
       active = false;
     };
-  }, [authorizedFetch, groupId, reloadToken]);
+  }, [authorizedFetch, groupId, scope, reloadToken]);
 
   const refresh = useCallback(() => {
     setStatus('loading');
@@ -70,5 +85,5 @@ export function useTransactions(groupId: string): UseTransactionsResult {
     setTransactions((current) => current.filter((t) => t.id !== transactionId));
   }, []);
 
-  return { status, transactions, refresh, upsert, remove };
+  return { status, transactions, excludedSubgroupCount, refresh, upsert, remove };
 }

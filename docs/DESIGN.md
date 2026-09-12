@@ -143,17 +143,24 @@ a way back), and a retryable connection error.
 
 A sheet, opened from a small "Stats" button in the group header, left of "Details" — the
 transaction list stays the group's primary content. A **Spending / Income** pill row (same
-styling as the split editor's mode toggle), then a wrapped row of **one pill chip per
-group member** — the viewer's own chip reads "You" — all active by default, each
-independently tappable to include or exclude that member. Under them a **donut chart**
-(`DonutChart`, 220pt, 44pt ring — noticeably thick so a small share still reads as an arc,
-not a line) with one arc per category in that category's own colour, and a legend below:
-colour swatch, emoji + label, percentage, amount — largest first.
+styling as the split editor's mode toggle) — with an **"Include sub-groups" pill**
+alongside it for a group that has any, active by default — then a wrapped row of **one
+pill chip per group member** — the viewer's own chip reads "You" — all active by default,
+each independently tappable to include or exclude that member; the chips never change with
+the sub-groups toggle, since every sub-group member is already a member of the group
+itself (`docs/specs/group-statistics.md`). When sub-groups are included and some are left
+out because the viewer has not joined them, a small line under the toggles says how many
+("2 sub-groups you're not in aren't included.") rather than presenting a partial sum as
+the whole tree's. Under all of that a **donut chart** (`DonutChart`, 220pt, 44pt ring —
+noticeably thick so a small share still reads as an arc, not a line) with one arc per
+category in that category's own colour, and a legend below: colour swatch, emoji + label,
+percentage, amount — largest first.
 
 The donut's hole holds the total for the current selection ("Total spending", the amount);
 tapping an arc or a legend row swaps it for that category's emoji, label, amount and
-percentage, and fades the other arcs to 30%. Tapping the same one again, changing the type,
-or toggling a member, returns to the total. With every member selected the total is the
+percentage, and fades the other arcs to 30%. Tapping the same one again, changing the
+type, toggling a member, or toggling sub-groups, returns to the total. With every member
+selected the total is the
 group's; deselecting members narrows it to the sum of only their own shares — selecting the
 viewer alone reproduces what used to be a separate "Me" toggle. Deselecting every member
 shows an empty state asking to select at least one, instead of drawing a zero-value ring.
@@ -170,8 +177,14 @@ yet.", "None of this group's spending concerns you yet.") rather than a generic 
 here". A group holding only transfers reads as "Nothing spent yet" with the reason, since
 transfers deliberately do not count.
 
-The sheet reads the transactions the group screen already loaded — no second request, and
-a transaction saved while it is open is reflected when it is reopened.
+The sheet fetches its own transactions (`useTransactions(groupId, scope)`) rather than
+reusing the group screen's plain list, since its default scope — including sub-groups —
+usually differs from the list's, which only ever reads the one group. A group with no
+sub-groups still fetches on its own, for the same reason and at no meaningful extra cost.
+Toggling "Include sub-groups" refetches at the new scope, keeping the last-known chart
+visible rather than blinking to a loading state — the same choice already made for
+balances elsewhere in this feature. A transaction saved while the sheet is open is
+reflected the next time it is opened.
 
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 

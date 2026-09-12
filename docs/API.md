@@ -408,7 +408,18 @@ categories dynamically; the emoji and label for each key are a client-side looku
 ### `GET /groups/:groupId/transactions`
 
 The group's transactions, most recent first (by date, then by recording order for
-same-day entries). Response `200 { "transactions": ["<Transaction>"] }`.
+same-day entries). Response
+`200 { "transactions": ["<Transaction>"], "excludedSubgroupCount": 0 }`.
+
+`?scope=` (`group`, the default, or `subtree`) controls whether sub-groups are included
+(`docs/specs/group-statistics.md`). With `scope=subtree`, the response also contains every
+transaction of the group's descendants **the caller currently belongs to**, at any depth —
+a sub-group the caller has not joined contributes nothing, whether or not it is visible to
+them. `excludedSubgroupCount` is then the number of descendants left out for that reason;
+it is always `0` for `scope=group` and for a group with no sub-groups. An unrecognised
+`scope` value falls back to `group` rather than `400` — the client just gets a smaller
+answer, not a broken one. The plain transaction list itself always uses the default
+`scope=group` and is unaffected by any of this.
 
 ### `POST /groups/:groupId/transactions`
 

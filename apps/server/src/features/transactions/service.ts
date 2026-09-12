@@ -8,6 +8,7 @@ import type {
   Transaction,
   TransactionCategory,
   TransactionKind,
+  TransactionsListScope,
   UpdateTransactionRequest,
 } from '@splitcount/shared';
 
@@ -21,8 +22,20 @@ import { computeBalances, groupParticipantsByTransaction } from './balances.js';
 import { TransactionError } from './errors.js';
 import type { ParticipantInput, TransactionFields, TransactionsRepository } from './repository.js';
 
+export interface TransactionsListResult {
+  transactions: Transaction[];
+  /** Always `0` for `scope: 'group'`. See `docs/specs/group-statistics.md`. */
+  excludedSubgroupCount: number;
+}
+
 export interface TransactionsService {
-  list(userId: string, groupId: string): Promise<Transaction[]>;
+  /**
+   * A group's transactions. `scope: 'subtree'` adds those of every
+   * descendant the caller belongs to (`docs/specs/group-statistics.md`);
+   * `'group'` (the default call site, the plain transaction list) is
+   * unaffected by sub-groups entirely.
+   */
+  list(userId: string, groupId: string, scope?: TransactionsListScope): Promise<TransactionsListResult>;
   get(userId: string, groupId: string, transactionId: string): Promise<Transaction>;
   create(userId: string, groupId: string, input: CreateTransactionRequest): Promise<Transaction>;
   update(
@@ -202,16 +215,32 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
   }
 
   return {
-    async list(userId, groupId) {
+    async list(userId, groupId, scope = 'group') {
       await requireMembership(userId, groupId);
-      const rows = await repository.listByGroup(groupId);
+
+      let excludedSubgroupCount = 0;
+      let rows: TransactionRow[];
+      if (scope === 'subtree') {
+        const { memberDescendantIds, excludedCount } = await groups.subtreeScope(
+          userId,
+          groupId,
+        );
+        excludedSubgroupCount = excludedCount;
+        rows = await repository.listByGroups([groupId, ...memberDescendantIds]);
+      } else {
+        rows = await repository.listByGroup(groupId);
+      }
+
       const participants = await repository.listParticipants(rows.map((row) => row.id));
       const byTransaction = groupParticipantsByTransaction(participants);
       const userMap = await buildUserMap([
         ...rows.map((row) => row.payerId),
         ...participants.map((participant) => participant.userId),
       ]);
-      return rows.map((row) => toTransaction(row, byTransaction.get(row.id) ?? [], userMap));
+      return {
+        transactions: rows.map((row) => toTransaction(row, byTransaction.get(row.id) ?? [], userMap)),
+        excludedSubgroupCount,
+      };
     },
 
     async get(userId, groupId, transactionId) {
