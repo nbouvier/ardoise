@@ -1,351 +1,345 @@
 # Design
 
-Living document for visual and interaction conventions. Update it as the UI evolves.
+Living document for visual and interaction conventions. **Every new feature follows
+it**; when a feature genuinely needs something this document does not cover, add the
+rule here in the same change rather than inventing it locally.
+
+## Identity
+
+SplitCount is about money shared between people who like each other. The design aims for
+**warm, colourful and calm** — not the neutral grey-on-white of a banking app, and not a
+rainbow either.
+
+The palette is deliberately small:
+
+| Role | Hue | What it is for |
+| --- | --- | --- |
+| **Brand** | violet | primary actions, active states, links, the app's own identity |
+| **Accent** | tangerine | emphasis that is *not* an action (badges, the "Owner" tag) — used sparingly |
+| **Credit / debit** | green / red | money owed to you, money you owe — nothing else |
+| **Danger** | red | destructive actions |
+
+Green and red are kept **out** of the brand and accent, so a balance never reads as
+branding and branding never reads as a balance. Neutrals are tinted towards the brand
+hue rather than grey: **no surface in the app is plain white, grey or black.**
+
+The mark (`src/components/brand-mark.tsx`) is a rounded tile split down the middle —
+violet half, tangerine half — with a coin on the seam: one thing, divided between
+people. It is **drawn in SVG from the theme tokens**, not shipped as a bitmap, so the
+identity has exactly one source. The app icon, splash glyph, favicon and Android
+adaptive layers are exports of that same mark.
 
 ## Tokens
 
-Defined in `apps/mobile/src/constants/theme.ts`:
+All in `apps/mobile/src/constants/theme.ts`. Reach for a token, never a literal.
 
-- **Colours** — `Colors.light` / `Colors.dark` with roles: `text`, `textSecondary`,
-  `background`, `backgroundElement`, `backgroundSelected`, plus `credit` / `debit` for a
-  balance in or against the viewer's favour (lifted on dark, where the light greens and
-  reds go muddy). Reach for them through `balanceTone()`
+### Colours — `Colors.light` / `Colors.dark`, typed as `Theme`
+
+- **Ink** — `text` (a deep violet, not black), `textSecondary`.
+- **Surfaces** — `background` (the canvas), `surface` (a card sitting on it),
+  `backgroundElement` (a filled but unselected area: inputs, quiet fills),
+  `backgroundSelected`, `border` (hairlines and card outlines).
+- **Brand** — `primary`, `onPrimary` (ink on top of it), `primarySoft` (a washed brand
+  surface: chips, badges, highlighted rows), `onPrimarySoft`.
+- **Accent** — `accent`, `accentSoft`, `onAccentSoft` (the accent itself is too light to
+  be text on its own wash).
+- **Money** — `credit` / `debit`, reached through `balanceTone()`
   (`src/features/transactions/balance-display.ts`) rather than testing the sign by hand.
-  Destructive-action red is still written inline at its few call sites — a different
-  meaning that happens to share a hue.
-- **Category colours** are not theme tokens: each transaction category owns its colour in
-  `@splitcount/shared`'s `categories.ts`, alongside its emoji and label, and keeps it in
-  both themes. Read it from `categoryDefinition(key).color`, never redefine one per screen.
-- **Spacing** — `Spacing` scale: `half` (2) → `six` (64). Use tokens, not raw numbers.
-- **Fonts** — `Fonts` per platform: `sans`, `serif`, `rounded`, `mono`.
+- **Destructive** — `danger`. A different meaning that happens to share a hue with
+  `debit`; never write it inline.
+
+Read them through `useTheme()`. `useIsDark()` exists only for the handful of tokens that
+are a function of the scheme rather than a colour (`cardShadow`, a medallion's two
+halves) — it is never a licence to branch on the scheme inline.
+
+### Medallions
+
+`Medallions` / `medallionFor(id)` give something with no colour of its own — a group, a
+sub-group, a person with no profile picture — a **stable** colour derived from its id.
+The same subject keeps the same colour across screens and launches. This is what makes a
+list of otherwise identical rows tell itself apart at a glance. Never a random colour,
+never a per-screen choice.
+
+### Category colours
+
+Not theme tokens: each transaction category owns its colour in `@splitcount/shared`'s
+`categories.ts`, alongside its emoji and label, and keeps it in both themes. Read it from
+`categoryDefinition(key).color`. A selected category pill and the statistics donut use
+that colour rather than the brand hue — a category is the one thing allowed to bring its
+own.
+
+### Shape, space, type
+
+- **`Spacing`** — `half` (2) → `six` (64). Tokens, not raw numbers.
+- **`Radius`** — `small` (8), `medium` (12, fields), `card` (18), `large` (26),
+  `pill` (999, every button and every selectable token). The app is deliberately round.
+- **`cardShadow(dark)`** — a soft violet-tinted lift on light; **flat on dark**, where a
+  shadow only muddies the canvas and `border` carries the separation instead.
+- **`Fonts`** per platform: `sans`, `serif`, `rounded`, `mono`.
 - **Layout** — `MaxContentWidth` (800), `BottomTabInset` per platform.
 
 ## Theming
 
 - Light/dark driven by the OS colour scheme (`userInterfaceStyle: "automatic"`).
 - On web, hydration-safe colour scheme via `apps/mobile/src/hooks/use-color-scheme.web.ts`.
-- Use `ThemedText` and `ThemedView` rather than styling colours directly.
+- React Navigation gets SplitCount's palette too (`navigationTheme` in `app/_layout.tsx`)
+  — otherwise a pushed screen's header and the gap between screens fall back to its
+  grey-on-white defaults and punch a hole in the tinted canvas.
+- Use `ThemedText` / `ThemedView` rather than styling colours directly.
 
 ## Components
 
-- `ThemedText` — typography variants (`title`, `code`, `small`, ...).
-- `ThemedView` — themed surfaces, incl. `type="backgroundElement"`.
-- `Button` — the action button: `primary` (filled) or `secondary` (outlined), with a busy
-  state. The auth screens predate it and still style their own pressables.
-- `AppTabs` — bottom tab navigation (Groups, Friends, Account). Groups is the index
-  route and the app's landing screen.
-- `Avatar` — someone's Google picture, falling back to the initial of their name. Used
-  in every list of people.
+The shared kit in `src/components`. **Reuse these before writing a new pressable, field
+or box**; a screen that styles its own is a bug in this document.
+
+- **`Card`** — the app's unit of content: every row, field group and standalone block
+  sits in one, so a list reads as a stack of objects rather than runs of text separated
+  by hairlines. `tone="brand"` for the single most important block on a screen;
+  `muted` for archived / left / not-joined; `onPress` makes the whole card the hit area.
+- **`Button`** — `primary` (brand-filled, **one per screen**), `secondary` (outlined in
+  the brand hue), `ghost` (a soft brand wash, for an action that must not compete —
+  Cancel, Close, Done), `danger` (outlined destructive). Pill-shaped, with a busy state.
+- **`Pill`** — the selectable token: a mode toggle, a category, a member filter. Filled
+  when selected, outlined when not. One shape, so a row of pills always means "pick from
+  these".
+- **`TextField`** — every text input: a filled, rounded field on `backgroundElement`,
+  never a bare underline. `multiline` for a comment.
+- **`Avatar`** — someone's Google picture, falling back to their initial **on their own
+  medallion colour**. Pass `seed={user.id}` wherever an id is available, so a rename does
+  not change someone's colour.
+- **`MedallionBadge`** — a coloured disc standing in for something with no picture: a
+  group's initials, a category's emoji, a sub-group's `↳`. Takes an explicit `color` when
+  the subject owns one (a category), a seed otherwise.
+- **`BrandMark`** — the logo, drawn from the tokens.
+- **`ScreenHeader`** — the top of a tab screen: large title, optional caption, room for
+  one screen-level action. Every tab opens the same way.
+- **`ThemedText`** — `title`, `subtitle` (a screen's own name), `sectionTitle` (a block
+  inside a screen), `overline` (a small all-caps label above a block — quiet structure,
+  never a sentence), `amount` (a figure that must read as a figure), `default`, `small`,
+  `smallBold`, `link`, `linkPrimary`, `code`.
+- **`ThemedView`** — themed surfaces, plus `type="transparent"` for a layout wrapper
+  inside a card, where the canvas colour would undo the card.
+
+### Rules of thumb
+
+- One **primary** button per screen. Everything else is `secondary` or `ghost`.
+- A destructive action is a **red text button**, never a filled red one, and always
+  confirms through an `Alert` that states what is lost.
+- A section heading inside a screen or sheet is an **`overline`**, not a bold sentence.
+- A spinner is `theme.primary`, never `theme.text`.
+- Colour never carries meaning alone: a balance is said in words ("You owe 8.00"), a
+  chart slice is repeated in a legend with its emoji and label.
 
 ## Screens
 
 ### Auth gate (`src/features/auth/auth-gate.tsx`)
 
-Wraps the app. States:
-
-- **loading** — centered `ActivityIndicator` while the session is restored (the animated
-  splash overlay covers the first frames).
-- **error** — "Can't connect" with a "Try again" button, when the server was unreachable
-  on launch (the stored session is kept).
-- **signedOut** — the sign-in screen.
-- **signedIn** — the app (tabs).
+Wraps the app. States: **loading** (centred spinner while the session is restored, under
+the animated splash overlay), **error** ("Can't connect" + a secondary "Try again"),
+**signedOut** (the sign-in screen), **signedIn** (the app).
 
 ### Sign-in (`src/features/auth/sign-in-screen.tsx`)
 
-Full-screen, centered. Logo + "SplitCount" + tagline; a single primary "Continue with
-Google" button (filled with the theme text colour). Inline red error text on failure
-(not on user cancellation). On web the button is disabled with a "coming soon" caption.
+Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "SplitCount", a tagline,
+and a single primary "Continue with Google". Inline `danger` error text on failure (not
+on user cancellation). On web the button is disabled with a "coming soon" caption.
 
-### Account (`src/features/auth/account-screen.tsx`, tab `app/(tabs)/account.tsx`)
+### Account (`src/features/auth/account-screen.tsx`)
 
-Google avatar (or initial fallback), name, email, and an outlined "Sign out" button.
+One brand-toned identity card — avatar, name, email — and a secondary "Sign out" at the
+bottom. The screen has exactly one piece of content, so it gets exactly one card.
 
 ### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
-The app's landing screen, **root groups only** — a group that is itself a sub-group is
-reached by opening its parent, never listed here. Rows (`group-row.tsx`) show name,
-member count, and a third line: the viewer's own balance **in that group alone**
-(`groupBalanceLabel` / `balanceTone`, `docs/specs/balances.md`) — the same wording as the
-group screen's own summary. Tappable
-to open the group. Empty state: "No groups yet" with what a group is for. A footer holds
-the primary "Create a group" action and the same "Got an invitation code?" entry as the
-Friends tab — a code is a code, and the confirmation screen figures out whether it leads
-to a friendship or a group.
+The landing screen, **root groups only** — a sub-group is reached by opening its parent.
+`ScreenHeader` with the active-group count as caption. Each group is a **`GroupRow`
+card**: a medallion carrying the group's initials, the name, the member count, and the
+viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
+`docs/specs/balances.md`). Empty state: a brand card with a glyph, "No groups yet" and
+what a group is for. A footer holds the primary "Create a group" and the invitation-code
+entry.
 
-**Archived groups** live under a discreet "Show archived (n)" toggle at the very bottom of
-the list, and are rendered muted (55% opacity) with "n members · archived" when revealed.
-They are hidden rather than greyed inline because the list is about what is still going
-on; the count in the toggle is what keeps them findable. A list with only archived groups
+**Archived groups** sit under a "Show archived (n)" brand-coloured toggle at the bottom,
+rendered `muted` with "n members · archived" when revealed — hidden rather than greyed
+inline because the list is about what is still going on. A list with only archived groups
 shows the toggle, not the empty state.
 
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
-Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
-a **breadcrumb** of ancestors (root first, tappable, shown only for a sub-group), the
-group's name, a **sub-groups section** (below), an "Archived" note when the group is
-*effectively* archived — itself or any ancestor (`readOnly` on `GroupDetail`,
-`docs/specs/groups.md`) — **the viewer's own balance** ("You are owed 21.25" / "You owe
-8.00" / "You're all settled up" — said in words, so it never rests on spotting a minus
-sign; this group's own figure, read straight off `group.viewerBalanceCents` rather than a
-separate balances fetch), the
-transaction list (`TransactionRow`: the category emoji next to the title, date, kind,
-payer, and the viewer's own share, coloured), and a primary "Add a transaction" button —
-absent when effectively archived. A row opens the same add/edit sheet, pre-filled; when
-read-only, rows render but are not pressable. Empty state: an explanation and the same
-"Add a transaction" action.
+Pushed above the tabs, so it has a back button. **Transactions are the primary content.**
 
-**Sub-groups section** (`SubgroupsSection`, shown on **both kinds of group**, including a
-pair group — a friendship can have sub-groups too): a "Sub-groups" heading with a small
-"+ Create" link, then every sub-group the viewer has already joined as a row
-(`SubgroupRow`: name, member count, and — same wording and colour as a top-level
-`GroupRow`, `groupBalanceLabel`/`balanceTone` off the sub-group's own `viewerBalanceCents`
-— where the viewer stands across *that* sub-group's own sub-tree; tappable to open
-directly). Ones the viewer has **not** joined are hidden behind a "Show sub-groups I'm not
-in (n)" toggle, mirroring the group list's archived-groups pattern; revealed, they render
-muted with "n members · not joined" and no balance line (not being a member, it is always
-exactly zero) and tapping one opens a "Join this group?" `Alert` instead of navigating —
-confirming calls the lighter join endpoint (no friendship check) and opens the group only
-once it succeeds. "+ Create" opens `CreateGroupScreen` with the current group as the
-implicit parent. The section renders nothing when there are no sub-groups and the group is
-read-only, so it never appears as a permanent empty box on an archived leaf group. The
-group screen's own data (including this list) refetches whenever `groupsChanged` fires —
-e.g. right after creating a sub-group and landing on its own screen, coming back here shows
-it immediately, not only after a fresh navigation.
+The header is: a **breadcrumb** of ancestors (brand-coloured, tappable, only on a
+sub-group), the group's name, a row of three **header chips** — "Settle" (the
+reimbursement plan), "Stats" (the per-category breakdown), "Details" — all soft brand,
+all present on every kind of group, archived or pair included, since the first two are
+read-only views and the plan's one action is refused with a reason rather than hidden. An
+"Archived — read-only" note when the group is *effectively* archived (itself or any
+ancestor, `readOnly` on `GroupDetail`). Then **the viewer's own balance in a brand card**
+— "Your balance here" over the figure, said in words so it never rests on spotting a minus
+sign, read straight off `group.viewerBalanceCents` rather than a separate fetch.
 
-The header carries three small text buttons: **"Settle"** (the reimbursement plan, see
-"Reimbursements" below), **"Stats"** (the per-category breakdown, see "Group statistics"
-below) and **"Details"**. All three open sheets, and all three are present on every kind
-of group, archived or pair included: the first two are read-only views, and the plan's
-one action is refused with a reason rather than hidden.
+Below: the sub-groups section, the transaction list (`TransactionRow` cards), and a
+primary "Add a transaction" — absent when effectively archived. A row opens the same
+add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
+state: a brand card with a glyph and an explanation.
 
-Group management — everything that used to sit directly on this screen — moved behind a
-small "Details" button in the header, opening a sheet: the member list (avatar + name,
-"Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
-net, coloured, "settled up" at zero — a member who left with an unsettled balance still
-appears, without an avatar), then the management actions.
+**Sub-groups section** (shown on **both kinds of group** — a friendship can have
+sub-groups too): an `overline` "Sub-groups" heading with a brand "+ Create" link, then
+every sub-group the viewer has joined as a card (`↳` medallion, name, member count, and
+where they stand across *that* sub-group's own sub-tree). Ones they have **not** joined
+hide behind a "Show sub-groups I'm not in (n)" toggle, mirroring the archived pattern;
+revealed, they render `muted` with "n members · not joined" and no balance line (never
+being a member, it is always exactly zero), and tapping one opens a "Join this group?"
+`Alert` instead of navigating. The section renders nothing when there are no sub-groups
+and the group is read-only, so it never becomes a permanent empty box.
 
-The per-member balance list is read **once, by the group screen**, and handed to the
-sheet; the screen refreshes it after a transaction is saved or deleted, since a balance
-cannot be patched from a single transaction the way the list can. The top summary no
-longer shares that fetch — it reads `group.viewerBalanceCents` directly, so it has nothing
-to wait on and nothing to keep stale-but-stable during a reload.
+**Details sheet** — the member list (avatar + name, an accent "Owner" tag on the owner) in
+one card, **balances** (`GroupBalances`) in another, then the management actions. The
+per-member balance list is read **once, by the group screen**, and handed to the sheet.
 
-**One screen for both kinds of group**, in both the main view and the details sheet.
-**Transactions and sub-groups behave identically on a pair group** — the two things that
-do. Every other management action stays **absent**, not disabled, on a pair group, and the
-details sheet's closing line explains that it is just the two of them. For a standard
-group: "Add friends", "Share an invitation link" (gone when effectively archived — the
-server actually blocks them — **or when the group is `pairRooted`**: itself the pair
-group, or a sub-group nested under one at any depth, which can only ever contain that
-friendship's own two people; a small note explains that no one else can be added),
-"Rename" (gone only when the group's **own** flag is archived,
-not an ancestor's — renaming is never blocked server-side, `pairRooted` or not), "Archive
-group" / "Reopen group" (always available, and always reflects the group's own flag, never
-an ancestor's), "Leave group" (hidden for an owner who still has company **or** who solely
-owns a still-populated sub-group), and a red text-only "Delete this group" for the owner.
-Destructive actions confirm through an `Alert` that states what is lost, naming the
-sub-groups too when the group has any.
+**One screen for both kinds of group.** Transactions and sub-groups behave identically on
+a pair group. Every other management action is **absent**, not disabled, there, and the
+sheet's closing line explains that it is just the two of them. For a standard group: "Add
+friends" and "Share an invitation link" (gone when effectively archived, or when the group
+is `pairRooted`), "Rename" (gone only when the group's **own** flag is archived), "Archive
+group" / "Reopen group" (always available, always the group's own flag), "Leave group"
+(hidden for an owner who still has company or who solely owns a populated sub-group), and
+a red text-only "Delete this group" for the owner.
 
-States: loading, "This group is gone" (deleted, or the viewer was removed — no retry, just
-a way back), and a retryable connection error.
+States: loading, "This group is gone" (no retry, just a way back), and a retryable
+connection error.
+
+### Transaction row (`src/features/transactions/transaction-row.tsx`)
+
+A card: the **category's emoji on a badge in the category's own colour**, then the title,
+then a second line of date · kind · payer, then the viewer's own share, coloured. The
+emoji is the badge — it is *not* prefixed to the title text.
 
 ### Reimbursements (`src/features/reimbursements/reimbursements-screen.tsx`)
 
-A sheet, opened from the "Settle" button in the group header. It reads **answer first,
-justification second**: "Suggested reimbursements" — one row per payment, a sentence
-("You pay Alan Turing", "Grace Hopper pays you", "Alan pays Grace") with the amount at
-the end, the viewer's own rows first — then a one-line count ("One payment clears
-everything."), then "Where everyone stands", the group's balances in the same colours and
-wording as `GroupBalances`.
+A sheet from "Settle". **Answer first, justification second**: "Suggested reimbursements"
+— one card per payment, a sentence ("You pay Alan Turing") with the amount at the end as
+an `amount`, the viewer's own rows first — then a one-line count, then "Where everyone
+stands", the group's balances in one card, same colours and wording as `GroupBalances`.
 
-A payment row is **pressable and opens the pre-filled transfer form**; when it cannot be
-recorded (archived group, or a party who has left) the row is disabled and carries the
-reason underneath, never a silent dead tap. When nobody owes anybody, both lists are
-replaced by a single settled line — not two empty sections.
+A payment card is **pressable and opens the pre-filled transfer form**; when it cannot be
+recorded (archived group, or a party who has left) it is `muted`, disabled, and carries
+the reason underneath — never a silent dead tap. When nobody owes anybody, both lists are
+replaced by a single settled line.
 
 The plan is **derived from the balances the group screen already loaded**
-(`planReimbursements` in `@splitcount/shared`), so the sheet has no fetch of its own: it
-shows the balances' own spinner while they load, their retry on failure, and never a
-"settled" state produced by a failed read. Scoped to the one group, like every balance
-figure here (`docs/specs/reimbursements.md`).
+(`planReimbursements`), so the sheet has no fetch of its own.
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
-A sheet, opened from a small "Stats" button in the group header, left of "Details" — the
-transaction list stays the group's primary content. A **Spending / Income** pill row (same
-styling as the split editor's mode toggle) — with an **"Include sub-groups" pill**
-alongside it for a group that has any, active by default — then a wrapped row of **one
-pill chip per group member** — the viewer's own chip reads "You" — all active by default,
-each independently tappable to include or exclude that member; the chips never change with
-the sub-groups toggle, since every sub-group member is already a member of the group
-itself (`docs/specs/group-statistics.md`). When sub-groups are included and some are left
-out because the viewer has not joined them, a small line under the toggles says how many
-("2 sub-groups you're not in aren't included.") rather than presenting a partial sum as
-the whole tree's. Under all of that a **donut chart** (`DonutChart`, 220pt, 44pt ring —
-noticeably thick so a small share still reads as an arc, not a line) with one arc per
-category in that category's own colour, and a legend below: colour swatch, emoji + label,
-percentage, amount — largest first.
+A sheet from "Stats". A **Spending / Income** pill row — with an **"Include sub-groups"**
+pill for a group that has any, active by default — then a wrapped row of **one pill per
+member** (the viewer's reads "You"), all active by default, each independently tappable.
+When sub-groups are included and some are left out because the viewer has not joined them,
+a small line says how many rather than presenting a partial sum as the whole tree's.
 
-The donut's hole holds the total for the current selection ("Total spending", the amount);
-tapping an arc or a legend row swaps it for that category's emoji, label, amount and
-percentage, and fades the other arcs to 30%. Tapping the same one again, changing the
-type, toggling a member, or toggling sub-groups, returns to the total. With every member
-selected the total is the
-group's; deselecting members narrows it to the sum of only their own shares — selecting the
-viewer alone reproduces what used to be a separate "Me" toggle. Deselecting every member
-shows an empty state asking to select at least one, instead of drawing a zero-value ring.
-Colour never carries meaning alone: every slice is repeated in the legend with its emoji
-and label, and the selected one is named in words in the centre.
+Under that a **donut chart** (220pt, 44pt ring — thick enough that a small share reads as
+an arc, not a line), one arc per category in that category's own colour, and a legend card
+below: swatch, emoji + label, percentage, amount — largest first. The hole holds the total
+for the current selection; tapping an arc or legend row swaps it for that category's
+emoji, label, amount and percentage, fades the other arcs to 30%, and tints the legend row
+it came from. Tapping again, changing the type, or toggling a member or sub-groups returns
+to the total.
 
-Category colours live with the categories themselves (`@splitcount/shared`'s
-`categories.ts`), mid-lightness so the same thirteen values read on both themes — they are
-not theme tokens and do not change between light and dark.
-
-States: a spinner while the transactions load, the same retryable connection error as the
-list, and empty states that say *which* combination is empty ("Nothing recorded as income
-yet.", "None of this group's spending concerns you yet.") rather than a generic "nothing
-here". A group holding only transfers reads as "Nothing spent yet" with the reason, since
-transfers deliberately do not count.
-
-The sheet fetches its own transactions (`useTransactions(groupId, scope)`) rather than
-reusing the group screen's plain list, since its default scope — including sub-groups —
-usually differs from the list's, which only ever reads the one group. A group with no
-sub-groups still fetches on its own, for the same reason and at no meaningful extra cost.
-Toggling "Include sub-groups" refetches at the new scope, keeping the last-known chart
-visible rather than blinking to a loading state — the same choice already made for
-balances elsewhere in this feature. A transaction saved while the sheet is open is
-reflected the next time it is opened.
+States: a spinner, the same retryable connection error as the list, and empty states that
+say *which* combination is empty ("Nothing recorded as income yet.") rather than a generic
+"nothing here".
 
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 
-One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
-"Delete this transaction". Kind picker (Expense / Income / Transfer), then a title row: a
-small square **category badge** to the left of the title field, showing just the emoji
-(`Other` by default), then the title itself. Tapping the badge opens a small sheet with
-just the category grid (`CategoryPicker`); picking one updates the badge and closes the
-sheet immediately — no separate save step for it, though the transaction itself is only
-persisted when the form's own "Save" is pressed. Then amount, date (`DatePickerField` —
-see below), optional comment, then "Who paid" (`MemberSelect`, defaulting to the
-signed-in member). An expense or income continues with "Who it concerns" (`SplitEditor`);
-a transfer replaces it with a single "To" picker instead, excluding the payer. "Save" is
-disabled until the title, amount, date and split are all valid — the category always has
-a value, so it never blocks saving.
+One sheet for recording and for editing. A **kind pill row** (Expense / Income /
+Transfer), then **two cards**:
 
-### Category picker (`src/features/transactions/category-picker.tsx`)
+1. *What it is* — a square **category badge** (the emoji, tappable, opens a sheet holding
+   just the `CategoryPicker`; picking one closes it immediately, though the transaction is
+   only persisted on "Save"), the title field beside it, then amount and date side by
+   side under `overline` labels, then an optional multiline comment.
+2. *Who it involves* — "Who paid" (`MemberSelect`), then either a single "To" picker
+   (transfer, excluding the payer) or "Who it concerns" (`SplitEditor`).
 
-Every preset as an emoji + label pill (`CategoryPicker`), wrapping into a grid — same
-pill styling as the split editor's mode toggle, filled when selected. Single-select: every
-transaction has a category (`Other` by default), so there is no "clear" gesture — picking
-`Other` itself is the neutral choice. No way to add, rename or reorder a category here —
-the list is fixed (`@splitcount/shared`'s `categories.ts`). Used inside the add/edit
-form's category badge sheet.
+Then primary "Save" (disabled until title, amount, date and split are all valid — the
+category always has a value, so it never blocks saving), ghost "Cancel", and when editing
+a red text-only "Delete this transaction".
+
+### Member / friend selection
+
+`MemberSelect` (single-select) and `FriendPicker` (multi-select) both render a **filled
+row in `primarySoft` when selected**, not just a filled dot — what the eye lands on first
+when reopening a pre-filled form. The dot or checkbox is the confirmation, not the signal.
+The friend picker deliberately shows **no balance**: it is a selection list, and a money
+figure there is noise.
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 
-Every member as a checkbox row (all pre-selected by default, on the caller's side — this
-component just edits whatever selection it is given), plus a **Shares / Fixed amounts**
-toggle. In shares mode each checked member gets a −/+ weight stepper (default 1 — an
-equal split is simply everyone at the same weight) and a live-computed "= 12.34" preview
-of their cut, using the same rounding as the server. In fixed-amount mode each checked
-member gets an amount field instead, with a running "X left to allocate" / "X over the
-total" line — green when it balances, red otherwise. Switching modes seeds fixed amounts
-from the shares preview, and resets shares to equal weights, rather than losing the
-selection.
+Every member as a checkbox row (selected rows filled in `primarySoft`), plus a **Shares /
+Fixed amounts** pill toggle. In shares mode each checked member gets a −/+ stepper
+(default 1 — an equal split is everyone at the same weight) and a live "= 12.34" preview
+using the server's own rounding. In fixed-amount mode each gets an amount field and a
+running "X left to allocate" / "X over the total" line — `credit` when it balances,
+`debit` otherwise. Switching modes seeds fixed amounts from the shares preview and resets
+shares to equal weights, rather than losing the selection.
 
 ### Date field (`src/features/transactions/date-picker-field.tsx`)
 
-A native picker via `@expo/ui`, one component with the platform split inside it rather
-than as separate files, since only the trigger differs:
-
-- **iOS** — an inline `compact` SwiftUI `DatePicker`: a small tappable field that pops its
-  own calendar, no extra chrome needed.
-- **Android** — Compose has no inline "compact field" equivalent, so a plain field shows
-  the formatted date and tapping it opens the Material dialog picker; it unmounts on
-  confirmation or dismissal.
-- **Web** — `@expo/ui` has no host views there at all (`date-picker-field.web.tsx`): the
-  same plain `YYYY-MM-DD` text field every platform used before this existed.
-
-`@expo/ui` was already a dependency, unused until now — see `docs/MOBILE.md` for the
-native-rebuild consequence of that.
+A native picker via `@expo/ui`, platform split inside the one component: **iOS** an inline
+`compact` SwiftUI `DatePicker`; **Android** a plain field opening the Material dialog
+(Compose has no inline equivalent); **web** the app's own `TextField` in `YYYY-MM-DD`
+(`@expo/ui` has no host views there).
 
 ### Create a group (`src/features/groups/create-group-screen.tsx`)
 
-A sheet from the groups list: a name field (autofocused, 60 chars), then the friend picker.
-Creating with nobody selected is allowed — a link can come later.
+A sheet: a name field (autofocused, 60 chars), then the friend picker. Creating with
+nobody selected is allowed — a link can come later. The same screen creates a
+**sub-group** when opened with a `parentId`: the title reads "New sub-group", the button
+"Create sub-group", and the parent is implicit. When the parent is `pairRooted` the friend
+picker is **not shown at all**, replaced by a short note — the only other allowed person
+is added automatically.
 
-The same screen creates a **sub-group** when opened with a `parentId` (from the group
-screen's sub-groups section): the title reads "New sub-group", the button "Create
-sub-group", and the parent is implicit — there is no field for it, and no failure wording
-mentions it either, since the caller already knows which group they are in.
+### Friends (`src/features/friends/friends-screen.tsx`)
 
-When the parent is `pairRooted` (the pair group itself, or a sub-group nested under one),
-the friend picker is **not shown at all** — replaced by a short note that it is just the
-two of them here too — since the only other allowed person is added automatically the
-moment the sub-group is created; offering them in a picker would only fail on submit.
-
-### Friend picker (`src/features/groups/friend-picker.tsx`)
-
-Selectable friend rows with a round checkbox that fills with the theme text colour. Used
-both when creating a group and when adding to one, where members already in are left out
-and the empty state points at the invitation link instead.
-
-### Friends (`src/features/friends/friends-screen.tsx`, tab `app/(tabs)/friends.tsx`)
-
-List of avatar + name rows, each with **where the two of them stand** under the name —
-"owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted across every group
-they share (`docs/specs/balances.md`). No grand total sits above the list: members of
-shared groups who are not friends are absent from it, so a sum of the rows would not be
-the viewer's overall position.
-
-**Tapping a row opens the group shared with that friend**; "Remove" stays a separate hit
-area at the end of the row, and its confirmation says that the shared group and its
-contents go too. Empty state: "No friends yet". A footer holds the primary "Invite a
-friend" action and the invitation code entry below.
-
-The **friend picker** deliberately shows no balance: it is a selection list, and a money
-figure there is noise.
+`ScreenHeader` with the friend count. Each friend is a card: avatar, name, and **where the
+two of them stand** — "owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted
+across every group they share. No grand total above the list: members of shared groups who
+are not friends are absent from it, so a sum of the rows would not be the viewer's overall
+position. **Tapping a card opens the group shared with that friend**; "Remove" stays a
+separate hit area at the end. Empty state: a brand card. A footer holds the primary
+"Invite a friend" and the code entry.
 
 ### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
 
-The manual fallback for someone who has a code instead of a link — typed in, or pasted
-from somewhere the link itself didn't survive. A small "Got an invitation code?" label,
-a text field and a secondary "Open" button (disabled until something is typed), submittable
-from the keyboard too. Feeds the same `pendingInvite` store a deep link does, so it opens
-the same confirmation screen.
-
-**Rendered identically at the bottom of both the Friends and Groups tabs** — one component,
-so a friend code and a group code are entered the same way and neither tab has to know
+An `overline` "Got an invitation code?", a `TextField` and a secondary "Open" (disabled
+until something is typed, submittable from the keyboard). **Rendered identically at the
+bottom of both the Friends and Groups tabs** — one component, so neither tab has to know
 which kind of code the visitor is holding.
 
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 
-One component behind both the friend link (`features/friends/invite-screen.tsx`) and the
-group link (`features/groups/group-invite-screen.tsx`): only the wording and the endpoint
-differ. Opened as a sheet. The link is shown in a `backgroundElement` box and is
-**selectable**, so a failed clipboard write is not a dead end. Primary "Share" (OS share
-sheet), secondary "Copy link" (flips to "Copied"), the expiry in words, and a bottom
-"Generate a new link" with a caption warning that the previous link stops working.
+One component behind both the friend link and the group link. The link sits in a
+**brand-toned card** under an "Your invitation link" overline, and is **selectable**, so a
+failed clipboard write is not a dead end. Primary "Share", secondary "Copy link" (flips to
+"Copied"), the expiry in words, and a bottom ghost "Generate a new link" with a caption
+warning that the previous link stops working.
 
 ### Invitation confirmation (`src/features/invites/invite-prompt.tsx`)
 
 A full-screen modal, not a route: it must appear identically whether the code arrived from
-a deep link or was typed by hand, and it is mounted above the tabs. Centred avatar, then
-what the link leads to — "X wants to add you as a friend" / "X invited you to <group>" —
-and Accept / Join group / Not now. Terminal states: friends now, already friends, joined
-(with an "Open group" action), already a member, link no longer valid, your own link, and
-a retryable connection error.
-
-## Principles
-
-- Prefer the smallest structural fix over a visual workaround.
-- Check light and dark, plus small and large widths, after any UI change.
-- Reproduce a visual bug before fixing it; verify the fix against the original scenario.
+a deep link or was typed, and it is mounted above the tabs. Centred avatar, what the link
+leads to, and Accept / Join group / Not now. Terminal states: friends now, already
+friends, joined (with "Open group"), already a member, link no longer valid, your own
+link, and a retryable connection error.
 
 ## Navigation
 
-`app/_layout.tsx` is a `Stack` wrapping the `(tabs)` group, so a group detail pushes
-above the tab bar with a back button. The tabs themselves live in
-`app/(tabs)/_layout.tsx`.
+`app/_layout.tsx` is a `Stack` wrapping the `(tabs)` group, so a group detail pushes above
+the tab bar with a back button; the tabs live in `app/(tabs)/_layout.tsx`. The tab bar is
+a **surface**, not the canvas, and the active tab carries the brand hue — the one place
+navigation says which app this is. On web the tab list is a floating pill bar with the
+"SplitCount" wordmark in brand violet.
 
 The groups list is the index of that group, so its URL is `/`.
 
@@ -353,16 +347,21 @@ Typed routes are generated into `.expo/types/router.d.ts` when the dev server ru
 `router.push` or an `href` is rejected for a route that plainly exists, the generated file
 is stale — restart the dev server rather than working around the type.
 
+## Principles
+
+- Prefer the smallest structural fix over a visual workaround.
+- Check light and dark, plus small and large widths, after any UI change.
+- Reproduce a visual bug before fixing it; verify the fix against the original scenario.
+- Reuse the shared kit. A new pressable, field or box needs a reason recorded here.
+
 ## Current state
 
-Auth screens (sign-in, account, gate), the friends screens, the groups screens and the
-transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
-Groups hold transactions, show balances and break their money down by category, can nest
-sub-groups up to five levels deep, and the friend list shows where you stand with each
-person across every group you share; settle-up suggestions are not built yet.
+The whole surface — auth, groups, friends, transactions, statistics, reimbursements,
+invitations — is on this design system; every Expo starter component and asset is gone.
+The sign-in screen has been verified in both themes on the web target; the rest is covered
+by component tests but **has not been validated on a device**, since web sign-in is
+disabled and they cannot be reached there.
 
-The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
-text field on web (see "Date field" above and `docs/MOBILE.md`).
-
-These screens are covered by component tests but have **not** been validated on a device
-yet: web sign-in is disabled, so they cannot be reached on the web target.
+The app icon, splash glyph, favicon and Android adaptive layers were generated from
+`BrandMark`. They are flat exports of the SVG: if the mark ever changes, regenerate them
+rather than editing the PNGs.
