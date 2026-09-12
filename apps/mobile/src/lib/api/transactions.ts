@@ -1,9 +1,12 @@
 import {
   balancesResponseSchema,
+  reimbursementPlanResponseSchema,
   transactionResponseSchema,
   transactionsListResponseSchema,
   type Balance,
   type CreateTransactionRequest,
+  type ReimbursementPlanResponse,
+  type ReimbursementScope,
   type Transaction,
   type TransactionsListResponse,
   type TransactionsListScope,
@@ -80,4 +83,21 @@ export async function fetchBalances(
 ): Promise<Balance[]> {
   const response = await fetcher(`${transactionsPath(groupId)}/balances`);
   return (await parsedJson(response, balancesResponseSchema)).balances;
+}
+
+/**
+ * Who should pay whom to clear the group, and the net positions it comes
+ * from (`docs/specs/reimbursements.md`). `scope: 'subtree'` covers the group
+ * and every sub-group nested in it — unlike the transaction list's own
+ * sub-tree scope, one the viewer has not joined is included too.
+ */
+export async function fetchReimbursements(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+  scope: ReimbursementScope = 'group',
+): Promise<ReimbursementPlanResponse> {
+  const response = await fetcher(
+    `${transactionsPath(groupId)}/reimbursements?scope=${encodeURIComponent(scope)}`,
+  );
+  return parsedJson(response, reimbursementPlanResponseSchema);
 }

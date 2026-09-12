@@ -27,11 +27,30 @@ import { MemberSelect } from './member-select';
 import { SplitEditor } from './split-editor';
 import { splitFrom } from './transaction-request';
 
+/**
+ * A new transaction's starting values, for a caller that already knows what
+ * it should say — today, a suggested reimbursement
+ * (`docs/specs/reimbursements.md`). Everything stays editable: a partial
+ * reimbursement is recorded by changing the amount before saving. Ignored
+ * when `initial` is given, since editing an existing transaction has its own
+ * values.
+ */
+export interface TransactionPrefill {
+  kind: TransactionKind;
+  title: string;
+  amountCents: number;
+  payerId: string;
+  /** The person reimbursed — only meaningful for a `transfer`. */
+  toUserId?: string;
+}
+
 export interface TransactionFormScreenProps {
   group: GroupDetail;
   viewerId: string;
   /** Editing this transaction when present; recording a new one otherwise. */
   initial?: Transaction;
+  /** Starting values for a *new* transaction. See `TransactionPrefill`. */
+  prefill?: TransactionPrefill;
   onSaved: (transaction: Transaction) => void;
   onDeleted: () => void;
   onCancel: () => void;
@@ -59,6 +78,7 @@ export function TransactionFormScreen({
   group,
   viewerId,
   initial,
+  prefill,
   onSaved,
   onDeleted,
   onCancel,
@@ -66,23 +86,30 @@ export function TransactionFormScreen({
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
   const members = group.members;
+  // Editing wins over a pre-fill: an existing transaction's own values are
+  // the only sensible starting point for it.
+  const start = initial ? undefined : prefill;
 
-  const [kind, setKind] = useState<TransactionKind>(initial?.kind ?? 'expense');
-  const [title, setTitle] = useState(initial?.title ?? '');
-  const [amountCents, setAmountCents] = useState<number | null>(initial?.amountCents ?? 0);
+  const [kind, setKind] = useState<TransactionKind>(initial?.kind ?? start?.kind ?? 'expense');
+  const [title, setTitle] = useState(initial?.title ?? start?.title ?? '');
+  const [amountCents, setAmountCents] = useState<number | null>(
+    initial?.amountCents ?? start?.amountCents ?? 0,
+  );
   const [occurredOn, setOccurredOn] = useState(initial?.occurredOn ?? today());
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [category, setCategory] = useState<TransactionCategory>(
     initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
   );
-  const [payerId, setPayerId] = useState(initial?.payer.id ?? viewerId);
+  const [payerId, setPayerId] = useState(initial?.payer.id ?? start?.payerId ?? viewerId);
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
       ? splitFrom(initial)
       : defaultSplit(members.map((m) => m.id)),
   );
   const [toUserId, setToUserId] = useState<string | null>(
-    initial?.kind === 'transfer' ? (initial.participants[0]?.user.id ?? null) : null,
+    initial?.kind === 'transfer'
+      ? (initial.participants[0]?.user.id ?? null)
+      : (start?.toUserId ?? null),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

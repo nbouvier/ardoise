@@ -3,6 +3,7 @@ import type {
   GroupDetail,
   GroupMember,
   SubgroupSummary,
+  SuggestedReimbursement,
   Transaction,
 } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
@@ -25,10 +26,14 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
+import { ReimbursementsScreen } from '@/features/reimbursements/reimbursements-screen';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
 import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
-import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
+import {
+  TransactionFormScreen,
+  type TransactionPrefill,
+} from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { useBalances, type UseBalancesResult } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
@@ -53,8 +58,11 @@ import { useGroup } from './use-group';
  * archive, invite, leave, delete) — everything that used to sit directly on
  * this screen before transactions became its primary content. `invite`,
  * `members` and `rename` are launched from inside it and return to it.
- * `statistics` is its read-only counterpart, opened from the same header.
- * `createSubgroup` is launched from the sub-groups section.
+ * `statistics` is its read-only counterpart, opened from the same header, as
+ * is `reimbursements` — which is read-only too until a suggested payment is
+ * tapped, at which point it hands over to `transaction` pre-filled and gets
+ * it back, one payment shorter. `createSubgroup` is launched from the
+ * sub-groups section.
  */
 type Sheet =
   | 'details'
@@ -63,6 +71,7 @@ type Sheet =
   | 'rename'
   | 'transaction'
   | 'statistics'
+  | 'reimbursements'
   | 'createSubgroup'
   | null;
 
@@ -74,6 +83,10 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   const theme = useTheme();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  // Set only when the transaction sheet was opened from the reimbursement
+  // plan — it is both the form's starting values and how the sheet knows to
+  // hand control back to the plan afterwards.
+  const [prefill, setPrefill] = useState<TransactionPrefill | null>(null);
   const [busy, setBusy] = useState(false);
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the details sheet: the summary above the
@@ -248,11 +261,31 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   function openNewTransaction() {
     setEditingTransaction(null);
+    setPrefill(null);
     setSheet('transaction');
   }
 
   function openTransaction(transaction: Transaction) {
     setEditingTransaction(transaction);
+    setPrefill(null);
+    setSheet('transaction');
+  }
+
+  /**
+   * Record a suggested reimbursement: the transfer form, pre-filled, with
+   * everything still editable — a partial payment is a changed amount
+   * (`docs/specs/reimbursements.md`). Saving or cancelling returns to the
+   * plan, which is then re-read.
+   */
+  function recordReimbursement(suggestion: SuggestedReimbursement) {
+    setEditingTransaction(null);
+    setPrefill({
+      kind: 'transfer',
+      title: 'Reimbursement',
+      amountCents: suggestion.amountCents,
+      payerId: suggestion.from.id,
+      toUserId: suggestion.to.id,
+    });
     setSheet('transaction');
   }
 
@@ -268,6 +301,15 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               {group.name}
             </ThemedText>
             <ThemedView style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reimbursements"
+                onPress={() => setSheet('reimbursements')}
+                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Settle
+                </ThemedText>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Group statistics"
@@ -373,6 +415,18 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               />
             ) : null}
 
+            {sheet === 'reimbursements' ? (
+              <ReimbursementsScreen
+                groupId={groupId}
+                hasSubgroups={hasSubgroups}
+                members={group.members}
+                viewerId={viewerId}
+                readOnly={readOnly}
+                onRecord={recordReimbursement}
+                onClose={() => setSheet(null)}
+              />
+            ) : null}
+
             {sheet === 'invite' ? (
               <>
                 <GroupInviteScreen groupId={groupId} groupName={group.name} />
@@ -413,6 +467,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 group={group}
                 viewerId={viewerId}
                 initial={editingTransaction ?? undefined}
+                prefill={prefill ?? undefined}
                 onSaved={(transaction) => {
                   transactionsResult.upsert(transaction);
                   // Unlike the list, balances cannot be recomputed from one
@@ -421,7 +476,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                   // A friend's per-friend total on the Friends tab may depend
                   // on this transaction too; it has no other way to know.
                   friendsChanged.notify();
-                  setSheet(null);
+                  // Back to the plan it came from, remounted and re-read, so
+                  // the payment just recorded is gone from it.
+                  setSheet(prefill ? 'reimbursements' : null);
                 }}
                 onDeleted={() => {
                   if (editingTransaction) {
@@ -431,7 +488,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                   friendsChanged.notify();
                   setSheet(null);
                 }}
-                onCancel={() => setSheet(null)}
+                onCancel={() => setSheet(prefill ? 'reimbursements' : null)}
               />
             ) : null}
           </SafeAreaView>

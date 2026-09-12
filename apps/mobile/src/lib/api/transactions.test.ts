@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-import { ada, balances, fakeAuthorizedFetch, response, transaction } from '@/test-utils/api-fakes';
+import {
+  ada,
+  balances,
+  fakeAuthorizedFetch,
+  grace,
+  response,
+  transaction,
+} from '@/test-utils/api-fakes';
 
 import {
   createTransaction,
   deleteTransaction,
   fetchBalances,
+  fetchReimbursements,
   fetchTransaction,
   fetchTransactions,
   updateTransaction,
@@ -147,6 +155,37 @@ describe('fetchBalances', () => {
 
     await expect(fetchBalances(fetcher, transaction.groupId)).resolves.toEqual(balances);
     expect(fetcher).toHaveBeenCalledWith(`/groups/${transaction.groupId}/transactions/balances`);
+  });
+});
+
+describe('fetchReimbursements', () => {
+  const plan = {
+    scope: 'group' as const,
+    positions: [
+      { user: ada, amountCents: 2125, sources: [] },
+      { user: grace, amountCents: -2125, sources: [] },
+    ],
+    reimbursements: [{ from: grace, to: ada, amountCents: 2125 }],
+  };
+
+  it('parses the plan and its positions', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: plan }));
+
+    await expect(fetchReimbursements(fetcher, transaction.groupId)).resolves.toEqual(plan);
+    expect(fetcher).toHaveBeenCalledWith(
+      `/groups/${transaction.groupId}/transactions/reimbursements?scope=group`,
+    );
+  });
+
+  it('asks for the whole sub-tree when the scope says so', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { ...plan, scope: 'subtree' } }));
+
+    await expect(
+      fetchReimbursements(fetcher, transaction.groupId, 'subtree'),
+    ).resolves.toMatchObject({ scope: 'subtree' });
+    expect(fetcher).toHaveBeenCalledWith(
+      `/groups/${transaction.groupId}/transactions/reimbursements?scope=subtree`,
+    );
   });
 });
 
