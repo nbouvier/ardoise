@@ -4,6 +4,7 @@ import { Pressable, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 
 export interface GroupRowProps {
   group: GroupSummary;
@@ -12,7 +13,11 @@ export interface GroupRowProps {
   muted?: boolean;
 }
 
-/** One line of the group list: name, size, and the fact that it is over. */
+/**
+ * One line of the group list: name, size, and where the viewer stands —
+ * rolled up over the group and every sub-group nested inside it
+ * (`docs/specs/balances.md`).
+ */
 export function GroupRow({ group, onPress, muted = false }: GroupRowProps) {
   const members =
     group.memberCount === 1 ? '1 member' : `${group.memberCount} members`;
@@ -27,6 +32,9 @@ export function GroupRow({ group, onPress, muted = false }: GroupRowProps) {
         <ThemedText numberOfLines={1}>{group.name}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {muted ? `${members} · archived` : members}
+        </ThemedText>
+        <ThemedText type="small" themeColor={balanceTone(group.viewerBalanceCents)}>
+          {groupBalanceLabel(group.viewerBalanceCents)}
         </ThemedText>
       </ThemedView>
     </Pressable>

@@ -27,7 +27,7 @@ export async function fetchGroup(
 
 export async function createGroup(
   fetcher: AuthorizedFetch,
-  input: { name: string; memberIds?: string[] },
+  input: { name: string; memberIds?: string[]; parentId?: string },
 ): Promise<GroupDetail> {
   const response = await fetcher('/groups', { method: 'POST', body: input });
   return (await parsedJson(response, groupResponseSchema)).group;
@@ -93,6 +93,18 @@ export async function rotateGroupInvite(
     method: 'POST',
   });
   return (await parsedJson(response, inviteResponseSchema)).invite;
+}
+
+/**
+ * Join a sub-group visible in a group the caller already belongs to — no
+ * friendship check, unlike accepting an invitation link. Idempotent.
+ */
+export async function joinGroup(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+): Promise<GroupDetail> {
+  const response = await fetcher(`${groupPath(groupId)}/join`, { method: 'POST' });
+  return (await parsedJson(response, groupResponseSchema)).group;
 }
 
 /**

@@ -17,6 +17,7 @@ import {
   fetchGroupInvite,
   fetchGroups,
   fetchPairGroup,
+  joinGroup,
   removeGroupMember,
   updateGroup,
 } from './groups';
@@ -72,6 +73,30 @@ describe('createGroup', () => {
     expect(fetcher).toHaveBeenCalledWith('/groups', {
       method: 'POST',
       body: { name: 'Corsica 2026', memberIds: [grace.id] },
+    });
+  });
+
+  it('sends parentId when creating a sub-group', async () => {
+    const sub = { ...groupDetail, parentId: groupDetail.id, depth: 1 };
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: sub } }));
+
+    await expect(
+      createGroup(fetcher, { name: 'Ajaccio weekend', parentId: groupDetail.id }),
+    ).resolves.toEqual(sub);
+    expect(fetcher).toHaveBeenCalledWith('/groups', {
+      method: 'POST',
+      body: { name: 'Ajaccio weekend', parentId: groupDetail.id },
+    });
+  });
+});
+
+describe('joinGroup', () => {
+  it('joins a visible sub-group', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: groupDetail } }));
+
+    await expect(joinGroup(fetcher, groupDetail.id)).resolves.toEqual(groupDetail);
+    expect(fetcher).toHaveBeenCalledWith(`/groups/${groupDetail.id}/join`, {
+      method: 'POST',
     });
   });
 });

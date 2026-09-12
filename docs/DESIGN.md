@@ -62,11 +62,15 @@ Google avatar (or initial fallback), name, email, and an outlined "Sign out" but
 
 ### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
-The app's landing screen. Rows of name + member count, tappable to open the group. Empty
-state: "No groups yet" with what a group is for. A footer holds the primary "Create a
-group" action and the same "Got an invitation code?" entry as the Friends tab — a code is
-a code, and the confirmation screen figures out whether it leads to a friendship or a
-group.
+The app's landing screen, **root groups only** — a group that is itself a sub-group is
+reached by opening its parent, never listed here. Rows (`group-row.tsx`) show name,
+member count, and a third line: the viewer's own balance **rolled up over the group and
+every sub-group nested inside it** (`groupBalanceLabel` / `balanceTone`,
+`docs/specs/balances.md`) — the same wording as the group screen's own summary. Tappable
+to open the group. Empty state: "No groups yet" with what a group is for. A footer holds
+the primary "Create a group" action and the same "Got an invitation code?" entry as the
+Friends tab — a code is a code, and the confirmation screen figures out whether it leads
+to a friendship or a group.
 
 **Archived groups** live under a discreet "Show archived (n)" toggle at the very bottom of
 the list, and are rendered muted (55% opacity) with "n members · archived" when revealed.
@@ -77,14 +81,30 @@ shows the toggle, not the empty state.
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
 Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
-the group's name, an "Archived" note when it applies, **the viewer's own balance**
-("You are owed 21.25" / "You owe 8.00" / "You're all settled up" — said in words, so it
-never rests on spotting a minus sign), the transaction list (`TransactionRow`: the
-category emoji next to the title, date, kind, payer, and the viewer's own share,
-coloured), and a primary "Add a transaction" button — absent on an archived group. A row
-opens the same add/edit sheet, pre-filled; on an archived group rows render but are not
-pressable, read only. Empty state: an explanation and the same "Add a transaction"
-action.
+a **breadcrumb** of ancestors (root first, tappable, shown only for a sub-group), the
+group's name, a **sub-groups section** (below), an "Archived" note when the group is
+*effectively* archived — itself or any ancestor (`readOnly` on `GroupDetail`,
+`docs/specs/groups.md`) — **the viewer's own balance** ("You are owed 21.25" / "You owe
+8.00" / "You're all settled up" — said in words, so it never rests on spotting a minus
+sign; for a group with sub-groups this is already rolled up over the whole sub-tree, read
+straight off `group.viewerBalanceCents` rather than a separate balances fetch), the
+transaction list (`TransactionRow`: the category emoji next to the title, date, kind,
+payer, and the viewer's own share, coloured), and a primary "Add a transaction" button —
+absent when effectively archived. A row opens the same add/edit sheet, pre-filled; when
+read-only, rows render but are not pressable. Empty state: an explanation and the same
+"Add a transaction" action.
+
+**Sub-groups section** (`SubgroupsSection`, standard groups only — absent on a pair
+group): a "Sub-groups" heading with a small "+ Create" link, then every sub-group the
+viewer has already joined as a row (`SubgroupRow`: name + member count, tappable to open
+directly). Ones the viewer has **not** joined are hidden behind a "Show sub-groups I'm not
+in (n)" toggle, mirroring the group list's archived-groups pattern; revealed, they render
+muted with "n members · not joined" and tapping one opens a "Join this group?" `Alert`
+instead of navigating — confirming calls the lighter join endpoint (no friendship check)
+and opens the group only once it succeeds. "+ Create" opens `CreateGroupScreen` with the
+current group as the implicit parent. The section renders nothing when there are no
+sub-groups and the group is read-only, so it never appears as a permanent empty box on an
+archived leaf group.
 
 The header carries two small text buttons: **"Stats"** (the per-category breakdown, see
 "Group statistics" below) and **"Details"**. Both open sheets; both are present on every
@@ -94,22 +114,27 @@ Group management — everything that used to sit directly on this screen — mov
 small "Details" button in the header, opening a sheet: the member list (avatar + name,
 "Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
 net, coloured, "settled up" at zero — a member who left with an unsettled balance still
-appears, without an avatar), then the management actions.
+appears, without an avatar; this list stays scoped to the one group, never rolled up),
+then the management actions.
 
-The balances are read **once, by the group screen**, and handed to both the summary and
-the sheet; the screen refreshes them after a transaction is saved or deleted, since a
-balance cannot be patched from a single transaction the way the list can. The summary
-keeps showing the last known figure while that reload is in flight, rather than blinking
-on every save.
+The per-member balance list is read **once, by the group screen**, and handed to the
+sheet; the screen refreshes it after a transaction is saved or deleted, since a balance
+cannot be patched from a single transaction the way the list can. The top summary no
+longer shares that fetch — it reads `group.viewerBalanceCents` directly, so it has nothing
+to wait on and nothing to keep stale-but-stable during a reload.
 
 **One screen for both kinds of group**, in both the main view and the details sheet.
 **Transactions behave identically on a pair group** — the one thing that does. Every
 management action stays **absent**, not disabled, on a pair group, and the details
 sheet's closing line explains that it is just the two of them. For a standard group:
-"Add friends", "Share an invitation link" and "Rename" (all three gone while archived),
-"Archive group" / "Reopen group", "Leave group" (hidden for an owner who still has
-company), and a red text-only "Delete this group" for the owner. Destructive actions
-confirm through an `Alert` that states what is lost.
+"Add friends", "Share an invitation link" (both gone when effectively archived — the
+server actually blocks them), "Rename" (gone only when the group's **own** flag is
+archived, not an ancestor's — renaming is never blocked server-side), "Archive group" /
+"Reopen group" (always available, and always reflects the group's own flag, never an
+ancestor's), "Leave group" (hidden for an owner who still has company **or** who solely
+owns a still-populated sub-group), and a red text-only "Delete this group" for the owner.
+Destructive actions confirm through an `Alert` that states what is lost, naming the
+sub-groups too when the group has any.
 
 States: loading, "This group is gone" (deleted, or the viewer was removed — no retry, just
 a way back), and a retryable connection error.
@@ -205,6 +230,11 @@ native-rebuild consequence of that.
 A sheet from the groups list: a name field (autofocused, 60 chars), then the friend picker.
 Creating with nobody selected is allowed — a link can come later.
 
+The same screen creates a **sub-group** when opened with a `parentId` (from the group
+screen's sub-groups section): the title reads "New sub-group", the button "Create
+sub-group", and the parent is implicit — there is no field for it, and no failure wording
+mentions it either, since the caller already knows which group they are in.
+
 ### Friend picker (`src/features/groups/friend-picker.tsx`)
 
 Selectable friend rows with a round checkbox that fills with the theme text colour. Used
@@ -279,9 +309,9 @@ is stale — restart the dev server rather than working around the type.
 
 Auth screens (sign-in, account, gate), the friends screens, the groups screens and the
 transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
-Groups hold transactions, show balances and break their money down by category, and the
-friend list shows where you stand with each person across every group you share; settle-up
-suggestions are not built yet.
+Groups hold transactions, show balances and break their money down by category, can nest
+sub-groups up to five levels deep, and the friend list shows where you stand with each
+person across every group you share; settle-up suggestions are not built yet.
 
 The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
 text field on web (see "Date field" above and `docs/MOBILE.md`).

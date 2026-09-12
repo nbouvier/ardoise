@@ -31,3 +31,19 @@ export function balanceWithPerson(amountCents: number): string {
   }
   return 'settled up';
 }
+
+/**
+ * Where the viewer stands against a group, in words — used both for a
+ * group's own balance and for the rolled-up figure over a group and its
+ * sub-groups (`docs/specs/balances.md`); the two read identically, since to
+ * the viewer they answer the same question.
+ */
+export function groupBalanceLabel(amountCents: number): string {
+  if (amountCents === 0) {
+    return 'You’re all settled up';
+  }
+  if (amountCents > 0) {
+    return `You are owed ${centsToText(amountCents)}`;
+  }
+  return `You owe ${centsToText(-amountCents)}`;
+}

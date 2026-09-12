@@ -71,6 +71,14 @@ describe('GroupsScreen', () => {
     expect(screen.getByText('3 members')).toBeTruthy();
   });
 
+  it("shows the viewer's balance rolled up over the group and its sub-groups", async () => {
+    mockFetchGroups.mockResolvedValue([{ ...trip, viewerBalanceCents: 2500 }]);
+
+    await render(<GroupsScreen />);
+
+    expect(await screen.findByText('You are owed 25.00')).toBeTruthy();
+  });
+
   it('hides archived groups behind a toggle that counts them', async () => {
     mockFetchGroups.mockResolvedValue([trip, lastYear]);
 
