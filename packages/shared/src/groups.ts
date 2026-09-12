@@ -75,13 +75,16 @@ export type GroupAncestor = z.infer<typeof groupAncestorSchema>;
  * A group opened by one of its members. `viewerRole` drives which actions
  * show. `subgroups` are the group's *direct* sub-groups (`docs/specs/groups.md`);
  * `ancestors` is empty for a root group and, for a sub-group, every one of its
- * ancestors root-first, for a breadcrumb.
+ * ancestors root-first, for a breadcrumb. `readOnly` is `true` when the group
+ * itself is archived *or any ancestor of it is* — a root group's `readOnly`
+ * always equals its own `archivedAt !== null`, since it has no ancestors.
  */
 export const groupDetailSchema = groupSummarySchema.extend({
   members: z.array(groupMemberSchema),
   viewerRole: groupRoleSchema,
   subgroups: z.array(subgroupSummarySchema),
   ancestors: z.array(groupAncestorSchema),
+  readOnly: z.boolean(),
 });
 export type GroupDetail = z.infer<typeof groupDetailSchema>;
 

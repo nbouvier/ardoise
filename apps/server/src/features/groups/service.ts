@@ -14,7 +14,6 @@ import type { InviteHandler, InvitesService } from '../invites/service.js';
 import { toUserSummary } from '../users/repository.js';
 
 import {
-  assertActive,
   assertCanLeave,
   assertEffectivelyActive,
   assertNotPairGroup,
@@ -22,6 +21,7 @@ import {
   assertRemovable,
   assertWithinDepthLimit,
   GroupAccessError,
+  isEffectivelyArchived,
 } from './membership.js';
 import type { GroupsRepository, MemberWithUser } from './repository.js';
 
@@ -34,6 +34,12 @@ interface GroupContext {
 export interface RemovedMember {
   /** The group had no members left and was deleted with its contents. */
   groupDeleted: boolean;
+  /**
+   * How many of the group's descendants the person also lost membership at,
+   * as a side effect (`docs/specs/groups.md`) — `0` when the group has none,
+   * or when the removal was a no-op (already gone).
+   */
+  removedFromDescendantCount: number;
 }
 
 export interface GroupsService {
@@ -44,6 +50,14 @@ export interface GroupsService {
   remove(userId: string, groupId: string): Promise<void>;
   addMembers(userId: string, groupId: string, memberIds: string[]): Promise<GroupDetail>;
   removeMember(userId: string, groupId: string, targetId: string): Promise<RemovedMember>;
+  /**
+   * Join a sub-group visible in a group the caller already belongs to —
+   * lighter than an invitation link, since being in the parent is already a
+   * stronger trust signal than friendship. Joins that sub-group only; the
+   * caller's membership in every ancestor already holds by construction
+   * (`docs/specs/groups.md`).
+   */
+  join(userId: string, groupId: string): Promise<GroupDetail>;
   getOrCreateInvite(userId: string, groupId: string): Promise<Invite>;
   rotateInvite(userId: string, groupId: string): Promise<Invite>;
   revokeInvite(userId: string, groupId: string): Promise<void>;
@@ -128,12 +142,26 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         id: ancestor.id,
         name: ancestor.name ?? 'Untitled group',
       })),
+      // A root group's `readOnly` is exactly its own archived flag, since it
+      // has no ancestors — this only differs from `archivedAt !== null` for a
+      // sub-group whose ancestor is archived (`docs/specs/groups.md`).
+      readOnly: isEffectivelyArchived(group, ancestors),
     };
   }
 
+  /** {@link assertEffectivelyActive}, fetching the ancestor chain itself. */
+  async function assertGroupEffectivelyActive(group: GroupRow): Promise<void> {
+    assertEffectivelyActive(group, await repository.listAncestors(group.id));
+  }
+
   /**
-   * Membership is the only authorization. A group the caller does not belong to
-   * is reported as missing, so its existence is never disclosed.
+   * Membership is the only authorization. A group the caller does not belong
+   * to is reported as missing, so its existence is never disclosed — *unless*
+   * the caller belongs to its immediate parent, in which case they already
+   * legitimately know it exists (it is shown to them in the parent's own
+   * sub-group list) and the refusal says "join it" instead
+   * (`docs/specs/groups.md`). This never applies transitively: belonging to a
+   * grandparent says nothing about knowing a grandchild exists.
    */
   async function requireMembership(userId: string, groupId: string): Promise<GroupContext> {
     const group = await repository.findGroupById(groupId);
@@ -141,10 +169,13 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       throw new GroupAccessError('not_found');
     }
     const membership = await repository.findMembership(groupId, userId);
-    if (!membership) {
-      throw new GroupAccessError('not_found');
+    if (membership) {
+      return { group, role: membership.role as GroupRole };
     }
-    return { group, role: membership.role as GroupRole };
+    if (group.parentId && (await repository.findMembership(group.parentId, userId))) {
+      throw new GroupAccessError('join_required');
+    }
+    throw new GroupAccessError('not_found');
   }
 
   /** Membership plus the guards every management action shares. */
@@ -203,8 +234,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         // the membership check every other group action already uses.
         const { group: parent } = await requireMembership(userId, input.parentId);
         assertNotPairGroup(parent);
-        const ancestors = await repository.listAncestors(parent.id);
-        assertEffectivelyActive(parent, ancestors);
+        await assertGroupEffectivelyActive(parent);
         assertWithinDepthLimit(parent.depth);
         parentId = parent.id;
         depth = parent.depth + 1;
@@ -244,7 +274,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
 
     async addMembers(userId, groupId, memberIds) {
       const { group, role } = await requireManageable(userId, groupId);
-      assertActive(group);
+      await assertGroupEffectivelyActive(group);
 
       await repository.addMembers(groupId, await requireFriends(userId, memberIds));
       return detailOf(group, userId, role);
@@ -257,34 +287,65 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         assertCanLeave(role, await repository.countMembers(groupId));
       } else {
         // Removing someone else is a management action; leaving is not.
-        assertActive(group);
+        await assertGroupEffectivelyActive(group);
         const target = await repository.findMembership(groupId, targetId);
         if (!target) {
           // Already out — nothing to do, and nothing to disclose.
-          return { groupDeleted: false };
+          return { groupDeleted: false, removedFromDescendantCount: 0 };
         }
         assertRemovable(target.role as GroupRole);
       }
 
-      await repository.removeMember(groupId, targetId);
-
-      // A group nobody belongs to is unreachable; keeping it would be a leak.
-      if ((await repository.countMembers(groupId)) === 0) {
-        await repository.deleteGroup(groupId);
-        return { groupDeleted: true };
+      // Cascading targetId out of groupId must not strand a sub-group only
+      // they can delete — the same reasoning as `assertCanLeave`, extended
+      // down the tree (`docs/specs/groups.md`). Applies whether targetId is
+      // leaving on their own or being removed by someone else: either way,
+      // their membership in every descendant goes with it.
+      const stranded = await repository.listOwnedPopulatedDescendants(groupId, targetId);
+      if (stranded.length > 0) {
+        throw new GroupAccessError('owner_cannot_leave');
       }
-      return { groupDeleted: false };
+
+      const { removedFromGroupIds, deletedGroupIds } =
+        await repository.removeMemberWithDescendants(groupId, targetId);
+
+      return {
+        groupDeleted: deletedGroupIds.includes(groupId),
+        removedFromDescendantCount: Math.max(0, removedFromGroupIds.length - 1),
+      };
+    },
+
+    async join(userId, groupId) {
+      const group = await repository.findGroupById(groupId);
+      // A root group has no "already visible without membership" story, so
+      // there is nothing to join directly — the same not_found a stranger
+      // gets. Joining only ever applies to a sub-group shown in its parent's
+      // own list.
+      if (!group || group.parentId === null) {
+        throw new GroupAccessError('not_found');
+      }
+      if (!(await repository.findMembership(group.parentId, userId))) {
+        throw new GroupAccessError('not_found');
+      }
+      await assertGroupEffectivelyActive(group);
+
+      await repository.addMembers(group.id, [userId]);
+      // Re-read rather than assume 'member': joining is idempotent, and a
+      // caller already a member — as an owner, say — must not be downgraded
+      // in the response.
+      const membership = await repository.findMembership(group.id, userId);
+      return detailOf(group, userId, membership!.role as GroupRole);
     },
 
     async getOrCreateInvite(userId, groupId) {
       const { group } = await requireManageable(userId, groupId);
-      assertActive(group);
+      await assertGroupEffectivelyActive(group);
       return invites.getOrCreate(targetFor(groupId), userId);
     },
 
     async rotateInvite(userId, groupId) {
       const { group } = await requireManageable(userId, groupId);
-      assertActive(group);
+      await assertGroupEffectivelyActive(group);
       return invites.rotate(targetFor(groupId), userId);
     },
 
@@ -311,12 +372,17 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
  */
 export function createGroupInviteHandler(repository: GroupsRepository): InviteHandler {
   /**
-   * A group that was deleted, or archived since the link was shared, takes no
-   * new members — the holder's next step is the same as for a dead link.
+   * A group that was deleted, or archived since the link was shared —
+   * itself, or any ancestor of it — takes no new members: the holder's next
+   * step is the same as for a dead link (`docs/specs/groups.md`).
    */
   async function resolveGroup(groupId: string | null): Promise<GroupRow> {
     const group = groupId ? await repository.findGroupById(groupId) : undefined;
-    if (!group || group.kind === 'pair' || group.archivedAt) {
+    if (!group || group.kind === 'pair') {
+      throw new InviteError('gone');
+    }
+    const ancestors = await repository.listAncestors(group.id);
+    if (isEffectivelyArchived(group, ancestors)) {
       throw new InviteError('gone');
     }
     return group;

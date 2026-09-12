@@ -24,6 +24,7 @@ const group: GroupDetail = {
   viewerRole: 'owner',
   subgroups: [],
   ancestors: [],
+  readOnly: false,
 };
 
 const existing: Transaction = {

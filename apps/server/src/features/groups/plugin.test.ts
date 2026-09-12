@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -106,6 +107,16 @@ describe('groups routes', () => {
       headers: user.headers,
       payload,
     });
+
+  const removeMember = (user: TestUser, groupId: string, targetId: string) =>
+    app.inject({
+      method: 'DELETE',
+      url: `/groups/${groupId}/members/${targetId}`,
+      headers: user.headers,
+    });
+
+  const joinGroup = (user: TestUser, groupId: string) =>
+    app.inject({ method: 'POST', url: `/groups/${groupId}/join`, headers: user.headers });
 
   const groupInvite = (user: TestUser, groupId: string) =>
     app.inject({
@@ -661,6 +672,270 @@ describe('groups routes', () => {
       expect(graceDetail.subgroups).toEqual([
         { id: sub.id, name: 'Ajaccio weekend', memberCount: 1, viewerIsMember: false },
       ]);
+    });
+  });
+
+  describe('sub-group membership cascade', () => {
+    it('removes a leaving member from every descendant too', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+
+      const response = await removeMember(grace, root.id, grace.userId);
+
+      expect(response.statusCode).toBe(204);
+      expect((await getGroup(ada, root.id)).json().group.memberCount).toBe(1);
+      expect((await getGroup(ada, sub.id)).json().group.memberCount).toBe(1);
+      expect((await listGroups(grace)).json()).toEqual({ groups: [] });
+    });
+
+    it('deletes a sub-group left with nobody in it by the cascade', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      // Grace owns the sub-group and is its only member — ada never joined it.
+      const sub = await createdSubgroup(grace, root.id, 'Grace solo trip');
+
+      const response = await removeMember(grace, root.id, grace.userId);
+
+      expect(response.statusCode).toBe(204);
+      expect(await app.db.select().from(groups).where(eq(groups.id, sub.id))).toHaveLength(0);
+    });
+
+    it("refuses to let the owner leave while they solely own a populated sub-group", async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId, alan.userId]);
+      // Ada owns the sub-group; grace is also in it. Leaving root would
+      // cascade ada out of the sub-group too, stranding grace there with no
+      // owner and nobody able to delete it.
+      await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+
+      const response = await removeMember(ada, root.id, ada.userId);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'owner_cannot_leave' });
+    });
+
+    it('refuses to remove a member who solely owns a populated sub-group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      await befriend(grace, alan);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId, alan.userId]);
+      // Grace owns the sub-group; alan is also in it. Ada (root's owner)
+      // removing grace from root would strand alan in the sub-group the same
+      // way grace leaving on her own would.
+      await createdSubgroup(grace, root.id, 'Ajaccio weekend', [alan.userId]);
+
+      const response = await removeMember(ada, root.id, grace.userId);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'owner_cannot_leave' });
+    });
+
+    it('allows leaving when the owned sub-group has no other members', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      // Ada is alone in both root and the sub-group — leaving root is "alone,
+      // leaving is deleting" (unaffected by the new tree check), and the
+      // sub-group has nobody else in it to strand.
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await removeMember(ada, root.id, ada.userId);
+
+      expect(response.statusCode).toBe(204);
+      expect(await app.db.select().from(groups).where(eq(groups.id, root.id))).toHaveLength(0);
+      expect(await app.db.select().from(groups).where(eq(groups.id, sub.id))).toHaveLength(0);
+    });
+  });
+
+  describe('joining a sub-group directly', () => {
+    it('lets a member of the parent join a visible sub-group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await joinGroup(grace, sub.id);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group).toMatchObject({ id: sub.id, memberCount: 2 });
+      expect((await getGroup(grace, sub.id)).statusCode).toBe(200);
+    });
+
+    it('is idempotent and preserves an existing role', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await joinGroup(ada, sub.id);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group.viewerRole).toBe('owner');
+    });
+
+    it('refuses to join a root group directly', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+
+      const response = await joinGroup(ada, root.id);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: 'group_not_found' });
+    });
+
+    it('refuses a non-member of the parent, without disclosing the sub-group', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await joinGroup(alan, sub.id);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: 'group_not_found' });
+    });
+
+    it('refuses to join an effectively archived sub-group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      await patchGroup(ada, root.id, { archived: true });
+
+      const response = await joinGroup(grace, sub.id);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+  });
+
+  describe('accessing an unjoined sub-group of a group the caller belongs to', () => {
+    it('answers "join required" rather than "not found"', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await getGroup(grace, sub.id);
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'join_required' });
+    });
+
+    it('applies the same answer to other group routes, not only GET', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const attempts = [
+        patchGroup(grace, sub.id, { name: 'Hijacked' }),
+        app.inject({
+          method: 'POST',
+          url: `/groups/${sub.id}/members`,
+          headers: grace.headers,
+          // Any syntactically valid body: `join_required` is thrown before
+          // the friend check ever runs.
+          payload: { memberIds: [ada.userId] },
+        }),
+      ];
+
+      for (const attempt of await Promise.all(attempts)) {
+        expect(attempt.statusCode).toBe(403);
+        expect(attempt.json()).toEqual({ error: 'join_required' });
+      }
+    });
+
+    it('never applies transitively, to a sibling or grandchild', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const subA = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const subB = await createdSubgroup(ada, root.id, 'Bastia weekend');
+      const grandchild = await createdSubgroup(ada, subA.id, 'Beach day');
+
+      // Grace is a member of root and can see (and join_required into) subA
+      // and subB directly, but knows nothing of subA's own child.
+      expect((await getGroup(grace, subB.id)).json()).toEqual({ error: 'join_required' });
+      expect((await getGroup(grace, grandchild.id)).json()).toEqual({ error: 'group_not_found' });
+    });
+  });
+
+  describe('effective archive for sub-groups', () => {
+    it('marks a sub-group read-only when an ancestor is archived, without touching its own flag', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      await patchGroup(ada, root.id, { archived: true });
+      const detail = (await getGroup(ada, sub.id)).json().group;
+
+      expect(detail.archivedAt).toBeNull();
+      expect(detail.readOnly).toBe(true);
+
+      await patchGroup(ada, root.id, { archived: false });
+      const restored = (await getGroup(ada, sub.id)).json().group;
+      expect(restored.readOnly).toBe(false);
+    });
+
+    it('refuses to add a member to a sub-group whose ancestor is archived', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      await patchGroup(ada, root.id, { archived: true });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/groups/${sub.id}/members`,
+        headers: ada.headers,
+        payload: { memberIds: [grace.userId] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
+    it('refuses to issue an invitation for a sub-group whose ancestor is archived', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      await patchGroup(ada, root.id, { archived: true });
+
+      const response = await groupInvite(ada, sub.id);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
+    it('treats a sub-group invitation as a dead link once an ancestor is archived', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const { invite } = (await groupInvite(ada, sub.id)).json();
+
+      await patchGroup(ada, root.id, { archived: true });
+      const response = await acceptInvite(alan, invite.code);
+
+      expect(response.statusCode).toBe(410);
+      expect(response.json()).toEqual({ error: 'invite_gone' });
     });
   });
 

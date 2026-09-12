@@ -215,17 +215,22 @@ caller's **membership** before anything else.
 
 A group the caller does not belong to is answered `404 { "error": "group_not_found" }`,
 never `403` — a non-member must not be able to tell a group they cannot see from one that
-does not exist.
+does not exist. **The one exception is `join_required`**: a member of a group's immediate
+parent who has not joined it already knows it exists — it is shown to them in the parent's
+own `subgroups` list — so every route that would otherwise answer `group_not_found`
+answers `403 { "error": "join_required" }` for exactly that case instead
+(`docs/specs/groups.md`). This never applies transitively to a sibling or grandchild.
 
 Shared error codes:
 
 | Status | Code                   | Meaning                                                    |
 | ------ | ---------------------- | ---------------------------------------------------------- |
 | `404`  | `group_not_found`      | No such group, or the caller is not a member                |
+| `403`  | `join_required`        | The caller belongs to the group's immediate parent but hasn't joined it |
 | `403`  | `not_group_owner`      | Deleting is owner-only                                      |
 | `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
 | `409`  | `group_archived`       | An archived group, or one whose ancestor is archived, takes no new members and issues no links |
-| `409`  | `owner_cannot_leave`   | The owner cannot leave while other members remain           |
+| `409`  | `owner_cannot_leave`   | The owner cannot leave — or be removed — while other members remain in the group or in a sub-group they solely own |
 | `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
@@ -233,10 +238,12 @@ Shared error codes:
 `GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is `null` for a root
 group; `depth` is `0` for a root group and capped at `4`; `subgroupCount` is the number of
 *direct* sub-groups only. `GroupDetail` adds `members` (a `FriendSummary` plus `role`),
-`viewerRole`, `subgroups` (the group's direct sub-groups — see below) and `ancestors`
-(root-first, empty for a root group). A **pair group stores no name**: the API fills it
-with the *other* member's name, so each side sees who they share with, and it can neither
-have a parent nor be one.
+`viewerRole`, `subgroups` (the group's direct sub-groups — see below), `ancestors`
+(root-first, empty for a root group) and `readOnly` — `true` when the group itself is
+archived *or any ancestor of it is*; for a root group this always equals
+`archivedAt !== null`, since it has no ancestors. A **pair group stores no name**: the API
+fills it with the *other* member's name, so each side sees who they share with, and it can
+neither have a parent nor be one.
 
 A `subgroups` entry is `{ id, name, memberCount, viewerIsMember }` — enough to decide
 whether to open it (already a member) or join it, never a member list. An `ancestors`
@@ -296,11 +303,29 @@ Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetai
 ### `DELETE /groups/:groupId/members/:userId`
 
 Remove a member, or leave when `userId` is the caller. Response `204`, and removing
-someone who already left is a no-op. When the last member leaves, the group is deleted
-with its contents.
+someone who already left is a no-op. This also removes that person from every one of
+`groupId`'s descendants, since nobody can remain in a sub-group of a group they are no
+longer part of (`docs/specs/groups.md`). When the last member of a group leaves, it is
+deleted with its contents; the same applies to any descendant left with nobody in it by
+this cascade.
 
 The **owner cannot be removed** by another member: that would leave a group nobody is
-allowed to delete. They leave on their own terms, or delete it.
+allowed to delete. They leave on their own terms, or delete it. The same refusal
+(`409 owner_cannot_leave`) now also covers cascading someone out of a sub-group they solely
+own while others remain in it — leaving or being removed from `groupId` would strand it.
+
+### `POST /groups/:groupId/join`
+
+Join a sub-group that is visible because the caller already belongs to its immediate
+parent — lighter than an invitation link: no friendship check, since membership in the
+parent is already a stronger signal of trust. Joins that sub-group only; the caller's
+membership in every one of its ancestors already holds (`docs/specs/groups.md`).
+Idempotent — calling it again when already a member returns the group unchanged, without
+altering an existing role (e.g. an owner stays the owner).
+
+Response `200 { "group": "<GroupDetail>" }`. `404 group_not_found` for a root group, or for
+a sub-group whose immediate parent the caller does not belong to. `409 group_archived` when
+the sub-group or an ancestor of it is archived.
 
 ### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
 

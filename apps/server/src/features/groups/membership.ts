@@ -7,10 +7,14 @@ import type { GroupRow } from '../../db/schema.js';
  *
  * `not_found` covers both "no such group" and "you are not a member": a
  * non-member must not be able to tell a group they cannot see from one that
- * does not exist.
+ * does not exist. `join_required` is the one deliberate exception: a member
+ * of a group's immediate parent who has not joined it already knows it
+ * exists — it is shown to them in the parent's own sub-group list
+ * (`docs/specs/groups.md`).
  */
 export type GroupAccessReason =
   | 'not_found'
+  | 'join_required'
   | 'not_owner'
   | 'pair_immutable'
   | 'archived'
@@ -50,11 +54,17 @@ export function assertActive(group: GroupRow): void {
  * archiving a group makes every sub-group of it effectively archived too,
  * without writing anything to those sub-groups (`docs/specs/groups.md`).
  * `ancestors` is the caller's own `listAncestors(group.id)` result; passed in
- * rather than fetched here so this stays a plain, synchronous assertion like
- * every other one in this module.
+ * rather than fetched here so this stays a plain, synchronous predicate like
+ * every other check in this module. The single definition both the
+ * throwing assertion below and `GroupDetail.readOnly` are built from.
  */
+export function isEffectivelyArchived(group: GroupRow, ancestors: readonly GroupRow[]): boolean {
+  return group.archivedAt !== null || ancestors.some((ancestor) => ancestor.archivedAt !== null);
+}
+
+/** Throws when {@link isEffectivelyArchived} would be `true`. */
 export function assertEffectivelyActive(group: GroupRow, ancestors: readonly GroupRow[]): void {
-  if (group.archivedAt || ancestors.some((ancestor) => ancestor.archivedAt !== null)) {
+  if (isEffectivelyArchived(group, ancestors)) {
     throw new GroupAccessError('archived');
   }
 }

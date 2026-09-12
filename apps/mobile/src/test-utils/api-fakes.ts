@@ -66,6 +66,7 @@ export const groupDetail = {
   viewerRole: 'owner' as const,
   subgroups: [],
   ancestors: [],
+  readOnly: false,
 };
 
 export const transaction = {

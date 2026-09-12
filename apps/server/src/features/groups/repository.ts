@@ -1,5 +1,5 @@
 import type { GroupRole } from '@splitcount/shared';
-import { aliasedTable, and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
@@ -26,6 +26,13 @@ export interface RootGroupSummary extends GroupWithCount {
 export interface MemberWithUser {
   user: UserRow;
   role: GroupRole;
+}
+
+export interface RemoveMemberResult {
+  /** Every group, from `groupId` down, the person actually lost membership at. */
+  removedFromGroupIds: string[];
+  /** Of those, the ones left with no members afterward, and deleted. */
+  deletedGroupIds: string[];
 }
 
 export interface CreateGroupInput {
@@ -63,6 +70,25 @@ export interface GroupsRepository {
    */
   addMembers(groupId: string, userIds: readonly string[]): Promise<string[]>;
   removeMember(groupId: string, userId: string): Promise<void>;
+  /**
+   * Remove `userId` from `groupId` and from every one of its descendants —
+   * nobody can remain in a sub-group of a group they are no longer part of
+   * (`docs/specs/groups.md`). Also deletes any of those groups left with no
+   * members afterward, cascading their own remaining sub-tree through the
+   * database's foreign key.
+   */
+  removeMemberWithDescendants(groupId: string, userId: string): Promise<RemoveMemberResult>;
+  /**
+   * Of `groupId`'s descendants, the ones where `userId` is the owner *and*
+   * someone else still belongs to it — cascading `userId` out of `groupId`
+   * would strand such a sub-group, since it would be left with no owner and
+   * other members still in it. Used to extend the "owner cannot leave"
+   * guard down the tree.
+   */
+  listOwnedPopulatedDescendants(
+    groupId: string,
+    userId: string,
+  ): Promise<{ id: string; name: string | null }[]>;
   /**
    * The friendship joining two users, if they are friends. Read directly:
    * `friendships` is shared domain data, like `users`.
@@ -125,6 +151,25 @@ async function fetchAncestorIds(db: Database, groupId: string): Promise<string[]
       WHERE g.parent_id IS NOT NULL
     )
     SELECT id FROM ancestors
+  `);
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Every descendant id of a group, at any depth, as a plain list — used both
+ * to build `listDescendantIds` and to cascade a membership removal down the
+ * tree. Bounded the same way `fetchAncestorIds` is (`docs/specs/groups.md`).
+ */
+async function fetchDescendantIds(db: Database, groupId: string): Promise<string[]> {
+  const { rows } = await db.execute<{ id: string }>(sql`
+    WITH RECURSIVE descendants(id) AS (
+      SELECT id FROM groups WHERE parent_id = ${groupId}
+      UNION ALL
+      SELECT g.id
+      FROM groups g
+      JOIN descendants d ON g.parent_id = d.id
+    )
+    SELECT id FROM descendants
   `);
   return rows.map((row) => row.id);
 }
@@ -306,6 +351,75 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
     },
 
+    async removeMemberWithDescendants(groupId, userId) {
+      const scope = [groupId, ...(await fetchDescendantIds(db, groupId))];
+
+      const removed = await db
+        .delete(groupMembers)
+        .where(and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, scope)))
+        .returning({ groupId: groupMembers.groupId });
+
+      if (removed.length === 0) {
+        return { removedFromGroupIds: [], deletedGroupIds: [] };
+      }
+
+      // Any of the touched groups left with nobody in it is gone too — the
+      // same "a group nobody belongs to is unreachable" rule as a single
+      // group's last member leaving, applied at every level this reached.
+      // Deleting it cascades its *own* remaining sub-tree through
+      // `groups.parent_id`, so nothing further is needed for a deeper branch
+      // that became empty this same way.
+      const deleted = await db
+        .delete(groups)
+        .where(
+          and(
+            inArray(groups.id, scope),
+            notExists(
+              db
+                .select({ id: groupMembers.id })
+                .from(groupMembers)
+                .where(eq(groupMembers.groupId, groups.id)),
+            ),
+          ),
+        )
+        .returning({ id: groups.id });
+
+      return {
+        removedFromGroupIds: removed.map((row) => row.groupId),
+        deletedGroupIds: deleted.map((row) => row.id),
+      };
+    },
+
+    async listOwnedPopulatedDescendants(groupId, userId) {
+      const descendantIds = await fetchDescendantIds(db, groupId);
+      if (descendantIds.length === 0) {
+        return [];
+      }
+
+      // Joined twice against `group_members`: once to require `userId` owns
+      // the group, once to require someone *else* still belongs to it —
+      // `selectDistinct` collapses the fan-out from that second join when
+      // more than one other member exists.
+      const otherMember = aliasedTable(groupMembers, 'other_member');
+
+      return db
+        .selectDistinct({ id: groups.id, name: groups.name })
+        .from(groups)
+        .innerJoin(
+          groupMembers,
+          and(
+            eq(groupMembers.groupId, groups.id),
+            eq(groupMembers.userId, userId),
+            eq(groupMembers.role, 'owner'),
+          ),
+        )
+        .innerJoin(
+          otherMember,
+          and(eq(otherMember.groupId, groups.id), ne(otherMember.userId, userId)),
+        )
+        .where(inArray(groups.id, descendantIds));
+    },
+
     async findFriendship(pair) {
       const [row] = await db
         .select({ id: friendships.id })
@@ -404,17 +518,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listDescendantIds(groupId) {
-      const { rows } = await db.execute<{ id: string }>(sql`
-        WITH RECURSIVE descendants(id) AS (
-          SELECT id FROM groups WHERE parent_id = ${groupId}
-          UNION ALL
-          SELECT g.id
-          FROM groups g
-          JOIN descendants d ON g.parent_id = d.id
-        )
-        SELECT id FROM descendants
-      `);
-      return rows.map((row) => row.id);
+      return fetchDescendantIds(db, groupId);
     },
 
     async listChildren(groupId) {

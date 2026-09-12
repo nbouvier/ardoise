@@ -87,6 +87,11 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - Avoid speculative abstraction and indirection: add structure at the second concrete use.
 - Path alias in mobile: `@/*` → `apps/mobile/src/*`, `@/assets/*` → `apps/mobile/assets/*`.
 - Server relative imports use `.js` extensions (NodeNext resolution).
+- In a raw `sql` template (`db.execute`), filter a set of ids with drizzle's `inArray()`
+  helper, never `= ANY(${array})`: binding a JS array as a single template parameter does
+  not reliably produce a Postgres array under the drivers this project runs on (observed
+  while adding nested groups' `listOwnedPopulatedDescendants` — it failed at runtime, not
+  typecheck, since `db.execute` isn't statically checked against the query text).
 
 ## Tooling
 
@@ -150,6 +155,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | Membership in a group implies membership in every ancestor, enforced at every write path (add, invite acceptance, join) rather than checked lazily on read | Makes "who can see this group's transactions" answerable from that group's own membership row alone, with no need to walk up the tree on every read — the invariant is paid for once, at the few places membership changes, not on every access |
 | 2026-09-12 | A member of a group's immediate parent who has not joined it gets `403 join_required`, not `404`, when asking for that group | The one deliberate exception to "non-membership is always 404": the caller already legitimately knows the group exists, because it is shown to them in the parent's own sub-group list. Kept narrow — it never applies transitively to a sibling's or grandchild's existence |
 | 2026-09-12 | A group's rolled-up balance and its statistics' "including sub-groups" scope are both resolved to "the group plus only the descendants the caller is a member of", entirely server-side | Consistent with `docs/specs/groups.md`'s visibility rule: a sub-group being *visible* must never leak into what its balance or statistics disclose about it |
+| 2026-09-12 | `GroupDetail.readOnly` is a derived boolean ("this group or any ancestor of it is archived"), not a second stored flag | One field the client (and `transactions`' `requireActive`) can check without walking the tree itself; a root group's `readOnly` always equals its own `archivedAt !== null`, so nothing changes for the common case |
+| 2026-09-12 | `join_required` is thrown from `requireMembership` itself, the single choke point almost every group route already shares, rather than added route by route | Every group route gets the exception uniformly for free, and there is exactly one place that can get it wrong |
+| 2026-09-12 | Leaving or removing someone from a group cascades to every descendant via `removeMemberWithDescendants`, and any of those left with nobody in it is deleted in the same statement | Mirrors the existing single-group "last member leaving deletes it" rule, applied at every level the removal reaches; deleting a group still cascades its own remaining sub-tree through the database FK, so nothing recurses in application code |
+| 2026-09-12 | The owner-cannot-leave guard extends to "would this cascade strand a sub-group the person solely owns", checked for both self-leave and forced removal | The failure mode (a sub-group left with an absent owner and other members still in it) is identical either way; scoping the guard to only self-leave would leave the forced-removal path free to create exactly the orphaned group the original guard exists to prevent |
 
 ## Open items
 

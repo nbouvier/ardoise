@@ -36,6 +36,7 @@ const trip: GroupDetail = {
   viewerRole: 'owner',
   subgroups: [],
   ancestors: [],
+  readOnly: false,
 };
 
 /** The implicit group two friends share: named after the other person. */

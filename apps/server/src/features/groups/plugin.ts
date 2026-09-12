@@ -177,7 +177,7 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId/members/:userId',
       authenticated,
       route(memberParamsSchema, async ({ params, userId, reply }) => {
-        const { groupDeleted } = await groups.removeMember(
+        const { groupDeleted, removedFromDescendantCount } = await groups.removeMember(
           userId,
           params.groupId,
           params.userId,
@@ -188,10 +188,23 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
             groupId: params.groupId,
             left: params.userId === userId,
             groupDeleted,
+            removedFromDescendantCount,
           },
           'groups.members.removed',
         );
         return reply.code(204).send();
+      }),
+    );
+
+    // A sub-group visible in a group the caller already belongs to; lighter
+    // than an invitation link (no friendship check, docs/specs/groups.md).
+    app.post(
+      '/groups/:groupId/join',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply }) => {
+        const group = await groups.join(userId, params.groupId);
+        app.log.info({ userId, groupId: group.id }, 'groups.joined');
+        return reply.send({ group });
       }),
     );
 
