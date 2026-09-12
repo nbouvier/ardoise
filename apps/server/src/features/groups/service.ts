@@ -168,6 +168,18 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         children.map((child) => child.group.id),
       ),
     );
+    // Only a joined sub-group contributes a balance — an unjoined one has the
+    // viewer on none of its transactions, so it is always `0` without a query
+    // (mirrors `rolledUpBalance`'s own reasoning for an unvisited descendant).
+    const childBalanceEntries = await Promise.all(
+      children
+        .filter((child) => joinedChildIds.has(child.group.id))
+        .map(async (child) => {
+          const balance = await rolledUpBalance(repository, ledger, viewerId, child.group);
+          return [child.group.id, balance] as const;
+        }),
+    );
+    const childBalances = new Map(childBalanceEntries);
 
     return {
       ...summaryOf(
@@ -189,6 +201,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         name: child.group.name ?? 'Untitled group',
         memberCount: child.memberCount,
         viewerIsMember: joinedChildIds.has(child.group.id),
+        viewerBalanceCents: childBalances.get(child.group.id) ?? 0,
       })),
       ancestors: ancestors.map((ancestor) => ({
         id: ancestor.id,

@@ -565,7 +565,13 @@ describe('groups routes', () => {
       const parentDetail = (await getGroup(ada, root.id)).json().group;
       expect(parentDetail.subgroupCount).toBe(1);
       expect(parentDetail.subgroups).toEqual([
-        { id: sub.id, name: 'Ajaccio weekend', memberCount: 1, viewerIsMember: true },
+        {
+          id: sub.id,
+          name: 'Ajaccio weekend',
+          memberCount: 1,
+          viewerIsMember: true,
+          viewerBalanceCents: 0,
+        },
       ]);
     });
 
@@ -702,7 +708,13 @@ describe('groups routes', () => {
       const graceDetail = (await getGroup(grace, root.id)).json().group;
 
       expect(graceDetail.subgroups).toEqual([
-        { id: sub.id, name: 'Ajaccio weekend', memberCount: 1, viewerIsMember: false },
+        {
+          id: sub.id,
+          name: 'Ajaccio weekend',
+          memberCount: 1,
+          viewerIsMember: false,
+          viewerBalanceCents: 0,
+        },
       ]);
     });
   });
@@ -999,6 +1011,21 @@ describe('groups routes', () => {
 
       expect(listed[0].viewerBalanceCents).toBe(500 + 200);
       expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(700);
+    });
+
+    it("carries a joined sub-group's own rolled-up balance in its parent's subgroups list", async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+      await recordExpense(ada, sub.id, ada.userId, [ada.userId, grace.userId], 400);
+
+      const parentDetail = (await getGroup(ada, root.id)).json().group;
+
+      expect(parentDetail.subgroups).toEqual([
+        expect.objectContaining({ id: sub.id, viewerBalanceCents: 200 }),
+      ]);
     });
 
     it('excludes a sub-group the viewer has never joined', async () => {

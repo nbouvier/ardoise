@@ -67,6 +67,8 @@ export const subgroupSummarySchema = z.object({
   name: z.string().min(1),
   memberCount: z.number().int().positive(),
   viewerIsMember: z.boolean(),
+  /** Rolled up over this sub-group's own sub-tree, `0` when not a member. */
+  viewerBalanceCents: z.number().int(),
 });
 export type SubgroupSummary = z.infer<typeof subgroupSummarySchema>;
 

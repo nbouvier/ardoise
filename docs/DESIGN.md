@@ -96,15 +96,20 @@ read-only, rows render but are not pressable. Empty state: an explanation and th
 
 **Sub-groups section** (`SubgroupsSection`, standard groups only — absent on a pair
 group): a "Sub-groups" heading with a small "+ Create" link, then every sub-group the
-viewer has already joined as a row (`SubgroupRow`: name + member count, tappable to open
-directly). Ones the viewer has **not** joined are hidden behind a "Show sub-groups I'm not
-in (n)" toggle, mirroring the group list's archived-groups pattern; revealed, they render
-muted with "n members · not joined" and tapping one opens a "Join this group?" `Alert`
+viewer has already joined as a row (`SubgroupRow`: name, member count, and — same wording
+and colour as a top-level `GroupRow`, `groupBalanceLabel`/`balanceTone` off the sub-group's
+own `viewerBalanceCents` — where the viewer stands across *that* sub-group's own sub-tree;
+tappable to open directly). Ones the viewer has **not** joined are hidden behind a "Show
+sub-groups I'm not in (n)" toggle, mirroring the group list's archived-groups pattern;
+revealed, they render muted with "n members · not joined" and no balance line (not being a
+member, it is always exactly zero) and tapping one opens a "Join this group?" `Alert`
 instead of navigating — confirming calls the lighter join endpoint (no friendship check)
 and opens the group only once it succeeds. "+ Create" opens `CreateGroupScreen` with the
 current group as the implicit parent. The section renders nothing when there are no
 sub-groups and the group is read-only, so it never appears as a permanent empty box on an
-archived leaf group.
+archived leaf group. The group screen's own data (including this list) refetches whenever
+`groupsChanged` fires — e.g. right after creating a sub-group and landing on its own
+screen, coming back here shows it immediately, not only after a fresh navigation.
 
 The header carries two small text buttons: **"Stats"** (the per-category breakdown, see
 "Group statistics" below) and **"Details"**. Both open sheets; both are present on every

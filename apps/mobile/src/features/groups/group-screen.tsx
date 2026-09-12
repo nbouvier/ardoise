@@ -26,6 +26,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
+import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
@@ -560,6 +561,13 @@ function SubgroupRow({
         <ThemedText type="small" themeColor="textSecondary">
           {muted ? `${members} · not joined` : members}
         </ThemedText>
+        {/* Not joined means none of the viewer's transactions can be in this
+            sub-tree, so the balance is always exactly 0 — not worth a line. */}
+        {muted ? null : (
+          <ThemedText type="small" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
+            {groupBalanceLabel(subgroup.viewerBalanceCents)}
+          </ThemedText>
+        )}
       </ThemedView>
     </Pressable>
   );

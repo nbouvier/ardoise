@@ -251,10 +251,13 @@ archived *or any ancestor of it is*; for a root group this always equals
 fills it with the *other* member's name, so each side sees who they share with, and it can
 neither have a parent nor be one.
 
-A `subgroups` entry is `{ id, name, memberCount, viewerIsMember }` — enough to decide
-whether to open it (already a member) or join it, never a member list. An `ancestors`
-entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own `subgroups` —
-they are read from the sub-group's own `GET /groups/:groupId` when opened.
+A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
+enough to decide whether to open it (already a member) or join it and show where the
+viewer stands, never a member list. `viewerBalanceCents` is rolled up over *that*
+sub-group's own sub-tree exactly like the top-level figure (see above), and is always `0`
+when `viewerIsMember` is `false`, since a non-member is on none of its transactions. An
+`ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own
+`subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when opened.
 
 ### `GET /groups`
 

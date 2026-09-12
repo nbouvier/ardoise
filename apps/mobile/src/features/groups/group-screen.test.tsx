@@ -7,13 +7,14 @@ import type {
   TransactionsListResponse,
 } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
 
 import { GroupScreen } from './group-screen';
+import { groupsChanged } from './groups-changed';
 
 const ada: FriendSummary = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -356,6 +357,7 @@ describe('GroupScreen', () => {
       name: 'Ajaccio weekend',
       memberCount: 2,
       viewerIsMember: true,
+      viewerBalanceCents: -1250,
     };
 
     const unjoinedSub: SubgroupSummary = {
@@ -363,6 +365,7 @@ describe('GroupScreen', () => {
       name: 'Bastia weekend',
       memberCount: 1,
       viewerIsMember: false,
+      viewerBalanceCents: 0,
     };
 
     it('shows a joined sub-group and opens it directly', async () => {
@@ -376,6 +379,14 @@ describe('GroupScreen', () => {
         params: { id: joinedSub.id },
       });
       expect(mockJoinGroup).not.toHaveBeenCalled();
+    });
+
+    it('shows a joined sub-group’s own rolled-up balance', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+
+      expect(await screen.findByText('You owe 12.50')).toBeTruthy();
     });
 
     it('hides an unjoined sub-group behind a toggle', async () => {
@@ -471,6 +482,20 @@ describe('GroupScreen', () => {
       await fireEvent.press(await screen.findByText('+ Create'));
 
       expect(await screen.findByText('New sub-group')).toBeTruthy();
+    });
+
+    it('reloads its subgroups when notified — e.g. right after creating one', async () => {
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Corsica 2026');
+      expect(mockFetchGroup).toHaveBeenCalledTimes(1);
+
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+      await act(async () => {
+        groupsChanged.notify();
+      });
+
+      expect(await screen.findByText('Ajaccio weekend')).toBeTruthy();
+      expect(mockFetchGroup).toHaveBeenCalledTimes(2);
     });
   });
 });
