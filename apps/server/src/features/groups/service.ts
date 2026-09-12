@@ -22,6 +22,7 @@ import {
   assertWithinDepthLimit,
   GroupAccessError,
   isEffectivelyArchived,
+  isPairRooted,
 } from './membership.js';
 import type { GroupsRepository, MemberWithUser } from './repository.js';
 
@@ -131,6 +132,52 @@ async function rolledUpBalance(
   return [group.id, ...descendantIds].reduce((sum, id) => sum + (balances.get(id) ?? 0), 0);
 }
 
+/**
+ * The two-person ceiling a pair-rooted tree can never exceed, or `null` for
+ * an ordinary standard-rooted one. Every way a third person could end up in
+ * `group` — picked as an initial member, added later, or joining through an
+ * invite link — inserts a membership row that propagates up the tree
+ * (`docs/specs/groups.md`), which for a pair-rooted group would reach the
+ * friendship's own immutable group. Checking the candidate ids against this
+ * set at the point of insertion is what actually prevents that; `isPairRooted`
+ * alone only says whether the ceiling applies, not who it allows.
+ */
+async function pairCeiling(
+  repository: GroupsRepository,
+  group: GroupRow,
+): Promise<ReadonlySet<string> | null> {
+  const ancestors = await repository.listAncestors(group.id);
+  if (!isPairRooted(group, ancestors)) {
+    return null;
+  }
+  const root = ancestors[0] ?? group;
+  const members = await repository.listMembers(root.id);
+  return new Set(members.map((member) => member.user.id));
+}
+
+/** Throws `pair_immutable` when `candidateIds` would add someone `ceiling` does not already allow. */
+function assertWithinPairCeiling(
+  ceiling: ReadonlySet<string> | null,
+  candidateIds: readonly string[],
+): void {
+  if (ceiling && candidateIds.some((id) => !ceiling.has(id))) {
+    throw new GroupAccessError('pair_immutable');
+  }
+}
+
+/**
+ * An invite link has no friendship check at all — whoever holds it joins
+ * (`InvitesService`) — so it is refused outright for a pair-rooted group
+ * rather than checked against the ceiling on acceptance: there is no one
+ * left it could legitimately be for, since the only other allowed person is
+ * already reachable through the ordinary unjoined-sub-group toggle.
+ */
+async function assertNotPairRooted(repository: GroupsRepository, group: GroupRow): Promise<void> {
+  if (await pairCeiling(repository, group)) {
+    throw new GroupAccessError('pair_immutable');
+  }
+}
+
 export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const { repository, invites, ledger, now = () => new Date() } = deps;
 
@@ -211,6 +258,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // has no ancestors — this only differs from `archivedAt !== null` for a
       // sub-group whose ancestor is archived (`docs/specs/groups.md`).
       readOnly: isEffectivelyArchived(group, ancestors),
+      pairRooted: isPairRooted(group, ancestors),
     };
   }
 
@@ -322,20 +370,24 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     async create(userId, input) {
       let parentId: string | null = null;
       let depth = 0;
+      let ceiling: ReadonlySet<string> | null = null;
 
       if (input.parentId) {
         // Creating a sub-group is available to any member of the parent —
         // the same people who can add a friend to it — so this is exactly
-        // the membership check every other group action already uses.
+        // the membership check every other group action already uses. The
+        // parent itself may be a pair group: a friendship can have
+        // sub-groups too, just capped at its own two people (`pairCeiling`).
         const { group: parent } = await requireMembership(userId, input.parentId);
-        assertNotPairGroup(parent);
         await assertGroupEffectivelyActive(parent);
         assertWithinDepthLimit(parent.depth);
         parentId = parent.id;
         depth = parent.depth + 1;
+        ceiling = await pairCeiling(repository, parent);
       }
 
       const memberIds = await requireFriends(userId, input.memberIds ?? []);
+      assertWithinPairCeiling(ceiling, memberIds);
       const group = await repository.createGroup({
         name: input.name,
         ownerId: userId,
@@ -371,7 +423,9 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       const { group, role } = await requireManageable(userId, groupId);
       await assertGroupEffectivelyActive(group);
 
-      await repository.addMembers(groupId, await requireFriends(userId, memberIds));
+      const friendIds = await requireFriends(userId, memberIds);
+      assertWithinPairCeiling(await pairCeiling(repository, group), friendIds);
+      await repository.addMembers(groupId, friendIds);
       return detailOf(group, userId, role);
     },
 
@@ -435,12 +489,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     async getOrCreateInvite(userId, groupId) {
       const { group } = await requireManageable(userId, groupId);
       await assertGroupEffectivelyActive(group);
+      await assertNotPairRooted(repository, group);
       return invites.getOrCreate(targetFor(groupId), userId);
     },
 
     async rotateInvite(userId, groupId) {
       const { group } = await requireManageable(userId, groupId);
       await assertGroupEffectivelyActive(group);
+      await assertNotPairRooted(repository, group);
       return invites.rotate(targetFor(groupId), userId);
     },
 

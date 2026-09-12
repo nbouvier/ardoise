@@ -23,9 +23,21 @@ export interface CreateGroupScreenProps {
    * it, since this screen is only ever opened from inside that parent.
    */
   parentId?: string;
+  /**
+   * The parent is a pair group, or is itself nested under one — the new
+   * sub-group can only ever contain that friendship's own two people, so
+   * there is no one to offer in a friend picker (`docs/specs/groups.md`). The
+   * other person joins it themselves from the parent's sub-groups list.
+   */
+  pairRooted?: boolean;
 }
 
-export function CreateGroupScreen({ onCreated, onCancel, parentId }: CreateGroupScreenProps) {
+export function CreateGroupScreen({
+  onCreated,
+  onCancel,
+  parentId,
+  pairRooted = false,
+}: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
   const [name, setName] = useState('');
@@ -84,11 +96,18 @@ export function CreateGroupScreen({ onCreated, onCancel, parentId }: CreateGroup
         ]}
       />
 
-      <ThemedText type="small" themeColor="textSecondary">
-        Add friends now, or share a link later.
-      </ThemedText>
-
-      <FriendPicker selected={selected} onToggle={toggle} />
+      {pairRooted ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Just the two of you here too — no one else can be added.
+        </ThemedText>
+      ) : (
+        <>
+          <ThemedText type="small" themeColor="textSecondary">
+            Add friends now, or share a link later.
+          </ThemedText>
+          <FriendPicker selected={selected} onToggle={toggle} />
+        </>
+      )}
 
       {error ? (
         <ThemedText type="small" style={styles.error}>

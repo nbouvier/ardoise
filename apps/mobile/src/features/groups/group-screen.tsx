@@ -146,8 +146,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   // A pair group belongs to a friendship: nobody can be added, and it cannot be
   // renamed, archived or deleted. Those actions are absent rather than
-  // disabled — they can never apply. Transactions are the exception: they work
-  // exactly like a standard group.
+  // disabled — they can never apply. Transactions and sub-groups are the
+  // exception: they both work exactly like a standard group, except every
+  // sub-group nested under a pair group is itself `pairRooted` (below).
   const managed = group.kind === 'standard';
   // The group's *own* archived flag — drives the archive toggle's own label
   // and action. `readOnly` is the effective one (itself or any ancestor
@@ -157,6 +158,13 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   // ancestors.
   const ownArchived = group.archivedAt !== null;
   const readOnly = group.readOnly;
+  // This group — or a pair group somewhere above it — can only ever contain
+  // the two people of a friendship, however deep its own sub-groups go
+  // (`docs/specs/groups.md`). "Add friends" and "share an invitation link"
+  // have no one left to add and are hidden; the other person still reaches
+  // it through the ordinary unjoined-sub-group toggle, since they already
+  // belong to every ancestor.
+  const pairRooted = group.pairRooted;
   const isOwner = group.viewerRole === 'owner';
   const alone = group.memberCount === 1;
   const hasSubgroups = group.subgroupCount > 0;
@@ -288,16 +296,17 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           <ViewerBalance amountCents={group.viewerBalanceCents} />
         </ThemedView>
 
-        {managed ? (
-          <SubgroupsSection
-            subgroups={group.subgroups}
-            readOnly={readOnly}
-            busy={busy}
-            onOpen={openGroup}
-            onJoin={confirmJoin}
-            onCreate={() => setSheet('createSubgroup')}
-          />
-        ) : null}
+        {/* Standard and pair groups can both have sub-groups — the pair
+            group's own DetailsSheet message covers the "no one new here"
+            part; this section is the same for both kinds. */}
+        <SubgroupsSection
+          subgroups={group.subgroups}
+          readOnly={readOnly}
+          busy={busy}
+          onOpen={openGroup}
+          onJoin={confirmJoin}
+          onCreate={() => setSheet('createSubgroup')}
+        />
 
         <TransactionList
           result={transactionsResult}
@@ -326,6 +335,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 balances={balancesResult}
                 managed={managed}
                 readOnly={readOnly}
+                pairRooted={pairRooted}
                 ownArchived={ownArchived}
                 isOwner={isOwner}
                 alone={alone}
@@ -343,6 +353,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
             {sheet === 'createSubgroup' ? (
               <CreateGroupScreen
                 parentId={groupId}
+                pairRooted={pairRooted}
                 onCreated={(created) => {
                   groupsChanged.notify();
                   setSheet(null);
@@ -643,6 +654,7 @@ function DetailsSheet({
   balances,
   managed,
   readOnly,
+  pairRooted,
   ownArchived,
   isOwner,
   alone,
@@ -660,6 +672,8 @@ function DetailsSheet({
   managed: boolean;
   /** Itself or an ancestor archived — gates what the server actually blocks. */
   readOnly: boolean;
+  /** This group's whole tree is capped at a friendship's two people — hides "Add friends"/"Invite". */
+  pairRooted: boolean;
   /** The group's own flag — drives the archive toggle's own label and action. */
   ownArchived: boolean;
   isOwner: boolean;
@@ -691,7 +705,14 @@ function DetailsSheet({
 
       {managed ? (
         <ThemedView style={styles.actions}>
-          {readOnly ? null : (
+          {pairRooted ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Just the two of you here too — the other person joins from the sub-groups list
+              above, not by invitation.
+            </ThemedText>
+          ) : null}
+
+          {readOnly || pairRooted ? null : (
             <>
               <Button label="Add friends" variant="secondary" disabled={busy} onPress={onAddFriends} />
               <Button
@@ -700,8 +721,10 @@ function DetailsSheet({
                 disabled={busy}
                 onPress={onInvite}
               />
-              <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
             </>
+          )}
+          {readOnly ? null : (
+            <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
           )}
 
           <Button

@@ -86,6 +86,11 @@ export type GroupAncestor = z.infer<typeof groupAncestorSchema>;
  * ancestors root-first, for a breadcrumb. `readOnly` is `true` when the group
  * itself is archived *or any ancestor of it is* — a root group's `readOnly`
  * always equals its own `archivedAt !== null`, since it has no ancestors.
+ * `pairRooted` is `true` when this group — or one of its ancestors — is the
+ * implicit space shared by two friends: it, and every sub-group nested inside
+ * it at any depth, can only ever contain those two people, so the client
+ * hides "add friends" and "share an invitation link" there and relies on the
+ * ordinary unjoined-sub-group toggle for the other person to join instead.
  */
 export const groupDetailSchema = groupSummarySchema.extend({
   members: z.array(groupMemberSchema),
@@ -93,6 +98,7 @@ export const groupDetailSchema = groupSummarySchema.extend({
   subgroups: z.array(subgroupSummarySchema),
   ancestors: z.array(groupAncestorSchema),
   readOnly: z.boolean(),
+  pairRooted: z.boolean(),
 });
 export type GroupDetail = z.infer<typeof groupDetailSchema>;
 

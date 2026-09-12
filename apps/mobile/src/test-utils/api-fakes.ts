@@ -68,6 +68,7 @@ export const groupDetail = {
   subgroups: [],
   ancestors: [],
   readOnly: false,
+  pairRooted: false,
 };
 
 export const transaction = {

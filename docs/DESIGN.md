@@ -94,22 +94,23 @@ absent when effectively archived. A row opens the same add/edit sheet, pre-fille
 read-only, rows render but are not pressable. Empty state: an explanation and the same
 "Add a transaction" action.
 
-**Sub-groups section** (`SubgroupsSection`, standard groups only — absent on a pair
-group): a "Sub-groups" heading with a small "+ Create" link, then every sub-group the
-viewer has already joined as a row (`SubgroupRow`: name, member count, and — same wording
-and colour as a top-level `GroupRow`, `groupBalanceLabel`/`balanceTone` off the sub-group's
-own `viewerBalanceCents` — where the viewer stands across *that* sub-group's own sub-tree;
-tappable to open directly). Ones the viewer has **not** joined are hidden behind a "Show
-sub-groups I'm not in (n)" toggle, mirroring the group list's archived-groups pattern;
-revealed, they render muted with "n members · not joined" and no balance line (not being a
-member, it is always exactly zero) and tapping one opens a "Join this group?" `Alert`
-instead of navigating — confirming calls the lighter join endpoint (no friendship check)
-and opens the group only once it succeeds. "+ Create" opens `CreateGroupScreen` with the
-current group as the implicit parent. The section renders nothing when there are no
-sub-groups and the group is read-only, so it never appears as a permanent empty box on an
-archived leaf group. The group screen's own data (including this list) refetches whenever
-`groupsChanged` fires — e.g. right after creating a sub-group and landing on its own
-screen, coming back here shows it immediately, not only after a fresh navigation.
+**Sub-groups section** (`SubgroupsSection`, shown on **both kinds of group**, including a
+pair group — a friendship can have sub-groups too): a "Sub-groups" heading with a small
+"+ Create" link, then every sub-group the viewer has already joined as a row
+(`SubgroupRow`: name, member count, and — same wording and colour as a top-level
+`GroupRow`, `groupBalanceLabel`/`balanceTone` off the sub-group's own `viewerBalanceCents`
+— where the viewer stands across *that* sub-group's own sub-tree; tappable to open
+directly). Ones the viewer has **not** joined are hidden behind a "Show sub-groups I'm not
+in (n)" toggle, mirroring the group list's archived-groups pattern; revealed, they render
+muted with "n members · not joined" and no balance line (not being a member, it is always
+exactly zero) and tapping one opens a "Join this group?" `Alert` instead of navigating —
+confirming calls the lighter join endpoint (no friendship check) and opens the group only
+once it succeeds. "+ Create" opens `CreateGroupScreen` with the current group as the
+implicit parent. The section renders nothing when there are no sub-groups and the group is
+read-only, so it never appears as a permanent empty box on an archived leaf group. The
+group screen's own data (including this list) refetches whenever `groupsChanged` fires —
+e.g. right after creating a sub-group and landing on its own screen, coming back here shows
+it immediately, not only after a fresh navigation.
 
 The header carries two small text buttons: **"Stats"** (the per-category breakdown, see
 "Group statistics" below) and **"Details"**. Both open sheets; both are present on every
@@ -129,14 +130,17 @@ longer shares that fetch — it reads `group.viewerBalanceCents` directly, so it
 to wait on and nothing to keep stale-but-stable during a reload.
 
 **One screen for both kinds of group**, in both the main view and the details sheet.
-**Transactions behave identically on a pair group** — the one thing that does. Every
-management action stays **absent**, not disabled, on a pair group, and the details
-sheet's closing line explains that it is just the two of them. For a standard group:
-"Add friends", "Share an invitation link" (both gone when effectively archived — the
-server actually blocks them), "Rename" (gone only when the group's **own** flag is
-archived, not an ancestor's — renaming is never blocked server-side), "Archive group" /
-"Reopen group" (always available, and always reflects the group's own flag, never an
-ancestor's), "Leave group" (hidden for an owner who still has company **or** who solely
+**Transactions and sub-groups behave identically on a pair group** — the two things that
+do. Every other management action stays **absent**, not disabled, on a pair group, and the
+details sheet's closing line explains that it is just the two of them. For a standard
+group: "Add friends", "Share an invitation link" (gone when effectively archived — the
+server actually blocks them — **or when the group is `pairRooted`**: itself the pair
+group, or a sub-group nested under one at any depth, which can only ever contain that
+friendship's own two people; a small note explains that the other person joins from the
+sub-groups list instead), "Rename" (gone only when the group's **own** flag is archived,
+not an ancestor's — renaming is never blocked server-side, `pairRooted` or not), "Archive
+group" / "Reopen group" (always available, and always reflects the group's own flag, never
+an ancestor's), "Leave group" (hidden for an owner who still has company **or** who solely
 owns a still-populated sub-group), and a red text-only "Delete this group" for the owner.
 Destructive actions confirm through an `Alert` that states what is lost, naming the
 sub-groups too when the group has any.
@@ -252,6 +256,12 @@ The same screen creates a **sub-group** when opened with a `parentId` (from the 
 screen's sub-groups section): the title reads "New sub-group", the button "Create
 sub-group", and the parent is implicit — there is no field for it, and no failure wording
 mentions it either, since the caller already knows which group they are in.
+
+When the parent is `pairRooted` (the pair group itself, or a sub-group nested under one),
+the friend picker is **not shown at all** — replaced by a short note that it is just the
+two of them here too — since the only other allowed person always already belongs to the
+new sub-group's own parent and simply joins it themselves from the sub-groups list;
+offering them in a picker would only fail on submit.
 
 ### Friend picker (`src/features/groups/friend-picker.tsx`)
 

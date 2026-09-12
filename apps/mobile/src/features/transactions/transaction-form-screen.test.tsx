@@ -26,6 +26,7 @@ const group: GroupDetail = {
   subgroups: [],
   ancestors: [],
   readOnly: false,
+  pairRooted: false,
 };
 
 const existing: Transaction = {

@@ -118,6 +118,14 @@ describe('groups routes', () => {
   const joinGroup = (user: TestUser, groupId: string) =>
     app.inject({ method: 'POST', url: `/groups/${groupId}/join`, headers: user.headers });
 
+  const addMembers = (user: TestUser, groupId: string, memberIds: string[]) =>
+    app.inject({
+      method: 'POST',
+      url: `/groups/${groupId}/members`,
+      headers: user.headers,
+      payload: { memberIds },
+    });
+
   const groupInvite = (user: TestUser, groupId: string) =>
     app.inject({
       method: 'POST',
@@ -586,16 +594,13 @@ describe('groups routes', () => {
       expect(listed[0]).toMatchObject({ id: root.id, subgroupCount: 1 });
     });
 
-    it('refuses to nest under a pair group', async () => {
+    it('reports a standard sub-group as not pair-rooted', async () => {
       const ada = await signIn('ada');
-      const grace = await signIn('grace');
-      await befriend(ada, grace);
-      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
 
-      const response = await createSubgroup(ada, pair.id, 'Nested');
-
-      expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({ error: 'pair_group_immutable' });
+      expect(root.pairRooted).toBe(false);
+      expect(sub.pairRooted).toBe(false);
     });
 
     it('refuses to create a sub-group under a group the caller does not belong to', async () => {
@@ -716,6 +721,136 @@ describe('groups routes', () => {
           viewerBalanceCents: 0,
         },
       ]);
+    });
+  });
+
+  describe('sub-groups of a pair group', () => {
+    it('creates a sub-group under the pair group two friends share', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+
+      const response = await createSubgroup(ada, pair.id, 'Ski trip');
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().group).toMatchObject({
+        kind: 'standard',
+        name: 'Ski trip',
+        parentId: pair.id,
+        depth: 1,
+        memberCount: 1,
+        pairRooted: true,
+      });
+    });
+
+    it('reports the pair group itself as pair-rooted', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+
+      expect(pair.pairRooted).toBe(true);
+    });
+
+    it('lets the other friend see and join it, exactly like any other sub-group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      const graceView = (await getGroup(grace, pair.id)).json().group;
+      expect(graceView.subgroups).toEqual([
+        expect.objectContaining({ id: sub.id, viewerIsMember: false }),
+      ]);
+
+      const joined = await joinGroup(grace, sub.id);
+      expect(joined.statusCode).toBe(200);
+      expect(joined.json().group.memberCount).toBe(2);
+    });
+
+    it('refuses a third person as an initial member', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+
+      const response = await createSubgroup(ada, pair.id, 'Ski trip', [alan.userId]);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'pair_group_immutable' });
+    });
+
+    it('refuses to add a third person to it later', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      const response = await addMembers(ada, sub.id, [alan.userId]);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'pair_group_immutable' });
+    });
+
+    it('still allows the other friend to be added directly, without going through join', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      const response = await addMembers(ada, sub.id, [grace.userId]);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group.memberCount).toBe(2);
+    });
+
+    it('refuses to generate an invitation link for it', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      const response = await groupInvite(ada, sub.id);
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'pair_group_immutable' });
+    });
+
+    it('keeps the two-person ceiling however deep the tree goes', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+      const subsub = await createdSubgroup(ada, sub.id, 'Chalet costs');
+
+      expect(subsub.pairRooted).toBe(true);
+      const response = await addMembers(ada, subsub.id, [alan.userId]);
+      expect(response.statusCode).toBe(409);
+    });
+
+    it('can still be renamed, unlike the pair group itself', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      const response = await patchGroup(ada, sub.id, { name: 'Renamed' });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group.name).toBe('Renamed');
     });
   });
 

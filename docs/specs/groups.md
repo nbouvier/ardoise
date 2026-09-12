@@ -88,16 +88,18 @@ know where I stand on the trip as a whole**.
 
 ### Sub-groups
 
-A **standard group** (not a pair group) can have sub-groups nested under it, and those
-sub-groups can themselves have sub-groups, up to **five levels deep** (a root group plus
-four levels of nesting). In every respect other than its position in the tree, a
-sub-group is a normal group: it has its own name, owner, members, invitation link,
+A group can have sub-groups nested under it, and those sub-groups can themselves have
+sub-groups, up to **five levels deep** (a root group plus four levels of nesting). A
+sub-group is itself always a **standard** group — it has its own name, owner, members,
 transactions and statistics, and is created, renamed, archived, deleted, joined and left
-exactly like any standard group.
+exactly like a root standard group — but the *parent* being nested under can be either
+kind: a standard group, or the **implicit pair group** two friends share. Nesting under a
+pair group works exactly the same way, with one difference — see "Sub-groups of a pair
+group" below.
 
 - **Creating a sub-group** is available to any member of the parent group, the same
-  people who can add a friend to it. The parent must be an *effectively active* standard
-  group not already at the depth limit — see the constraints below.
+  people who can add a friend to it. The parent must be *effectively active* and not
+  already at the depth limit — see the constraints below.
 - **Membership flows down automatically, never sideways or up on its own.** Belonging to
   a group **requires** belonging to every one of its ancestor groups. Concretely: adding a
   friend to a group, or accepting an invitation into it, adds that person to the group
@@ -133,8 +135,32 @@ exactly like any standard group.
   promoting a sub-group to a root group). This keeps the tree acyclic by construction and
   keeps every membership, balance and statistics computation a straightforward top-down
   walk.
-- **A pair group can neither have sub-groups nor be one.** It is a fixed, two-person space
-  keyed by a friendship, and nesting would break both.
+- **A pair group can never itself have a parent** — it stays a root, keyed by its
+  friendship. It *can* be a parent, though: see the next section.
+
+### Sub-groups of a pair group
+
+A pair group is a fixed, two-person space, and that does not change just because it now
+has sub-groups: **every sub-group nested under a pair group — at any depth — can only
+ever contain that friendship's own two people**, forever. Concretely:
+
+- **No third person can ever be added**, by any of the usual paths: chosen as an initial
+  member while creating the sub-group, added later as a friend, or joining through an
+  invitation link. All three would otherwise propagate a new membership up into the pair
+  group itself (the same upward-flow rule every sub-group follows) and break the one thing
+  that defines it. Attempting any of them is refused the same way any other pair-group
+  change is (`pair_group_immutable`).
+- **The other friend still reaches it themselves**, through the ordinary
+  unjoined-sub-group toggle described above — they already belong to the pair group (and
+  so to every sub-group's immediate parent along the way), so they see it listed and can
+  join it directly, with no invitation needed.
+- **Sharing an invitation link is refused outright** for such a sub-group: there is no one
+  it could legitimately be for, since the only other allowed person already has the join
+  path above.
+- Everything else about it is unaffected — it can still be renamed, archived, deleted,
+  and left like any standard group; only who can ever be *in* it is capped.
+- This caps every sub-group in that part of the tree, however deep: a sub-group of a
+  sub-group of a pair group is capped exactly the same way, transitively.
 
 ### Balance across a group and its sub-groups
 
@@ -179,8 +205,11 @@ exactly like any standard group.
 - It is **not listed** among the user's groups.
 - **Nobody can be added to it**: no member management, no invitation link. It stays
   exactly two people.
-- It **cannot be renamed, archived or deleted, and cannot have sub-groups or be one**. It
-  is named after the other person.
+- It **cannot be renamed, archived, deleted, or nested under something else**. It is named
+  after the other person.
+- **It can have sub-groups**, exactly like a standard group — but every sub-group in that
+  tree, at any depth, is itself capped at the same two people forever (no third person, no
+  invitation link either); see "Sub-groups of a pair group" above.
 - In every other respect it is a normal group and holds expenses the same way.
 - It **disappears with the friendship**: removing a friend deletes the pair group and
   everything in it, on both sides. This is the same loss as deleting a group, and the
@@ -247,9 +276,11 @@ exactly like any standard group.
 - **The last member leaving a group**: the group, and by the same act every sub-group
   nested in it (necessarily now empty too, by the membership invariant), is deleted with
   its contents.
-- **Any membership change on a pair group** (add, remove, invite, rename, archive, delete,
-  create a sub-group under it, nest it under something else): refused; the pair group is
-  immutable by construction.
+- **Any membership change on a pair group itself** (add, remove, invite, rename, archive,
+  delete, nest it under something else): refused; the pair group is immutable by
+  construction. **Creating a sub-group under it is allowed** — but bringing a third
+  person into that sub-group, or any of its descendants, is refused the same way (see
+  "Sub-groups of a pair group" above).
 - **Opening the pair group of a friend for the first time**: it is created on the spot and
   is indistinguishable from one that already existed, including when both devices do it
   simultaneously.
@@ -304,12 +335,17 @@ exactly like any standard group.
       it too. The owner cannot leave while other members remain in the group **or in any
       sub-group they solely own**, and no member can remove the owner.
 - [ ] Tapping a friend in the friend list opens the group shared with that friend, showing
-      their name, both members, and no membership, sub-group or invitation actions.
-- [ ] That pair group never appears in the group list, and cannot have or be a sub-group.
+      their name, both members, no membership or invitation actions, and an ordinary
+      sub-groups section.
+- [ ] That pair group never appears in the group list, and cannot itself be a sub-group.
 - [ ] Opening the same friend twice reaches the same group, and two simultaneous openings
       do not create two groups.
-- [ ] Archiving, deleting, renaming, inviting into, adding someone to, or creating a
-      sub-group under a pair group is refused.
+- [ ] Archiving, deleting, renaming, inviting into or adding someone to a pair group is
+      refused; creating a sub-group under it is not.
+- [ ] A sub-group nested under a pair group, at any depth, refuses a third person as an
+      initial member, as a later addition, and through an invitation link (which cannot
+      even be generated for it) — while the other friend can still join it themselves, and
+      it can still be renamed, archived, deleted and left normally.
 - [ ] Archiving a group makes every one of its sub-groups read-only for membership and
       transactions without changing any sub-group's own archived flag; un-archiving the
       parent restores each sub-group's own prior state exactly.
@@ -335,9 +371,13 @@ exactly like any standard group.
   requests without awaiting the first, unchanged from before sub-groups existed.
 - **Idempotence and concurrency of joining a sub-group**, the same way, is a direct
   analogue.
-- The **pair-group immutability** guard applies to eight operations now (the original six,
-  plus creating a sub-group under one and nesting one under something else); cover them as
-  a set rather than one by one.
+- The **pair-group immutability** guard still applies to the original six operations on the
+  pair group itself (add, remove, invite, rename, archive, delete) plus nesting it under
+  something else; cover them as a set rather than one by one. Creating a sub-group under a
+  pair group is now allowed — the same guard reappears one level down instead, refusing a
+  third person anywhere in that sub-group's own tree (add, invite, or an initial member at
+  creation) — cover that set separately, since it is a different operation triggering the
+  same reason.
 - **Effective archive**: a transaction, membership change or invitation issued against a
   sub-group must be refused when *any* ancestor is archived, not only when the sub-group
   itself is; and restored the instant the archiving ancestor is un-archived, with no state
@@ -370,10 +410,14 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   consistent with its ancestors' by the write paths described above, never by a read-time
   walk that infers it.
 - The pair group is **keyed by the friendship**, so the database itself guarantees one per
-  pair and removes it with the friendship; a pair group's parent is always null and it can
-  never be referenced as another group's parent.
+  pair and removes it with the friendship; a pair group's own parent is always null. It can,
+  however, *be* referenced as another group's parent — a friendship can have sub-groups.
 - The pair group's name is **not stored**: the API returns the other member's name, so
   each side sees the person they are sharing with.
+- **A sub-group nested under a pair group, at any depth, is capped at that friendship's own
+  two people** — enforced in the service layer against every group in the tree whose root
+  ancestor is the pair group, not by a column (`GroupDetail.pairRooted` exposes this to the
+  client). See "Sub-groups of a pair group" above.
 - **A group's parent is immutable after creation.** There is no endpoint to change it.
   This is what keeps the tree acyclic without needing cycle detection, and keeps every
   tree computation (membership propagation, effective-archive, balance roll-up, depth) a
@@ -403,12 +447,17 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - **Group detail** is one screen used for every standard group at any depth, and for a
   pair group. It shows, above the transaction list: the group's own name, a breadcrumb of
   its ancestors when it is a sub-group (so a member always knows where in the tree they
-  are), and a **sub-groups section** listing its direct sub-groups with their member
-  counts — sub-groups the viewer has not joined are hidden by default behind a
+  are), and a **sub-groups section** — shown for a pair group too — listing its direct
+  sub-groups with their member counts and, for a joined one, its own rolled-up balance;
+  sub-groups the viewer has not joined are hidden by default behind a
   "Show sub-groups I'm not in (n)" toggle, mirroring the archived-groups pattern, and open
   a "Join this group?" confirmation rather than the group itself. For a pair group, the
-  member actions, the sub-group section, the invitation action and the rename/archive/
-  delete actions are absent — not disabled-looking, absent — because they can never apply.
+  member actions, the invitation action and the rename/archive/delete actions are absent —
+  not disabled-looking, absent — because they can never apply; **for any group whose tree
+  is capped at a friendship's two people** (the pair group itself, or a sub-group nested
+  under it at any depth), "Add friends" and "share an invitation link" are likewise absent
+  and creating a further sub-group there skips the friend picker, since there is never
+  anyone left to offer — the other person self-joins through the toggle above instead.
 - Deleting asks for confirmation and states that everything in the group **and its
   sub-groups** is lost; leaving asks for confirmation too, and states how many sub-groups
   it also removes the member from.
@@ -459,7 +508,12 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - The group invitation code is a bearer capability with the same properties as the friend
   one: 128 bits, opaque, expiring, revocable. Its blast radius is joining one group **and
   every one of its ancestors** — no larger a blast radius than accepting it manually
-  through each ancestor's own link would produce.
+  through each ancestor's own link would produce. This is exactly why it **cannot be
+  generated at all** for a sub-group nested under a pair group: unlike adding a friend
+  directly (already restricted to the caller's own friends), an invitation link has no
+  friendship check, so if one could be created there it would let a total stranger's
+  acceptance propagate a membership up into the pair group itself — refusing generation is
+  what actually closes that path, not a check on acceptance.
 - The unauthenticated preview exposes a group's **name and member count** to whoever holds
   the code — needed to decide whether to join, and bounded: no member list, no emails, no
   disclosure of the group's ancestors or position in a tree.
@@ -467,8 +521,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   page and must be escaped — unchanged, and equally true for a sub-group's name.
 - Deleting a group is destructive and irreversible, and now takes an entire sub-tree with
   it; it is owner-only and confirmed, with the confirmation naming the scope of the loss.
-- Removing a friend is destructive too, since it takes the pair group with it — the
-  confirmation must say so.
+- Removing a friend is destructive too, since it takes the pair group **and every
+  sub-group nested under it** with it — the confirmation must say so.
 - A group's rolled-up balance is built only from transactions the viewer is already a
   party to, so it discloses no group, member or amount the viewer could not already reach
   by opening each sub-group individually — see `docs/specs/balances.md`.

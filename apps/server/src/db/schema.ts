@@ -92,7 +92,11 @@ export const friendships = pgTable(
  * re-parenting — which keeps the tree acyclic by construction and every tree
  * computation (membership propagation, effective-archive, balance and
  * statistics roll-up) a bounded walk instead of an open-ended graph problem. A
- * pair group can neither have a parent nor be one. See `docs/specs/groups.md`.
+ * pair group can never itself have a parent, but it can be one — a friendship
+ * can have sub-groups exactly like a standard group, except every sub-group in
+ * that tree is capped at the friendship's own two people forever, enforced in
+ * the service layer (`pairCeiling`), not by a column here. See
+ * `docs/specs/groups.md`.
  */
 export const groups = pgTable(
   'groups',
@@ -125,9 +129,9 @@ export const groups = pgTable(
       'groups_standard_named',
       sql`(${table.kind} = 'standard') = (${table.name} is not null)`,
     ),
-    // A pair group is always a root: it can never be nested nor have children
-    // point at it (the latter is a foreign-key concern, enforced in service —
-    // see assertNotPairGroup's use as a parent guard).
+    // A pair group is always a root: it can never itself be nested under
+    // another group. It can, however, be the parent of standard sub-groups —
+    // see the table comment and `pairCeiling` in the groups service.
     check('groups_pair_no_parent', sql`${table.kind} <> 'pair' or ${table.parentId} is null`),
     check('groups_root_depth', sql`(${table.parentId} is null) = (${table.depth} = 0)`),
     check('groups_depth_valid', sql`${table.depth} between 0 and 4`),

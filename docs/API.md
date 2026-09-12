@@ -228,7 +228,7 @@ Shared error codes:
 | `404`  | `group_not_found`      | No such group, or the caller is not a member                |
 | `403`  | `join_required`        | The caller belongs to the group's immediate parent but hasn't joined it |
 | `403`  | `not_group_owner`      | Deleting is owner-only                                      |
-| `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
+| `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group, or would bring a third person into a sub-group nested under one |
 | `409`  | `group_archived`       | An archived group, or one whose ancestor is archived, takes no new members and issues no links |
 | `409`  | `owner_cannot_leave`   | The owner cannot leave — or be removed — while other members remain in the group or in a sub-group they solely own |
 | `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
@@ -245,11 +245,19 @@ sub-groups this is simply its own balance, computed the same way as
 the whole sub-tree rather than the group's per-member list. `GroupDetail` adds `members` (a
 `FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
 below), `ancestors`
-(root-first, empty for a root group) and `readOnly` — `true` when the group itself is
+(root-first, empty for a root group), `readOnly` — `true` when the group itself is
 archived *or any ancestor of it is*; for a root group this always equals
-`archivedAt !== null`, since it has no ancestors. A **pair group stores no name**: the API
-fills it with the *other* member's name, so each side sees who they share with, and it can
-neither have a parent nor be one.
+`archivedAt !== null`, since it has no ancestors — and `pairRooted`. A **pair group stores
+no name**: the API fills it with the *other* member's name, so each side sees who they
+share with. A pair group's own parent is always `null`, and it can never be nested under
+something else — but it *can* be a parent: a friendship can have sub-groups, exactly like a
+standard group. `pairRooted` is `true` for the pair group itself and for every sub-group
+nested under it, at any depth: such a group can only ever contain that friendship's own two
+people, so `POST /groups` (as an initial member) and `POST /groups/:groupId/members` both
+refuse a third person there with `pair_group_immutable`, and
+`POST /groups/:groupId/invite` / `POST .../invite/rotate` refuse outright rather than issue
+a link with no one left to legitimately send it to. The other friend still reaches it
+through `POST /groups/:groupId/join` instead, same as any other unjoined sub-group.
 
 A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
 enough to decide whether to open it (already a member) or join it and show where the
@@ -275,10 +283,12 @@ Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"] }` → Response
 `201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
 
 `parentId` is optional and creates a **sub-group** under that group instead of a root
-group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must be a
-standard group, not effectively archived, and not already at the depth cap. Every initial
-member (the creator included) is also added to every ancestor of the new group in the same
-request — membership always flows down the tree.
+group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must be
+effectively active and not already at the depth cap — either kind, standard or the
+implicit pair group. Every initial member (the creator included) is also added to every
+ancestor of the new group in the same request — membership always flows down the tree.
+When `parentId` is `pairRooted`, `memberIds` may contain only the other person in that
+friendship; anyone else is refused with `409 pair_group_immutable`.
 
 Request: `{ "name": "Ajaccio weekend", "parentId": "<uuid>" }` → Response
 `201 { "group": "<GroupDetail>" }`, with `parentId` and `depth` set accordingly.
@@ -342,13 +352,15 @@ The group's invitation link — **one per group**, not per member: any member se
 and can replace the same one, and a sub-group's link is entirely its own, independent of
 its parent's. Same shapes as the `/friends/invite` trio. Accepting adds the person to the
 group, and to every one of its ancestors (`docs/specs/groups.md`); it does **not** create
-a friendship.
+a friendship. The get-or-create and rotate routes refuse (`409 pair_group_immutable`) for
+a `pairRooted` group — there is no one an invitation to one could legitimately be for.
 
 ### `POST /groups/pair/:friendId`
 
 The group the caller shares with a friend, **created on first access**. Idempotent, and
 safe under concurrency: the unique constraint on the friendship guarantees one group per
-pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends.
+pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends. This
+group can be used as `parentId` on `POST /groups` — a friendship can have sub-groups.
 
 ## Transactions
 

@@ -34,12 +34,28 @@ export class GroupAccessError extends Error {
  * A pair group is immutable by construction: it belongs to a friendship, always
  * has exactly those two people, and lives and dies with it. Renaming,
  * archiving, deleting, inviting into it or changing who is in it can never
- * apply.
+ * apply. Its sub-groups are ordinary standard groups — they can be renamed,
+ * archived, deleted, left — but the same `pair_immutable` reason also covers
+ * trying to bring a third person into any of them (`pairCeiling` in the
+ * groups service), since that could only ever happen by propagating a new
+ * membership up into this same immutable group.
  */
 export function assertNotPairGroup(group: GroupRow): void {
   if (group.kind === 'pair') {
     throw new GroupAccessError('pair_immutable');
   }
+}
+
+/**
+ * Whether `group`'s tree can only ever contain the two people of a
+ * friendship — either `group` itself is that implicit pair group, or one of
+ * its ancestors is. `ancestors` is root-first (`listAncestors`), so index `0`
+ * is the root; a pair group can never itself have a parent
+ * (`groups_pair_no_parent`), so it can only ever appear there or as `group`
+ * itself.
+ */
+export function isPairRooted(group: GroupRow, ancestors: readonly GroupRow[]): boolean {
+  return (ancestors[0] ?? group).kind === 'pair';
 }
 
 /** An archived group is inactive: it takes no new members and issues no links. */

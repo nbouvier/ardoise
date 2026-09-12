@@ -47,6 +47,7 @@ const trip: GroupDetail = {
   subgroups: [],
   ancestors: [],
   readOnly: false,
+  pairRooted: false,
 };
 
 /** The implicit group two friends share: named after the other person. */
@@ -60,6 +61,7 @@ const pair: GroupDetail = {
     { ...grace, role: 'member' },
   ],
   viewerRole: 'member',
+  pairRooted: true,
 };
 
 const groceries: Transaction = {
@@ -452,13 +454,41 @@ describe('GroupScreen', () => {
       alertSpy.mockRestore();
     });
 
-    it('has no sub-groups section on a pair group', async () => {
+    it('offers sub-groups on a pair group too, just like a standard one', async () => {
       mockFetchGroup.mockResolvedValue(pair);
 
       await render(<GroupScreen groupId={pair.id} />);
       await screen.findByText('Grace Hopper');
 
-      expect(screen.queryByText('Sub-groups')).toBeNull();
+      expect(screen.getByText('Sub-groups')).toBeTruthy();
+      expect(screen.getByText('+ Create')).toBeTruthy();
+    });
+
+    it('hides "add friends" and "invite" for a sub-group nested under a pair group', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('Details'));
+
+      expect(screen.queryByRole('button', { name: 'Add friends' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Share an invitation link' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
+      expect(
+        screen.getByText(
+          'Just the two of you here too — the other person joins from the sub-groups list above, not by invitation.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('skips the friend picker when creating a sub-group under a pair-rooted group', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('+ Create'));
+
+      expect(await screen.findByText('New sub-group')).toBeTruthy();
+      expect(screen.getByText('Just the two of you here too — no one else can be added.')).toBeTruthy();
+      expect(screen.queryByText('Add friends now, or share a link later.')).toBeNull();
     });
 
     it('shows a breadcrumb of ancestors and opens one when tapped', async () => {
