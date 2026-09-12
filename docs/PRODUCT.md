@@ -57,15 +57,22 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   viewer's own share, and, for a group with sub-groups, whether their transactions are
   included (on by default). Transfers between members are never counted. Derived from the
   transactions, like balances. See `docs/specs/group-statistics.md`.
+- **Reimbursements** — a group says who should pay whom to clear everything, in as few
+  payments as it can manage: a chain of debts becomes one payment rather than one per
+  pair. Tapping a suggestion records it as an ordinary transfer, pre-filled and still
+  editable. For a group with sub-groups the plan covers the whole sub-tree by default —
+  the one place where a sub-group the viewer has not joined still counts, so the plan
+  cannot disagree with what its own members see. Each person's position can be expanded
+  to the groups it comes from. See `docs/specs/reimbursements.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
-`/health`, auth, friends, invitations, groups, group transactions and per-category
-statistics, tooling and documentation.
+`/health`, auth, friends, invitations, groups, group transactions, per-category
+statistics and reimbursement plans, tooling and documentation.
 
 ## Planned direction
 
-- Settle-up suggestions — who should pay whom to clear a group, or to clear everything
-  between two people, built on the balances now shown.
+- Settling with one person across every group they share, from the friend list — the
+  per-group plan now exists; what is missing is which group would record it.
 - Better tracking and organisation than Tricount (categories, history, clarity).
 
 ## Not yet decided

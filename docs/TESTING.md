@@ -85,7 +85,14 @@ interaction is a device concern.
   same guard that blocks every other pair-group mutation), archived-group read-only
   behaviour, cross-group transaction access, cascade deletion, and the category field
   (round-trips, defaults to Other, an unknown value is refused, resets to Other when none
-  is given).
+  is given); and the reimbursement plan (`src/features/transactions/reimbursements*`):
+  the planner in isolation — the clearing property and the payment bound over 200
+  generated position sets, exact-match pairing, chained debts collapsing to one payment,
+  order independence — plus route tests for the sub-tree scope that **includes** a
+  sub-group the caller has not joined, a matching regression that the rolled-up balance
+  and the transaction sub-tree scope still exclude it, per-group attribution summing back
+  to each position, an archived descendant still counting, and the recorded transfer
+  (full or partial) shrinking the plan.
 - `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
   many generated totals/weights/group sizes, rounding determinism, tie-breaking — the
   transaction request schema's shape per kind, the category preset list (unique keys,
@@ -115,7 +122,14 @@ interaction is a device concern.
   closes, a sliver stays visible, a full ring is drawn as two halves) and the statistics
   sheet (totals and legend, one arc per category, the type toggle, narrowing and summing
   the per-member selection, the "select at least one" empty state, selecting and
-  deselecting a slice, and each empty state saying *which* view is empty).
+  deselecting a slice, and each empty state saying *which* view is empty); and the
+  reimbursements feature (`src/features/reimbursements/`): each payment worded from the
+  viewer's point of view with their own first, recording one by tapping it, the explained
+  (not silent) refusal on an archived group or with a former member, the settled state,
+  the per-group breakdown staying collapsed until asked for, the sub-groups scope
+  defaulting to the whole sub-tree, and a failure offering a retry rather than reading as
+  settled — plus, on the group screen, the plan opening from the header and handing a
+  pre-filled transfer to the transaction form (the debtor as payer, not the viewer).
 
 ### Gotchas
 
