@@ -1,26 +1,21 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useAuth } from '@/features/auth/use-auth';
 import { groupsChanged } from '@/features/groups/groups-changed';
 import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
-import { useTheme } from '@/hooks/use-theme';
-import { useAuth } from '@/features/auth/use-auth';
 import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
+import { useTheme } from '@/hooks/use-theme';
 import { fetchPairGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -38,37 +33,37 @@ function FriendRow({
   onOpen: (friend: FriendEntry) => void;
   onRemove: (friend: FriendEntry) => void;
 }) {
-  const theme = useTheme();
-
   return (
-    <ThemedView style={styles.row}>
-      {/* The row opens the group the two share; "Remove" stays a separate hit area. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open your shared group with ${friend.name}`}
-        disabled={busy}
-        onPress={() => onOpen(friend)}
-        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
-        <Avatar name={friend.name} picture={friend.picture} />
-        <ThemedView style={styles.rowText}>
-          <ThemedText numberOfLines={1}>{friend.name}</ThemedText>
-          {/* Netted across every group the two share — see docs/specs/balances.md. */}
-          <ThemedText type="small" themeColor={balanceTone(friend.balanceCents)}>
-            {balanceWithPerson(friend.balanceCents)}
-          </ThemedText>
-        </ThemedView>
-      </Pressable>
+    <Card>
+      <View style={styles.row}>
+        {/* The row opens the group the two share; "Remove" stays a separate hit area. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open your shared group with ${friend.name}`}
+          disabled={busy}
+          onPress={() => onOpen(friend)}
+          style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
+          <Avatar name={friend.name} picture={friend.picture} size={44} seed={friend.id} />
+          <View style={styles.rowText}>
+            <ThemedText numberOfLines={1}>{friend.name}</ThemedText>
+            {/* Netted across every group the two share — see docs/specs/balances.md. */}
+            <ThemedText type="smallBold" themeColor={balanceTone(friend.balanceCents)}>
+              {balanceWithPerson(friend.balanceCents)}
+            </ThemedText>
+          </View>
+        </Pressable>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${friend.name}`}
-        onPress={() => onRemove(friend)}
-        style={({ pressed }) => pressed && styles.pressed}>
-        <ThemedText type="small" themeColor="textSecondary" style={{ color: theme.textSecondary }}>
-          Remove
-        </ThemedText>
-      </Pressable>
-    </ThemedView>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${friend.name}`}
+          onPress={() => onRemove(friend)}
+          style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Remove
+          </ThemedText>
+        </Pressable>
+      </View>
+    </Card>
   );
 }
 
@@ -118,49 +113,54 @@ export function FriendsScreen() {
     );
   }
 
+  const friendCount =
+    friends.length === 0
+      ? undefined
+      : friends.length === 1
+        ? '1 friend'
+        : `${friends.length} friends`;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="subtitle">Friends</ThemedText>
+        <ScreenHeader title="Friends" caption={friendCount} />
 
         {status === 'loading' ? (
-          <ThemedView style={styles.centered}>
-            <ActivityIndicator testID="friends-loading" color={theme.text} />
-          </ThemedView>
+          <View style={styles.centered}>
+            <ActivityIndicator testID="friends-loading" color={theme.primary} />
+          </View>
         ) : status === 'error' ? (
-          <ThemedView style={styles.centered}>
+          <View style={styles.centered}>
             <ThemedText themeColor="textSecondary" style={styles.centeredText}>
               We couldn’t load your friends. Check your connection and try again.
             </ThemedText>
             <Button label="Try again" variant="secondary" onPress={refresh} />
-          </ThemedView>
+          </View>
         ) : friends.length === 0 ? (
-          <ThemedView style={styles.centered}>
-            <ThemedText type="subtitle">No friends yet</ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-              Invite someone with a link and they’ll show up here.
-            </ThemedText>
-          </ThemedView>
+          <View style={styles.centered}>
+            <Card tone="brand" style={styles.empty}>
+              <ThemedText style={styles.emptyGlyph}>🤝</ThemedText>
+              <ThemedText type="sectionTitle">No friends yet</ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+                Invite someone with a link and they’ll show up here.
+              </ThemedText>
+            </Card>
+          </View>
         ) : (
           <FlatList
             data={friends}
             keyExtractor={(friend) => friend.id}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => (
-              <FriendRow
-                friend={item}
-                busy={opening}
-                onOpen={handleOpen}
-                onRemove={handleRemove}
-              />
+              <FriendRow friend={item} busy={opening} onOpen={handleOpen} onRemove={handleRemove} />
             )}
           />
         )}
 
-        <ThemedView style={styles.footer}>
+        <View style={styles.footer}>
           <Button label="Invite a friend" onPress={() => setInviting(true)} />
           <InvitationCodeEntry />
-        </ThemedView>
+        </View>
       </SafeAreaView>
 
       <Modal
@@ -171,9 +171,9 @@ export function FriendsScreen() {
         <ThemedView style={styles.modal}>
           <SafeAreaView style={styles.modalSafeArea}>
             <InviteScreen />
-            <ThemedView style={styles.modalFooter}>
+            <View style={styles.modalFooter}>
               <Button label="Done" variant="secondary" onPress={() => setInviting(false)} />
-            </ThemedView>
+            </View>
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -204,6 +204,15 @@ const styles = StyleSheet.create({
   centeredText: {
     textAlign: 'center',
   },
+  empty: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.five,
+  },
+  emptyGlyph: {
+    fontSize: 40,
+    lineHeight: 48,
+  },
   list: {
     gap: Spacing.two,
     paddingVertical: Spacing.two,
@@ -212,7 +221,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    paddingVertical: Spacing.two,
   },
   rowMain: {
     flex: 1,
@@ -224,11 +232,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
+  remove: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+  },
   pressed: {
     opacity: 0.6,
   },
   footer: {
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   modal: {
     flex: 1,

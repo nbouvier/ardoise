@@ -1,13 +1,15 @@
 import type { Invite } from '@splitcount/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Share, StyleSheet } from 'react-native';
+import { ActivityIndicator, Share, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { useTheme } from '@/hooks/use-theme';
 import type { AuthorizedFetch } from '@/lib/api/client';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -48,6 +50,7 @@ export function InviteShareScreen({
   rotate,
 }: InviteShareScreenProps) {
   const { authorizedFetch } = useAuth();
+  const theme = useTheme();
   const [state, setState] = useState<InviteState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [rotating, setRotating] = useState(false);
@@ -137,40 +140,44 @@ export function InviteShareScreen({
   if (!invite) {
     return (
       <ThemedView style={styles.centered}>
-        <ActivityIndicator testID="invite-loading" />
+        <ActivityIndicator testID="invite-loading" color={theme.primary} />
       </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.intro}>
+      <View style={styles.intro}>
         <ThemedText type="subtitle">{title}</ThemedText>
         <ThemedText themeColor="textSecondary">{blurb}</ThemedText>
-      </ThemedView>
+      </View>
 
-      <ThemedView type="backgroundElement" style={styles.linkBox}>
+      {/* The link itself is the content here, so it gets the card. */}
+      <Card tone="brand" style={styles.linkBox}>
+        <ThemedText type="overline" themeColor="onPrimarySoft">
+          Your invitation link
+        </ThemedText>
         <ThemedText selectable style={styles.link}>
           {invite.url}
         </ThemedText>
-      </ThemedView>
+      </Card>
 
       <ThemedText type="small" themeColor="textSecondary">
         {`This link works until ${formatExpiry(invite.expiresAt)}.`}
       </ThemedText>
 
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button label="Share" onPress={() => void handleShare()} />
         <Button
           label={copied ? 'Copied' : 'Copy link'}
           variant="secondary"
           onPress={() => void handleCopy()}
         />
-      </ThemedView>
+      </View>
 
       <Button
         label="Generate a new link"
-        variant="secondary"
+        variant="ghost"
         busy={rotating}
         onPress={() => void handleRotate()}
         style={styles.rotate}
@@ -205,8 +212,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   linkBox: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
+    gap: Spacing.two,
   },
   link: {
     fontSize: 14,

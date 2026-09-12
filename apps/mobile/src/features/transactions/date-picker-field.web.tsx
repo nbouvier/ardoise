@@ -1,7 +1,4 @@
-import { TextInput } from 'react-native';
-
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { TextField } from '@/components/text-field';
 
 import type { DatePickerFieldProps } from './date-picker-props';
 
@@ -12,24 +9,13 @@ export type { DatePickerFieldProps } from './date-picker-props';
  * field there instead, same as every native target got before this picker.
  */
 export function DatePickerField({ value, onChange }: DatePickerFieldProps) {
-  const theme = useTheme();
-
   return (
-    <TextInput
+    <TextField
       accessibilityLabel="Date"
       placeholder="YYYY-MM-DD"
-      placeholderTextColor={theme.textSecondary}
       value={value}
       onChangeText={onChange}
       maxLength={10}
-      style={{
-        height: 52,
-        borderRadius: Spacing.three,
-        paddingHorizontal: Spacing.three,
-        fontSize: 16,
-        color: theme.text,
-        backgroundColor: theme.backgroundElement,
-      }}
     />
   );
 }

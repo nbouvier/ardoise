@@ -14,15 +14,18 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { MedallionBadge } from '@/components/medallion-badge';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
 import {
@@ -129,7 +132,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   if (status === 'loading') {
     return (
       <Centered>
-        <ActivityIndicator testID="group-loading" color={theme.text} />
+        <ActivityIndicator testID="group-loading" color={theme.primary} />
       </Centered>
     );
   }
@@ -293,52 +296,46 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.content}>
-        <ThemedView style={styles.header}>
+      <View style={styles.content}>
+        <View style={styles.header}>
           {group.ancestors.length > 0 ? (
             <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
           ) : null}
-          <ThemedView style={styles.headerRow}>
+          <View style={styles.headerRow}>
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
               {group.name}
             </ThemedText>
-            <ThemedView style={styles.headerActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Reimbursements"
-                onPress={() => setSheet('reimbursements')}
-                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Settle
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Group statistics"
-                onPress={() => setSheet('statistics')}
-                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Stats
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Group details"
-                onPress={() => setSheet('details')}
-                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Details
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-          </ThemedView>
+          </View>
+          <View style={styles.headerActions}>
+            <HeaderChip
+              label="Settle"
+              accessibilityLabel="Reimbursements"
+              onPress={() => setSheet('reimbursements')}
+            />
+            <HeaderChip
+              label="Stats"
+              accessibilityLabel="Group statistics"
+              onPress={() => setSheet('statistics')}
+            />
+            <HeaderChip
+              label="Details"
+              accessibilityLabel="Group details"
+              onPress={() => setSheet('details')}
+            />
+          </View>
           {readOnly ? (
             <ThemedText type="small" themeColor="textSecondary">
               Archived — read-only until it’s reopened.
             </ThemedText>
           ) : null}
-          <ViewerBalance amountCents={group.viewerBalanceCents} />
-        </ThemedView>
+          {/* The one figure this screen exists to answer, given its own card. */}
+          <Card tone="brand" style={styles.balanceCard}>
+            <ThemedText type="overline" themeColor="onPrimarySoft">
+              Your balance here
+            </ThemedText>
+            <ViewerBalance amountCents={group.viewerBalanceCents} />
+          </Card>
+        </View>
 
         {/* Standard and pair groups can both have sub-groups — the pair
             group's own DetailsSheet message covers the "no one new here"
@@ -360,11 +357,11 @@ export function GroupScreen({ groupId }: { groupId: string }) {
         />
 
         {readOnly ? null : (
-          <ThemedView style={styles.footer}>
+          <View style={styles.footer}>
             <Button label="Add a transaction" onPress={openNewTransaction} />
-          </ThemedView>
+          </View>
         )}
-      </ThemedView>
+      </View>
 
       <Modal
         visible={sheet !== null}
@@ -499,6 +496,38 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   );
 }
 
+/**
+ * A read-only view of this group opened from its header: a soft brand chip,
+ * quieter than a button but plainly tappable.
+ */
+function HeaderChip({
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.headerChip,
+        { backgroundColor: theme.primarySoft },
+        pressed && styles.pressed,
+      ]}>
+      <ThemedText type="smallBold" themeColor="onPrimarySoft">
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 /** Every ancestor of a sub-group, root first, each one tappable. */
 function Breadcrumb({
   ancestors,
@@ -508,22 +537,22 @@ function Breadcrumb({
   onOpen: (groupId: string) => void;
 }) {
   return (
-    <ThemedView style={styles.breadcrumb}>
+    <View style={styles.breadcrumb}>
       {ancestors.map((ancestor, index) => (
-        <ThemedView key={ancestor.id} style={styles.breadcrumbItem}>
+        <View key={ancestor.id} style={styles.breadcrumbItem}>
           {index > 0 ? (
             <ThemedText type="small" themeColor="textSecondary">
               {' › '}
             </ThemedText>
           ) : null}
           <Pressable onPress={() => onOpen(ancestor.id)}>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            <ThemedText type="smallBold" themeColor="primary" numberOfLines={1}>
               {ancestor.name}
             </ThemedText>
           </Pressable>
-        </ThemedView>
+        </View>
       ))}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -557,17 +586,19 @@ function SubgroupsSection({
   }
 
   return (
-    <ThemedView style={styles.subgroups}>
-      <ThemedView style={styles.subgroupsHeader}>
-        <ThemedText type="smallBold">Sub-groups</ThemedText>
+    <View style={styles.subgroups}>
+      <View style={styles.subgroupsHeader}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          Sub-groups
+        </ThemedText>
         {readOnly ? null : (
           <Pressable accessibilityRole="button" onPress={onCreate} disabled={busy}>
-            <ThemedText type="small" themeColor="textSecondary">
+            <ThemedText type="smallBold" themeColor="primary">
               + Create
             </ThemedText>
           </Pressable>
         )}
-      </ThemedView>
+      </View>
 
       {joined.map((subgroup) => (
         <SubgroupRow key={subgroup.id} subgroup={subgroup} onPress={() => onOpen(subgroup.id)} />
@@ -579,7 +610,7 @@ function SubgroupsSection({
             accessibilityRole="button"
             onPress={() => setShowUnjoined((shown) => !shown)}
             style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}>
-            <ThemedText type="small" themeColor="textSecondary">
+            <ThemedText type="smallBold" themeColor="primary">
               {showUnjoined
                 ? 'Hide sub-groups I’m not in'
                 : `Show sub-groups I’m not in (${unjoined.length})`}
@@ -603,7 +634,7 @@ function SubgroupsSection({
           No sub-groups yet.
         </ThemedText>
       ) : null}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -616,29 +647,27 @@ function SubgroupRow({
   muted?: boolean;
   onPress: () => void;
 }) {
-  const members =
-    subgroup.memberCount === 1 ? '1 member' : `${subgroup.memberCount} members`;
+  const members = subgroup.memberCount === 1 ? '1 member' : `${subgroup.memberCount} members`;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={subgroup.name}
-      onPress={onPress}
-      style={({ pressed }) => [styles.subgroupRow, pressed && styles.pressed]}>
-      <ThemedView style={muted ? styles.muted : undefined}>
-        <ThemedText numberOfLines={1}>{subgroup.name}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {muted ? `${members} · not joined` : members}
-        </ThemedText>
-        {/* Not joined means none of the viewer's transactions can be in this
-            sub-tree, so the balance is always exactly 0 — not worth a line. */}
-        {muted ? null : (
-          <ThemedText type="small" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
-            {groupBalanceLabel(subgroup.viewerBalanceCents)}
+    <Card accessibilityLabel={subgroup.name} onPress={onPress} muted={muted}>
+      <View style={styles.subgroupRow}>
+        <MedallionBadge seed={subgroup.id} content="↳" size={36} />
+        <View style={styles.subgroupText}>
+          <ThemedText numberOfLines={1}>{subgroup.name}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {muted ? `${members} · not joined` : members}
           </ThemedText>
-        )}
-      </ThemedView>
-    </Pressable>
+          {/* Not joined means none of the viewer's transactions can be in this
+              sub-tree, so the balance is always exactly 0 — not worth a line. */}
+          {muted ? null : (
+            <ThemedText type="smallBold" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
+              {groupBalanceLabel(subgroup.viewerBalanceCents)}
+            </ThemedText>
+          )}
+        </View>
+      </View>
+    </Card>
   );
 }
 
@@ -658,32 +687,35 @@ function TransactionList({
 
   if (status === 'loading') {
     return (
-      <ThemedView style={styles.centeredBody}>
-        <ActivityIndicator testID="transactions-loading" color={theme.text} />
-      </ThemedView>
+      <View style={styles.centeredBody}>
+        <ActivityIndicator testID="transactions-loading" color={theme.primary} />
+      </View>
     );
   }
 
   if (status === 'error') {
     return (
-      <ThemedView style={styles.centeredBody}>
+      <View style={styles.centeredBody}>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
           We couldn’t load the transactions. Check your connection and try again.
         </ThemedText>
         <Button label="Try again" variant="secondary" onPress={refresh} />
-      </ThemedView>
+      </View>
     );
   }
 
   if (transactions.length === 0) {
     return (
-      <ThemedView style={styles.centeredBody}>
-        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-          {archived
-            ? 'This group has no transactions.'
-            : 'No transactions yet. Add one to start tracking what you share.'}
-        </ThemedText>
-      </ThemedView>
+      <View style={styles.centeredBody}>
+        <Card tone="brand" style={styles.emptyCard}>
+          <ThemedText style={styles.emptyGlyph}>🧾</ThemedText>
+          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+            {archived
+              ? 'This group has no transactions.'
+              : 'No transactions yet. Add one to start tracking what you share.'}
+          </ThemedText>
+        </Card>
+      </View>
     );
   }
 
@@ -749,20 +781,26 @@ function DetailsSheet({
     <ThemedView style={styles.sheet}>
       <ThemedText type="subtitle">{group.name}</ThemedText>
 
-      <ThemedText type="smallBold">
-        {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-      </ThemedText>
-      <ThemedView style={styles.members}>
-        {group.members.map((member) => (
-          <MemberRow key={member.id} member={member} />
-        ))}
-      </ThemedView>
+      <Card style={styles.sheetSection}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
+        </ThemedText>
+        <View style={styles.members}>
+          {group.members.map((member) => (
+            <MemberRow key={member.id} member={member} />
+          ))}
+        </View>
+      </Card>
 
-      <ThemedText type="smallBold">Balances</ThemedText>
-      <GroupBalances result={balances} members={group.members} />
+      <Card style={styles.sheetSection}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          Balances
+        </ThemedText>
+        <GroupBalances result={balances} members={group.members} />
+      </Card>
 
       {managed ? (
-        <ThemedView style={styles.actions}>
+        <View style={styles.actions}>
           {pairRooted ? (
             <ThemedText type="small" themeColor="textSecondary">
               Just the two of you here too — no one else can be added.
@@ -802,12 +840,12 @@ function DetailsSheet({
               disabled={busy}
               onPress={onDelete}
               style={({ pressed }) => [styles.delete, pressed && styles.pressed]}>
-              <ThemedText type="small" style={styles.deleteLabel}>
+              <ThemedText type="smallBold" themeColor="danger">
                 Delete this group
               </ThemedText>
             </Pressable>
           ) : null}
-        </ThemedView>
+        </View>
       ) : (
         <ThemedText type="small" themeColor="textSecondary" style={styles.centeredText}>
           This is the space you share with {group.name}. It’s just the two of you — to
@@ -815,24 +853,28 @@ function DetailsSheet({
         </ThemedText>
       )}
 
-      <ThemedView style={styles.sheetFooter}>
-        <Button label="Close" variant="secondary" onPress={onClose} />
-      </ThemedView>
+      <View style={styles.sheetFooter}>
+        <Button label="Close" variant="ghost" onPress={onClose} />
+      </View>
     </ThemedView>
   );
 }
 
 function MemberRow({ member }: { member: GroupMember }) {
+  const theme = useTheme();
+
   return (
-    <ThemedView style={styles.memberRow}>
-      <Avatar name={member.name} picture={member.picture} />
+    <View style={styles.memberRow}>
+      <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
       <ThemedText style={styles.memberName}>{member.name}</ThemedText>
       {member.role === 'owner' ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          Owner
-        </ThemedText>
+        <View style={[styles.ownerTag, { backgroundColor: theme.accentSoft }]}>
+          <ThemedText type="overline" themeColor="onAccentSoft">
+            Owner
+          </ThemedText>
+        </View>
       ) : null}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -867,15 +909,15 @@ function AddMembersSheet({
         excludeIds={members}
         emptyLabel="All of your friends are already in this group. Share a link to invite anyone else."
       />
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button
           label="Add to group"
           busy={busy}
           disabled={selected.size === 0}
           onPress={() => onAdd([...selected])}
         />
-        <Button label="Cancel" variant="secondary" onPress={onCancel} />
-      </ThemedView>
+        <Button label="Cancel" variant="ghost" onPress={onCancel} />
+      </View>
     </ThemedView>
   );
 }
@@ -891,32 +933,27 @@ function RenameSheet({
   onRename: (name: string) => void;
   onCancel: () => void;
 }) {
-  const theme = useTheme();
   const [name, setName] = useState(current);
 
   return (
     <ThemedView style={styles.sheet}>
       <ThemedText type="subtitle">Rename group</ThemedText>
-      <TextInput
+      <TextField
         accessibilityLabel="Group name"
         autoFocus
         value={name}
         onChangeText={setName}
         maxLength={60}
-        style={[
-          styles.nameInput,
-          { color: theme.text, backgroundColor: theme.backgroundElement },
-        ]}
       />
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button
           label="Rename"
           busy={busy}
           disabled={name.trim().length === 0 || name.trim() === current}
           onPress={() => onRename(name.trim())}
         />
-        <Button label="Cancel" variant="secondary" onPress={onCancel} />
-      </ThemedView>
+        <Button label="Cancel" variant="ghost" onPress={onCancel} />
+      </View>
     </ThemedView>
   );
 }
@@ -924,7 +961,7 @@ function RenameSheet({
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.centered}>{children}</ThemedView>
+      <View style={styles.centered}>{children}</View>
     </ThemedView>
   );
 }
@@ -954,14 +991,20 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
+    gap: Spacing.two,
+    marginTop: Spacing.one,
   },
   headerTitle: {
     flex: 1,
   },
-  detailsButton: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
+  headerChip: {
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
+  balanceCard: {
+    marginTop: Spacing.two,
+    gap: Spacing.one,
   },
   breadcrumb: {
     flexDirection: 'row',
@@ -972,7 +1015,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   subgroups: {
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
   subgroupsHeader: {
     flexDirection: 'row',
@@ -980,10 +1023,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   subgroupRow: {
-    paddingVertical: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  subgroupText: {
+    flex: 1,
+    gap: Spacing.half,
   },
   list: {
     paddingVertical: Spacing.two,
+    gap: Spacing.two,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.five,
+  },
+  emptyGlyph: {
+    fontSize: 40,
+    lineHeight: 48,
   },
   centeredBody: {
     flex: 1,
@@ -1007,6 +1066,14 @@ const styles = StyleSheet.create({
   memberName: {
     flex: 1,
   },
+  ownerTag: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Radius.pill,
+  },
+  sheetSection: {
+    gap: Spacing.three,
+  },
   actions: {
     gap: Spacing.two,
     marginTop: Spacing.two,
@@ -1024,9 +1091,6 @@ const styles = StyleSheet.create({
   delete: {
     alignSelf: 'center',
     paddingVertical: Spacing.three,
-  },
-  deleteLabel: {
-    color: '#d64545',
   },
   pressed: {
     opacity: 0.6,
@@ -1048,11 +1112,5 @@ const styles = StyleSheet.create({
   sheetFooter: {
     paddingHorizontal: Spacing.four,
     paddingBottom: Spacing.four,
-  },
-  nameInput: {
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    fontSize: 16,
   },
 });

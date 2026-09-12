@@ -1,11 +1,12 @@
-import { Image } from 'expo-image';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BrandMark } from '@/components/brand-mark';
+import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -33,43 +34,27 @@ export function SignInScreen() {
     }
   }
 
-  const disabled = busy || !googleAvailable;
-
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.hero}>
-          <Image
-            source={require('@/assets/images/logo-glow.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
+        <View style={styles.hero}>
+          {/* The mark sits on its own brand wash, so it reads on both themes. */}
+          <View style={[styles.logoDisc, { backgroundColor: theme.primarySoft }]}>
+            <BrandMark size={88} />
+          </View>
           <ThemedText type="title">SplitCount</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.tagline}>
             Share expenses with the people you split with.
           </ThemedText>
-        </ThemedView>
+        </View>
 
-        <ThemedView style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            onPress={handleSignIn}
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: theme.text },
-              pressed && styles.pressed,
-              disabled && styles.disabled,
-            ]}>
-            {busy ? (
-              <ActivityIndicator color={theme.background} />
-            ) : (
-              <ThemedText style={[styles.buttonLabel, { color: theme.background }]}>
-                Continue with Google
-              </ThemedText>
-            )}
-          </Pressable>
+        <View style={styles.actions}>
+          <Button
+            label="Continue with Google"
+            onPress={() => void handleSignIn()}
+            busy={busy}
+            disabled={!googleAvailable}
+          />
 
           {!googleAvailable ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
@@ -77,11 +62,11 @@ export function SignInScreen() {
             </ThemedText>
           ) : null}
           {error ? (
-            <ThemedText type="small" style={styles.errorText}>
+            <ThemedText type="small" themeColor="danger" style={styles.hint}>
               {error}
             </ThemedText>
           ) : null}
-        </ThemedView>
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -106,9 +91,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.three,
   },
-  logo: {
-    width: 96,
-    height: 96,
+  logoDisc: {
+    width: 132,
+    height: 132,
+    borderRadius: Radius.large,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.two,
   },
   tagline: {
     textAlign: 'center',
@@ -116,27 +105,7 @@ const styles = StyleSheet.create({
   actions: {
     gap: Spacing.three,
   },
-  button: {
-    height: 52,
-    borderRadius: Spacing.three,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
   hint: {
     textAlign: 'center',
-  },
-  errorText: {
-    textAlign: 'center',
-    color: '#d94040',
   },
 });

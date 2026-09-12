@@ -1,7 +1,7 @@
 import type { AcceptInviteResult, InvitePreview } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { useTheme } from '@/hooks/use-theme';
 import { getApiBaseUrl } from '@/lib/api/config';
 import { ApiError } from '@/lib/api/errors';
 import { acceptInvite, previewInvite } from '@/lib/api/invites';
@@ -98,6 +99,7 @@ export interface AcceptInviteScreenProps {
 export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteScreenProps) {
   const { authorizedFetch } = useAuth();
   const router = useRouter();
+  const theme = useTheme();
   const [state, setState] = useState<ScreenState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [accepting, setAccepting] = useState(false);
@@ -151,7 +153,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   if (state.status === 'loading') {
     return (
       <ThemedView style={styles.container}>
-        <ActivityIndicator testID="accept-invite-loading" />
+        <ActivityIndicator testID="accept-invite-loading" color={theme.primary} />
       </ThemedView>
     );
   }
@@ -166,12 +168,10 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
         <ThemedText themeColor="textSecondary" style={styles.centered}>
           {body}
         </ThemedText>
-        <ThemedView style={styles.actions}>
-          {state.problem === 'offline' ? (
-            <Button label="Try again" onPress={retry} />
-          ) : null}
-          <Button label="Close" variant="secondary" onPress={onClose} />
-        </ThemedView>
+        <View style={styles.actions}>
+          {state.problem === 'offline' ? <Button label="Try again" onPress={retry} /> : null}
+          <Button label="Close" variant="ghost" onPress={onClose} />
+        </View>
       </ThemedView>
     );
   }
@@ -181,21 +181,26 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
     return (
       <ThemedView style={styles.container}>
         {result.kind === 'friend' ? (
-          <Avatar name={result.friend.name} picture={result.friend.picture} size={88} />
+          <Avatar
+            name={result.friend.name}
+            picture={result.friend.picture}
+            size={88}
+            seed={result.friend.id}
+          />
         ) : null}
         <ThemedText type="subtitle" style={styles.centered}>
           {acceptedCopy(result)}
         </ThemedText>
-        <ThemedView style={styles.actions}>
+        <View style={styles.actions}>
           {result.kind === 'group' ? (
             <Button label="Open group" onPress={() => openGroup(result.group.id)} />
           ) : null}
           <Button
             label="Done"
-            variant={result.kind === 'group' ? 'secondary' : 'primary'}
+            variant={result.kind === 'group' ? 'ghost' : 'primary'}
             onPress={onClose}
           />
-        </ThemedView>
+        </View>
       </ThemedView>
     );
   }
@@ -207,6 +212,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
         name={state.preview.inviter.name}
         picture={state.preview.inviter.picture}
         size={88}
+        seed={state.preview.inviter.name}
       />
       <ThemedText type="subtitle" style={styles.centered}>
         {title}
@@ -214,14 +220,14 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
       <ThemedText themeColor="textSecondary" style={styles.centered}>
         {body}
       </ThemedText>
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button
           label={state.preview.kind === 'group' ? 'Join group' : 'Accept'}
           busy={accepting}
           onPress={() => void handleAccept()}
         />
-        <Button label="Not now" variant="secondary" disabled={accepting} onPress={onClose} />
-      </ThemedView>
+        <Button label="Not now" variant="ghost" disabled={accepting} onPress={onClose} />
+      </View>
     </ThemedView>
   );
 }

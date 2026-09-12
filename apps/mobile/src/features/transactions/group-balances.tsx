@@ -28,7 +28,7 @@ export interface GroupBalancesProps {
  */
 export function ViewerBalance({ amountCents }: { amountCents: number }) {
   return (
-    <ThemedText type="smallBold" themeColor={balanceTone(amountCents)}>
+    <ThemedText type="amount" themeColor={balanceTone(amountCents)}>
       {groupBalanceLabel(amountCents)}
     </ThemedText>
   );
@@ -48,7 +48,7 @@ export function GroupBalances({ result, members }: GroupBalancesProps) {
   if (status === 'loading') {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator testID="balances-loading" color={theme.text} />
+        <ActivityIndicator testID="balances-loading" color={theme.primary} />
       </View>
     );
   }
@@ -71,9 +71,9 @@ export function GroupBalances({ result, members }: GroupBalancesProps) {
         return (
           <View key={balance.userId} style={styles.row}>
             {member ? (
-              <Avatar name={member.name} picture={member.picture} size={32} />
+              <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
             ) : (
-              <View style={[styles.placeholder, { borderColor: theme.textSecondary }]} />
+              <View style={[styles.placeholder, { borderColor: theme.border }]} />
             )}
             <ThemedText style={styles.name} numberOfLines={1}>
               {member?.name ?? 'Former member'}
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 2,
   },
   name: {
     flex: 1,

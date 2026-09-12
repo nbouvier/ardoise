@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface MemberSelectProps {
@@ -53,14 +53,20 @@ function MemberOption({
       accessibilityState={{ checked: selected }}
       accessibilityLabel={member.name}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <Avatar name={member.name} picture={member.picture} size={32} />
+      style={({ pressed }) => [
+        styles.row,
+        // The selected member is a filled row, not just a filled dot: what the
+        // eye lands on first when reopening a pre-filled form.
+        { backgroundColor: selected ? theme.primarySoft : 'transparent' },
+        pressed && styles.pressed,
+      ]}>
+      <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
       <ThemedText style={styles.name}>{member.name}</ThemedText>
       <View
         style={[
           styles.radio,
-          { borderColor: theme.text },
-          selected && { backgroundColor: theme.text },
+          { borderColor: selected ? theme.primary : theme.border },
+          selected && { backgroundColor: theme.primary },
         ]}
       />
     </Pressable>
@@ -76,15 +82,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
   },
   name: {
     flex: 1,
   },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
   },
   pressed: {
     opacity: 0.6,

@@ -1,9 +1,8 @@
 import { TRANSACTION_CATEGORIES, type TransactionCategory } from '@splitcount/shared';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
+import { Pill } from '@/components/pill';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 export interface CategoryPickerProps {
   value: TransactionCategory;
@@ -15,32 +14,23 @@ export interface CategoryPickerProps {
  * has a category (`Other` when none was chosen), so there is no "clear"
  * gesture: picking `Other` itself is how you get the neutral option. No way
  * to add one here; the list is closed (`@splitcount/shared`'s `categories.ts`).
+ *
+ * A selected pill fills with the category's own colour rather than the brand
+ * hue — the same colour the statistics chart gives it.
  */
 export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
-  const theme = useTheme();
-
   return (
     <View style={styles.grid}>
-      {TRANSACTION_CATEGORIES.map((category) => {
-        const selected = category.key === value;
-        return (
-          <Pressable
-            key={category.key}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            accessibilityLabel={category.label}
-            onPress={() => onChange(category.key)}
-            style={[
-              styles.pill,
-              { borderColor: theme.text },
-              selected && { backgroundColor: theme.text },
-            ]}>
-            <ThemedText type="small" style={selected ? { color: theme.background } : undefined}>
-              {category.emoji} {category.label}
-            </ThemedText>
-          </Pressable>
-        );
-      })}
+      {TRANSACTION_CATEGORIES.map((category) => (
+        <Pill
+          key={category.key}
+          label={`${category.emoji} ${category.label}`}
+          accessibilityLabel={category.label}
+          color={category.color}
+          selected={category.key === value}
+          onPress={() => onChange(category.key)}
+        />
+      ))}
     </View>
   );
 }
@@ -50,11 +40,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
-  },
-  pill: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.four,
-    borderWidth: StyleSheet.hairlineWidth,
   },
 });

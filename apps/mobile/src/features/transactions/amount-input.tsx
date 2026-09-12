@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
+import { StyleSheet, type TextInputProps } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { TextField } from '@/components/text-field';
 
 export interface AmountInputProps {
   /**
@@ -50,7 +49,6 @@ export function AmountInput({
   accessibilityLabel = 'Amount',
   style,
 }: AmountInputProps) {
-  const theme = useTheme();
   const [text, setText] = useState(() => centsToText(defaultValueCents));
 
   function handleChange(next: string) {
@@ -59,24 +57,22 @@ export function AmountInput({
   }
 
   return (
-    <TextInput
+    <TextField
       accessibilityLabel={accessibilityLabel}
       testID={testID}
       keyboardType="decimal-pad"
       value={text}
       onChangeText={handleChange}
       placeholder="0.00"
-      placeholderTextColor={theme.textSecondary}
-      style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }, style]}
+      style={[styles.input, style]}
     />
   );
 }
 
 const styles = StyleSheet.create({
+  /** A figure, not prose: bigger and heavier than a name field. */
   input: {
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    fontSize: 16,
+    fontSize: 20,
+    fontWeight: '700',
   },
 });

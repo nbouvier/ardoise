@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { Pill } from '@/components/pill';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { AmountInput, centsToText } from './amount-input';
@@ -96,10 +97,10 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
   return (
     <View style={styles.container}>
       <View style={styles.modeToggle}>
-        <ModeButton label="Shares" active={value.mode === 'shares'} onPress={() => setMode('shares')} />
-        <ModeButton
+        <Pill label="Shares" selected={value.mode === 'shares'} onPress={() => setMode('shares')} />
+        <Pill
           label="Fixed amounts"
-          active={value.mode === 'amount'}
+          selected={value.mode === 'amount'}
           onPress={() => setMode('amount')}
         />
       </View>
@@ -150,7 +151,7 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
       </View>
 
       {remaining !== null ? (
-        <ThemedText type="small" style={remaining === 0 ? styles.balanced : styles.unbalanced}>
+        <ThemedText type="smallBold" themeColor={remaining === 0 ? 'credit' : 'debit'}>
           {remaining === 0
             ? 'Fully allocated'
             : remaining > 0
@@ -176,25 +177,25 @@ function MemberRow({
   const theme = useTheme();
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, selected && { backgroundColor: theme.primarySoft }]}>
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked: selected }}
         accessibilityLabel={member.name}
         onPress={onToggle}
         style={styles.memberPress}>
-        <Avatar name={member.name} picture={member.picture} size={32} />
+        <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
         <ThemedText style={styles.name} numberOfLines={1}>
           {member.name}
         </ThemedText>
         <View
           style={[
             styles.checkbox,
-            { borderColor: theme.text },
-            selected && { backgroundColor: theme.text },
+            { borderColor: selected ? theme.primary : theme.border },
+            selected && { backgroundColor: theme.primary },
           ]}>
           {selected ? (
-            <ThemedText type="smallBold" style={{ color: theme.background }}>
+            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
               ✓
             </ThemedText>
           ) : null}
@@ -202,30 +203,6 @@ function MemberRow({
       </Pressable>
       {selected ? children : null}
     </View>
-  );
-}
-
-function ModeButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.modeButton, { borderColor: theme.text }, active && { backgroundColor: theme.text }]}>
-      <ThemedText type="small" style={active ? { color: theme.background } : undefined}>
-        {label}
-      </ThemedText>
-    </Pressable>
   );
 }
 
@@ -239,16 +216,26 @@ function Stepper({ value, onChange }: { value: number; onChange: (value: number)
         accessibilityLabel="Decrease weight"
         disabled={value <= MIN_WEIGHT}
         onPress={() => onChange(value - 1)}
-        style={[styles.stepperButton, { borderColor: theme.text }, value <= MIN_WEIGHT && styles.stepperDisabled]}>
-        <ThemedText type="smallBold">−</ThemedText>
+        style={[
+          styles.stepperButton,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+          value <= MIN_WEIGHT && styles.stepperDisabled,
+        ]}>
+        <ThemedText type="smallBold" themeColor="primary">
+          −
+        </ThemedText>
       </Pressable>
-      <ThemedText style={styles.stepperValue}>{value}</ThemedText>
+      <ThemedText type="smallBold" style={styles.stepperValue}>
+        {value}
+      </ThemedText>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Increase weight"
         onPress={() => onChange(value + 1)}
-        style={[styles.stepperButton, { borderColor: theme.text }]}>
-        <ThemedText type="smallBold">+</ThemedText>
+        style={[styles.stepperButton, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <ThemedText type="smallBold" themeColor="primary">
+          +
+        </ThemedText>
       </Pressable>
     </View>
   );
@@ -262,17 +249,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
   },
-  modeButton: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.four,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   rows: {
     gap: Spacing.one,
   },
   row: {
     gap: Spacing.one,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
   },
   memberPress: {
     flexDirection: 'row',
@@ -287,7 +271,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -308,10 +292,10 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   stepperButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -324,12 +308,7 @@ const styles = StyleSheet.create({
   },
   amountControl: {
     marginLeft: 44,
-    height: 40,
-  },
-  balanced: {
-    color: '#1a9f5c',
-  },
-  unbalanced: {
-    color: '#d64545',
+    height: 44,
+    fontSize: 16,
   },
 });

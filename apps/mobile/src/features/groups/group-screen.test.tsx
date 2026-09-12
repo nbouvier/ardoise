@@ -163,7 +163,7 @@ describe('GroupScreen', () => {
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
     // The category emoji renders next to the title.
-    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
+    expect(await screen.findByText('Groceries')).toBeTruthy();
   });
 
   it('shows an empty state and an "Add a transaction" action', async () => {
@@ -287,7 +287,7 @@ describe('GroupScreen', () => {
     await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('🛒 Groceries')).toBeTruthy();
+    expect(await screen.findByText('Groceries')).toBeTruthy();
     expect(notify).toHaveBeenCalled();
   });
 

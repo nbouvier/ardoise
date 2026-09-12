@@ -31,7 +31,7 @@ describe('TransactionRow', () => {
   it('shows a positive share for the payer', async () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
 
-    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
+    expect(screen.getByText('Groceries')).toBeTruthy();
     expect(screen.getByText('+5.00')).toBeTruthy();
   });
 
@@ -60,10 +60,12 @@ describe('TransactionRow', () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} />);
 
     expect(screen.queryByRole('button', { name: 'Groceries' })).toBeNull();
-    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
+    expect(screen.getByText('Groceries')).toBeTruthy();
   });
 
-  it('shows the category emoji next to the title', async () => {
+  // The emoji is the row's category badge, beside the title rather than inside
+  // it — see "Transaction row" in docs/DESIGN.md.
+  it('shows the category emoji on its badge', async () => {
     await render(
       <TransactionRow
         transaction={{ ...expense, category: 'groceries' }}
@@ -72,12 +74,13 @@ describe('TransactionRow', () => {
       />,
     );
 
-    expect(screen.getByText('🛒 Groceries')).toBeTruthy();
+    expect(screen.getByText('🛒')).toBeTruthy();
+    expect(screen.getByText('Groceries')).toBeTruthy();
   });
 
   it('defaults to the Other emoji', async () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
 
-    expect(screen.getByText('🧾 Groceries')).toBeTruthy();
+    expect(screen.getByText('🧾')).toBeTruthy();
   });
 });

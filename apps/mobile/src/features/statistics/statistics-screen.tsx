@@ -10,9 +10,11 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { Pill } from '@/components/pill';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
@@ -82,6 +84,7 @@ export function StatisticsScreen({
     () => new Set(members.map((member) => member.id)),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
+  const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
 
@@ -130,27 +133,27 @@ export function StatisticsScreen({
       <View style={styles.toggles}>
         <View style={styles.toggleRow}>
           {(['spending', 'income'] as const).map((option) => (
-            <Toggle
+            <Pill
               key={option}
               label={typeLabels[option]}
-              active={type === option}
+              selected={type === option}
               onPress={() => changeType(option)}
             />
           ))}
           {hasSubgroups ? (
-            <Toggle
+            <Pill
               label="Include sub-groups"
-              active={scope === 'subtree'}
+              selected={scope === 'subtree'}
               onPress={toggleScope}
             />
           ) : null}
         </View>
         <View style={styles.toggleRow}>
           {members.map((member) => (
-            <Toggle
+            <Pill
               key={member.id}
               label={member.id === viewerId ? 'You' : member.name}
-              active={selectedMemberIds.has(member.id)}
+              selected={selectedMemberIds.has(member.id)}
               onPress={() => toggleMember(member.id)}
             />
           ))}
@@ -166,7 +169,7 @@ export function StatisticsScreen({
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
-          <ActivityIndicator testID="statistics-loading" />
+          <ActivityIndicator testID="statistics-loading" color={theme.primary} />
         </View>
       ) : status === 'error' ? (
         <View style={styles.centeredBody}>
@@ -221,7 +224,7 @@ export function StatisticsScreen({
             />
           </DonutChart>
 
-          <View style={styles.legend}>
+          <Card style={styles.legend}>
             {breakdown.slices.map((slice) => (
               <LegendRow
                 key={slice.category}
@@ -234,13 +237,13 @@ export function StatisticsScreen({
                 }
               />
             ))}
-          </View>
+          </Card>
         </ScrollView>
       )}
 
-      <ThemedView style={styles.footer}>
-        <Button label="Close" variant="secondary" onPress={onClose} />
-      </ThemedView>
+      <View style={styles.footer}>
+        <Button label="Close" variant="ghost" onPress={onClose} />
+      </View>
     </ThemedView>
   );
 }
@@ -264,7 +267,7 @@ function Centre({
         numberOfLines={2}>
         {label}
       </ThemedText>
-      <ThemedText testID="statistics-centre-amount" type="smallBold" style={styles.centreAmount}>
+      <ThemedText testID="statistics-centre-amount" type="amount">
         {centsToText(amountCents)}
       </ThemedText>
       {percent === null ? null : (
@@ -290,6 +293,7 @@ function LegendRow({
   onPress: () => void;
 }) {
   const definition = categoryDefinition(category);
+  const theme = useTheme();
 
   return (
     <Pressable
@@ -297,7 +301,13 @@ function LegendRow({
       accessibilityState={{ selected }}
       accessibilityLabel={`${definition?.label ?? category}, ${centsToText(amountCents)}, ${percent}%`}
       onPress={onPress}
-      style={({ pressed }) => [styles.legendRow, pressed && styles.pressed]}>
+      style={({ pressed }) => [
+        styles.legendRow,
+        // The selected slice is named in the donut's hole; the row it came
+        // from says so too, so the two never disagree.
+        selected && { backgroundColor: theme.backgroundElement },
+        pressed && styles.pressed,
+      ]}>
       <View style={[styles.swatch, { backgroundColor: definition?.color ?? '#8A9199' }]} />
       <ThemedText style={styles.legendLabel} numberOfLines={1}>
         {definition ? `${definition.emoji} ${definition.label}` : category}
@@ -307,30 +317,6 @@ function LegendRow({
       </ThemedText>
       <ThemedText type={selected ? 'smallBold' : 'small'} style={styles.legendAmount}>
         {centsToText(amountCents)}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
-function Toggle({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.toggle, { borderColor: theme.text }, active && { backgroundColor: theme.text }]}>
-      <ThemedText type="small" style={active ? { color: theme.background } : undefined}>
-        {label}
       </ThemedText>
     </Pressable>
   );
@@ -353,12 +339,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
-  toggle: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.four,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   body: {
     gap: Spacing.four,
     paddingBottom: Spacing.four,
@@ -372,10 +352,6 @@ const styles = StyleSheet.create({
   centeredText: {
     textAlign: 'center',
   },
-  centreAmount: {
-    fontSize: 22,
-    lineHeight: 28,
-  },
   legend: {
     gap: Spacing.one,
   },
@@ -384,6 +360,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
   },
   legendLabel: {
     flex: 1,

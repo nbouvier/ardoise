@@ -1,13 +1,13 @@
 import type { GroupDetail } from '@splitcount/shared';
 import { useState } from 'react';
-import { StyleSheet, TextInput } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
-import { useTheme } from '@/hooks/use-theme';
 import { createGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -39,7 +39,6 @@ export function CreateGroupScreen({
   pairRooted = false,
 }: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
-  const theme = useTheme();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -82,18 +81,13 @@ export function CreateGroupScreen({
     <ThemedView style={styles.container}>
       <ThemedText type="subtitle">{parentId ? 'New sub-group' : 'New group'}</ThemedText>
 
-      <TextInput
+      <TextField
         accessibilityLabel="Group name"
         placeholder="Trip, flatshare, night out…"
-        placeholderTextColor={theme.textSecondary}
         autoFocus
         value={name}
         onChangeText={setName}
         maxLength={60}
-        style={[
-          styles.nameInput,
-          { color: theme.text, backgroundColor: theme.backgroundElement },
-        ]}
       />
 
       {pairRooted ? (
@@ -110,20 +104,20 @@ export function CreateGroupScreen({
       )}
 
       {error ? (
-        <ThemedText type="small" style={styles.error}>
+        <ThemedText type="small" themeColor="danger">
           {error}
         </ThemedText>
       ) : null}
 
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button
           label={parentId ? 'Create sub-group' : 'Create group'}
           busy={busy}
           disabled={name.trim().length === 0}
           onPress={() => void handleCreate()}
         />
-        <Button label="Cancel" variant="secondary" disabled={busy} onPress={onCancel} />
-      </ThemedView>
+        <Button label="Cancel" variant="ghost" disabled={busy} onPress={onCancel} />
+      </View>
     </ThemedView>
   );
 }
@@ -136,15 +130,6 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.three,
-  },
-  nameInput: {
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    fontSize: 16,
-  },
-  error: {
-    color: '#d64545',
   },
   actions: {
     gap: Spacing.two,

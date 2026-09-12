@@ -1,11 +1,10 @@
 import type { FriendSummary } from '@splitcount/shared';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useFriends } from '@/features/friends/use-friends';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -34,20 +33,20 @@ export function FriendPicker({
 
   if (status === 'loading') {
     return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator testID="friend-picker-loading" color={theme.text} />
-      </ThemedView>
+      <View style={styles.centered}>
+        <ActivityIndicator testID="friend-picker-loading" color={theme.primary} />
+      </View>
     );
   }
 
   if (status === 'error') {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={styles.centered}>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
           We couldn’t load your friends.
         </ThemedText>
         <Button label="Try again" variant="secondary" onPress={refresh} />
-      </ThemedView>
+      </View>
     );
   }
 
@@ -55,11 +54,11 @@ export function FriendPicker({
 
   if (selectable.length === 0) {
     return (
-      <ThemedView style={styles.centered}>
+      <View style={styles.centered}>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
           {emptyLabel}
         </ThemedText>
-      </ThemedView>
+      </View>
     );
   }
 
@@ -94,21 +93,25 @@ function FriendOption({
       accessibilityState={{ checked }}
       accessibilityLabel={friend.name}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <Avatar name={friend.name} picture={friend.picture} />
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: checked ? theme.primarySoft : 'transparent' },
+        pressed && styles.pressed,
+      ]}>
+      <Avatar name={friend.name} picture={friend.picture} seed={friend.id} />
       <ThemedText style={styles.name}>{friend.name}</ThemedText>
-      <ThemedView
+      <View
         style={[
           styles.checkbox,
-          { borderColor: theme.text },
-          checked && { backgroundColor: theme.text },
+          { borderColor: checked ? theme.primary : theme.border },
+          checked && { backgroundColor: theme.primary },
         ]}>
         {checked ? (
-          <ThemedText type="smallBold" style={{ color: theme.background }}>
+          <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
             ✓
           </ThemedText>
         ) : null}
-      </ThemedView>
+      </View>
     </Pressable>
   );
 }
@@ -125,7 +128,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   list: {
-    gap: Spacing.two,
+    gap: Spacing.one,
     paddingVertical: Spacing.two,
   },
   row: {
@@ -133,6 +136,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
   },
   name: {
     flex: 1,
@@ -141,7 +146,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

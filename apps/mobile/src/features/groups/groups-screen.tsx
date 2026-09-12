@@ -1,10 +1,12 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -35,54 +37,57 @@ export function GroupsScreen() {
   /** The archived section, below the active groups and behind a toggle. */
   const archivedSection =
     archived.length === 0 ? null : (
-      <ThemedView style={styles.archivedSection}>
+      <View style={styles.archivedSection}>
         <Pressable
           accessibilityRole="button"
           onPress={() => setShowArchived((shown) => !shown)}
           style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {showArchived
-              ? 'Hide archived'
-              : `Show archived (${archived.length})`}
+          <ThemedText type="smallBold" themeColor="primary">
+            {showArchived ? 'Hide archived' : `Show archived (${archived.length})`}
           </ThemedText>
         </Pressable>
 
-        {showArchived
-          ? archived.map((group) => (
+        {showArchived ? (
+          <View style={styles.archivedList}>
+            {archived.map((group) => (
               <GroupRow key={group.id} group={group} onPress={open} muted />
-            ))
-          : null}
-      </ThemedView>
+            ))}
+          </View>
+        ) : null}
+      </View>
     );
 
   function body() {
     if (status === 'loading') {
       return (
-        <ThemedView style={styles.centered}>
-          <ActivityIndicator testID="groups-loading" color={theme.text} />
-        </ThemedView>
+        <View style={styles.centered}>
+          <ActivityIndicator testID="groups-loading" color={theme.primary} />
+        </View>
       );
     }
 
     if (status === 'error') {
       return (
-        <ThemedView style={styles.centered}>
+        <View style={styles.centered}>
           <ThemedText themeColor="textSecondary" style={styles.centeredText}>
             We couldn’t load your groups. Check your connection and try again.
           </ThemedText>
           <Button label="Try again" variant="secondary" onPress={refresh} />
-        </ThemedView>
+        </View>
       );
     }
 
     if (active.length === 0 && archived.length === 0) {
       return (
-        <ThemedView style={styles.centered}>
-          <ThemedText type="subtitle">No groups yet</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            A group is where you and other people track what you share.
-          </ThemedText>
-        </ThemedView>
+        <View style={styles.centered}>
+          <Card tone="brand" style={styles.empty}>
+            <ThemedText style={styles.emptyGlyph}>👥</ThemedText>
+            <ThemedText type="sectionTitle">No groups yet</ThemedText>
+            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+              A group is where you and other people track what you share.
+            </ThemedText>
+          </Card>
+        </View>
       );
     }
 
@@ -97,17 +102,20 @@ export function GroupsScreen() {
     );
   }
 
+  const activeCount =
+    active.length === 0 ? undefined : active.length === 1 ? '1 group' : `${active.length} groups`;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="subtitle">Groups</ThemedText>
+        <ScreenHeader title="Groups" caption={activeCount} />
 
         {body()}
 
-        <ThemedView style={styles.footer}>
+        <View style={styles.footer}>
           <Button label="Create a group" onPress={() => setCreating(true)} />
           <InvitationCodeEntry />
-        </ThemedView>
+        </View>
       </SafeAreaView>
 
       <Modal
@@ -117,10 +125,7 @@ export function GroupsScreen() {
         onRequestClose={() => setCreating(false)}>
         <ThemedView style={styles.modal}>
           <SafeAreaView style={styles.modal}>
-            <CreateGroupScreen
-              onCreated={handleCreated}
-              onCancel={() => setCreating(false)}
-            />
+            <CreateGroupScreen onCreated={handleCreated} onCancel={() => setCreating(false)} />
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -151,14 +156,28 @@ const styles = StyleSheet.create({
   centeredText: {
     textAlign: 'center',
   },
+  empty: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.five,
+  },
+  emptyGlyph: {
+    fontSize: 40,
+    lineHeight: 48,
+  },
   list: {
     paddingVertical: Spacing.two,
+    gap: Spacing.two,
   },
   footer: {
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   archivedSection: {
     marginTop: Spacing.three,
+    gap: Spacing.two,
+  },
+  archivedList: {
+    gap: Spacing.two,
   },
   toggle: {
     paddingVertical: Spacing.two,

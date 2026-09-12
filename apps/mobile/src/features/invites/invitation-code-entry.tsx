@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 import { pendingInvite } from './pending-invite';
 
@@ -19,7 +18,6 @@ import { pendingInvite } from './pending-invite';
  * identically.
  */
 export function InvitationCodeEntry() {
-  const theme = useTheme();
   const [code, setCode] = useState('');
 
   function handleUseCode() {
@@ -28,24 +26,20 @@ export function InvitationCodeEntry() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="small" themeColor="textSecondary">
+    <View style={styles.container}>
+      <ThemedText type="overline" themeColor="textSecondary">
         Got an invitation code?
       </ThemedText>
-      <ThemedView style={styles.codeRow}>
-        <TextInput
+      <View style={styles.codeRow}>
+        <TextField
           accessibilityLabel="Invitation code"
           placeholder="Paste it here"
-          placeholderTextColor={theme.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
           value={code}
           onChangeText={setCode}
           onSubmitEditing={handleUseCode}
-          style={[
-            styles.codeInput,
-            { color: theme.text, backgroundColor: theme.backgroundElement },
-          ]}
+          style={styles.codeInput}
         />
         <Button
           label="Open"
@@ -53,8 +47,8 @@ export function InvitationCodeEntry() {
           disabled={code.trim().length === 0}
           onPress={handleUseCode}
         />
-      </ThemedView>
-    </ThemedView>
+      </View>
+    </View>
   );
 }
 
@@ -69,8 +63,5 @@ const styles = StyleSheet.create({
   },
   codeInput: {
     flex: 1,
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
   },
 });

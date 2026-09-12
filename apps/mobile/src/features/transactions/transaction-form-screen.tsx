@@ -9,12 +9,16 @@ import {
   type TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { Pill } from '@/components/pill';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/api/transactions';
@@ -187,111 +191,116 @@ export function TransactionFormScreen({
 
       <View style={styles.kindRow}>
         {(['expense', 'income', 'transfer'] as const).map((option) => (
-          <Pressable
+          <Pill
             key={option}
-            accessibilityRole="button"
-            accessibilityState={{ selected: kind === option }}
+            label={kindLabels[option]}
+            selected={kind === option}
             onPress={() => setKind(option)}
-            style={[
-              styles.kindButton,
-              { borderColor: theme.text },
-              kind === option && { backgroundColor: theme.text },
-            ]}>
-            <ThemedText type="small" style={kind === option ? { color: theme.background } : undefined}>
-              {kindLabels[option]}
-            </ThemedText>
-          </Pressable>
+            style={styles.kindPill}
+          />
         ))}
       </View>
 
-      <View style={styles.titleRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Category: ${selectedCategory?.label ?? 'Other'}`}
-          onPress={() => setCategoryPickerOpen(true)}
-          style={[styles.categoryBadge, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText style={styles.categoryEmoji}>{selectedCategory?.emoji ?? '🧾'}</ThemedText>
-        </Pressable>
-        <TextInput
-          accessibilityLabel="Title"
-          placeholder="Groceries, taxi, rent…"
-          placeholderTextColor={theme.textSecondary}
-          value={title}
-          onChangeText={setTitle}
-          maxLength={80}
-          style={[styles.input, styles.titleInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-        />
-      </View>
-
-      <ThemedView style={styles.fieldRow}>
-        <View style={styles.amountField}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Amount
-          </ThemedText>
-          <AmountInput defaultValueCents={amountCents ?? 0} onChangeCents={setAmountCents} />
-        </View>
-        <View style={styles.dateField}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Date
-          </ThemedText>
-          <DatePickerField value={occurredOn} onChange={setOccurredOn} />
-        </View>
-      </ThemedView>
-
-      <TextInput
-        accessibilityLabel="Comment"
-        placeholder="Comment (optional)"
-        placeholderTextColor={theme.textSecondary}
-        value={comment}
-        onChangeText={setComment}
-        maxLength={500}
-        multiline
-        style={[styles.input, styles.commentInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-      />
-
-      <ThemedText type="smallBold">
-        {kind === 'income' ? 'Who received it' : 'Who paid'}
-      </ThemedText>
-      <MemberSelect members={members} selectedId={payerId} onSelect={setPayerId} />
-
-      {kind === 'transfer' ? (
-        <>
-          <ThemedText type="smallBold">To</ThemedText>
-          <MemberSelect
-            members={members}
-            selectedId={toUserId}
-            onSelect={setToUserId}
-            excludeId={payerId}
+      {/* What the transaction is: its category, name, amount and date. */}
+      <Card style={styles.section}>
+        <View style={styles.titleRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Category: ${selectedCategory?.label ?? 'Other'}`}
+            onPress={() => setCategoryPickerOpen(true)}
+            style={[styles.categoryBadge, { backgroundColor: theme.primarySoft }]}>
+            <ThemedText style={styles.categoryEmoji}>{selectedCategory?.emoji ?? '🧾'}</ThemedText>
+          </Pressable>
+          <TextField
+            accessibilityLabel="Title"
+            placeholder="Groceries, taxi, rent…"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={80}
+            style={styles.titleInput}
           />
-        </>
-      ) : (
-        <>
-          <ThemedText type="smallBold">Who it concerns</ThemedText>
-          <SplitEditor members={members} amountCents={amountCents ?? 0} value={split} onChange={setSplit} />
-        </>
-      )}
+        </View>
+
+        <View style={styles.fieldRow}>
+          <View style={styles.amountField}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Amount
+            </ThemedText>
+            <AmountInput defaultValueCents={amountCents ?? 0} onChangeCents={setAmountCents} />
+          </View>
+          <View style={styles.dateField}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Date
+            </ThemedText>
+            <DatePickerField value={occurredOn} onChange={setOccurredOn} />
+          </View>
+        </View>
+
+        <TextField
+          accessibilityLabel="Comment"
+          placeholder="Comment (optional)"
+          value={comment}
+          onChangeText={setComment}
+          maxLength={500}
+          multiline
+        />
+      </Card>
+
+      {/* Who it involves: the payer, then either a recipient or a split. */}
+      <Card style={styles.section}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          {kind === 'income' ? 'Who received it' : 'Who paid'}
+        </ThemedText>
+        <MemberSelect members={members} selectedId={payerId} onSelect={setPayerId} />
+
+        {kind === 'transfer' ? (
+          <>
+            <ThemedText type="overline" themeColor="textSecondary">
+              To
+            </ThemedText>
+            <MemberSelect
+              members={members}
+              selectedId={toUserId}
+              onSelect={setToUserId}
+              excludeId={payerId}
+            />
+          </>
+        ) : (
+          <>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Who it concerns
+            </ThemedText>
+            <SplitEditor
+              members={members}
+              amountCents={amountCents ?? 0}
+              value={split}
+              onChange={setSplit}
+            />
+          </>
+        )}
+      </Card>
 
       {error ? (
-        <ThemedText type="small" style={styles.error}>
+        <ThemedText type="small" themeColor="danger">
           {error}
         </ThemedText>
       ) : null}
 
-      <ThemedView style={styles.actions}>
+      <View style={styles.actions}>
         <Button label="Save" busy={busy} disabled={!canSubmit} onPress={() => void handleSave()} />
-        <Button label="Cancel" variant="secondary" disabled={busy} onPress={onCancel} />
+        <Button label="Cancel" variant="ghost" disabled={busy} onPress={onCancel} />
         {initial ? (
           <Pressable
             accessibilityRole="button"
             disabled={busy}
             onPress={confirmDelete}
             style={({ pressed }) => [styles.delete, pressed && styles.pressed]}>
-            <ThemedText type="small" style={styles.deleteLabel}>
+            <ThemedText type="smallBold" themeColor="danger">
               Delete this transaction
             </ThemedText>
           </Pressable>
         ) : null}
-      </ThemedView>
+      </View>
 
       <Modal
         visible={categoryPickerOpen}
@@ -300,7 +309,7 @@ export function TransactionFormScreen({
         onRequestClose={() => setCategoryPickerOpen(false)}>
         <ThemedView style={styles.sheet}>
           <SafeAreaView style={styles.sheet}>
-            <ThemedView style={styles.sheetContent}>
+            <View style={styles.sheetContent}>
               <ThemedText type="subtitle">Category</ThemedText>
               <CategoryPicker
                 value={category}
@@ -309,8 +318,12 @@ export function TransactionFormScreen({
                   setCategoryPickerOpen(false);
                 }}
               />
-              <Button label="Close" variant="secondary" onPress={() => setCategoryPickerOpen(false)} />
-            </ThemedView>
+              <Button
+                label="Close"
+                variant="ghost"
+                onPress={() => setCategoryPickerOpen(false)}
+              />
+            </View>
           </SafeAreaView>
         </ThemedView>
       </Modal>
@@ -327,18 +340,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
   },
-  kindButton: {
+  kindPill: {
     flex: 1,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
   },
-  input: {
-    height: 52,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    fontSize: 16,
+  section: {
+    gap: Spacing.three,
   },
   titleRow: {
     flexDirection: 'row',
@@ -351,7 +358,7 @@ const styles = StyleSheet.create({
   categoryBadge: {
     width: 52,
     height: 52,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -366,11 +373,6 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.four,
   },
-  commentInput: {
-    height: 80,
-    paddingTop: Spacing.two,
-    textAlignVertical: 'top',
-  },
   fieldRow: {
     flexDirection: 'row',
     gap: Spacing.three,
@@ -383,9 +385,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.one,
   },
-  error: {
-    color: '#d64545',
-  },
   actions: {
     gap: Spacing.two,
     marginTop: Spacing.two,
@@ -393,9 +392,6 @@ const styles = StyleSheet.create({
   delete: {
     alignSelf: 'center',
     paddingVertical: Spacing.three,
-  },
-  deleteLabel: {
-    color: '#d64545',
   },
   pressed: {
     opacity: 0.6,

@@ -1,9 +1,10 @@
 import { planReimbursements, type Balance, type GroupMember } from '@splitcount/shared';
 import { useMemo } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -137,7 +138,7 @@ export function ReimbursementsScreen({
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
-          <ActivityIndicator testID="reimbursements-loading" color={theme.text} />
+          <ActivityIndicator testID="reimbursements-loading" color={theme.primary} />
         </View>
       ) : status === 'error' ? (
         <View style={styles.centeredBody}>
@@ -158,7 +159,9 @@ export function ReimbursementsScreen({
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.section}>
-            <ThemedText type="smallBold">Suggested reimbursements</ThemedText>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Suggested reimbursements
+            </ThemedText>
             {suggestions.map((suggestion) => (
               <SuggestionRow
                 key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
@@ -176,22 +179,26 @@ export function ReimbursementsScreen({
           </View>
 
           <View style={styles.section}>
-            <ThemedText type="smallBold">Where everyone stands</ThemedText>
-            {forDisplay(loaded).map((balance) => (
-              <BalanceRow
-                key={balance.userId}
-                party={partyOf(balance.userId, byId)}
-                amountCents={balance.amountCents}
-                isViewer={balance.userId === viewerId}
-              />
-            ))}
+            <ThemedText type="overline" themeColor="textSecondary">
+              Where everyone stands
+            </ThemedText>
+            <Card style={styles.standings}>
+              {forDisplay(loaded).map((balance) => (
+                <BalanceRow
+                  key={balance.userId}
+                  party={partyOf(balance.userId, byId)}
+                  amountCents={balance.amountCents}
+                  isViewer={balance.userId === viewerId}
+                />
+              ))}
+            </Card>
           </View>
         </ScrollView>
       )}
 
-      <ThemedView style={styles.footer}>
-        <Button label="Close" variant="secondary" onPress={onClose} />
-      </ThemedView>
+      <View style={styles.footer}>
+        <Button label="Close" variant="ghost" onPress={onClose} />
+      </View>
     </ThemedView>
   );
 }
@@ -216,26 +223,30 @@ function SuggestionRow({
   const amount = centsToText(suggestion.amountCents);
 
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Card
       accessibilityLabel={`${label} ${amount}`}
-      accessibilityState={{ disabled: blocked !== null }}
       disabled={blocked !== null}
+      muted={blocked !== null}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      style={styles.suggestion}>
       <View style={styles.cardRow}>
-        <Avatar name={suggestion.from.name} picture={suggestion.from.picture} size={32} />
+        <Avatar
+          name={suggestion.from.name}
+          picture={suggestion.from.picture}
+          size={36}
+          seed={suggestion.from.id}
+        />
         <ThemedText style={styles.cardLabel} numberOfLines={2}>
           {label}
         </ThemedText>
-        <ThemedText type="smallBold">{amount}</ThemedText>
+        <ThemedText type="amount">{amount}</ThemedText>
       </View>
       {blocked === null ? null : (
         <ThemedText type="small" themeColor="textSecondary">
           {blocked}
         </ThemedText>
       )}
-    </Pressable>
+    </Card>
   );
 }
 
@@ -256,7 +267,7 @@ function BalanceRow({
 
   return (
     <View style={styles.row}>
-      <Avatar name={party.name} picture={party.picture} size={32} />
+      <Avatar name={party.name} picture={party.picture} size={32} seed={party.id} />
       <ThemedText style={styles.name} numberOfLines={1}>
         {isViewer ? 'You' : party.name}
       </ThemedText>
@@ -292,9 +303,11 @@ const styles = StyleSheet.create({
   centeredText: {
     textAlign: 'center',
   },
-  card: {
+  suggestion: {
     gap: Spacing.one,
-    paddingVertical: Spacing.two,
+  },
+  standings: {
+    gap: Spacing.two,
   },
   cardRow: {
     flexDirection: 'row',

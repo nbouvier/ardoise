@@ -1,6 +1,8 @@
 import { categoryDefinition, type Transaction } from '@splitcount/shared';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Card } from '@/components/card';
+import { MedallionBadge } from '@/components/medallion-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 
@@ -46,18 +48,25 @@ function myShareCents(transaction: Transaction, viewerId: string): number {
   return net;
 }
 
-/** One row of a group's transaction list. */
+/**
+ * One card of a group's transaction list. The category badge carries the
+ * category's own colour, so a list reads as a spread of spending before a
+ * single word of it is read.
+ */
 export function TransactionRow({ transaction, viewerId, onPress }: TransactionRowProps) {
   const myShare = myShareCents(transaction, viewerId);
   const category = categoryDefinition(transaction.category);
 
   const content = (
-    <>
+    <View style={styles.row}>
+      <MedallionBadge
+        seed={transaction.id}
+        content={category?.emoji ?? '🧾'}
+        color={category?.color}
+        size={40}
+      />
       <View style={styles.text}>
-        <ThemedText numberOfLines={1}>
-          {category ? `${category.emoji} ` : ''}
-          {transaction.title}
-        </ThemedText>
+        <ThemedText numberOfLines={1}>{transaction.title}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {formatOccurredOn(transaction.occurredOn)} · {kindLabels[transaction.kind]} ·{' '}
           {transaction.payer.name}
@@ -66,21 +75,17 @@ export function TransactionRow({ transaction, viewerId, onPress }: TransactionRo
       <ThemedText type="smallBold" themeColor={balanceTone(myShare)}>
         {myShare === 0 ? '—' : `${myShare > 0 ? '+' : '−'}${centsToText(Math.abs(myShare))}`}
       </ThemedText>
-    </>
+    </View>
   );
 
   if (!onPress) {
-    return <View style={styles.row}>{content}</View>;
+    return <Card>{content}</Card>;
   }
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={transaction.title}
-      onPress={() => onPress(transaction)}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <Card accessibilityLabel={transaction.title} onPress={() => onPress(transaction)}>
       {content}
-    </Pressable>
+    </Card>
   );
 }
 
@@ -89,13 +94,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    paddingVertical: Spacing.three,
   },
   text: {
     flex: 1,
     gap: Spacing.half,
-  },
-  pressed: {
-    opacity: 0.6,
   },
 });
