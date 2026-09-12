@@ -6,7 +6,7 @@ import { CategoryPicker } from './category-picker';
 
 describe('CategoryPicker', () => {
   it('shows every preset category', async () => {
-    await render(<CategoryPicker value={null} onChange={jest.fn()} />);
+    await render(<CategoryPicker value="other" onChange={jest.fn()} />);
 
     for (const category of TRANSACTION_CATEGORIES) {
       expect(screen.getByRole('button', { name: category.label })).toBeTruthy();
@@ -28,19 +28,19 @@ describe('CategoryPicker', () => {
 
   it('reports the picked category', async () => {
     const onChange = jest.fn();
-    await render(<CategoryPicker value={null} onChange={onChange} />);
+    await render(<CategoryPicker value="other" onChange={onChange} />);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Leisure' }));
 
     expect(onChange).toHaveBeenCalledWith('leisure');
   });
 
-  it('clears the value when the already-selected category is pressed again', async () => {
+  it('reports the same category again when its own pill is pressed', async () => {
     const onChange = jest.fn();
     await render(<CategoryPicker value="leisure" onChange={onChange} />);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Leisure' }));
 
-    expect(onChange).toHaveBeenCalledWith(null);
+    expect(onChange).toHaveBeenCalledWith('leisure');
   });
 });

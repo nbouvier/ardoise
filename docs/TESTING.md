@@ -94,15 +94,18 @@ interaction is a device concern.
   flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
   invite sharing and opening the group shared with a friend, the groups feature
   (`src/features/groups/`): list with the archived toggle, creation with friend selection,
-  and the detail screen — now transaction-first, with group management behind the
-  "Details" sheet, including the pair-group variant where every management action is
-  absent **but "Add a transaction" is present**, and the transactions feature
-  (`src/features/transactions/`): the split editor (selection, weight stepper, live
-  preview, mode switching, the allocation indicator), the add/edit form (defaults, request
-  shape for each kind, full-replace edit, transfer validation), the category picker
-  (selection, clearing by re-tapping), the transaction row's "my share" calculation and
-  category emoji, and the date field's local-date conversion (no time-zone shift) and its
-  iOS/Android wiring.
+  the detail screen — now transaction-first, with group management behind the "Details"
+  sheet, including the pair-group variant where every management action is absent **but
+  "Add a transaction" is present** — and the category badge's quick-edit sheet (opens on
+  tap, applies immediately, does not also open the full edit sheet), and the transactions
+  feature (`src/features/transactions/`): the split editor (selection, weight stepper,
+  live preview, mode switching, the allocation indicator), the add/edit form (defaults —
+  Other by default — request shape for each kind, full-replace edit, transfer
+  validation), the category picker (selection; every category is reachable, none has a
+  "clear" behaviour), `transaction-request.ts` (rebuilding a full-replace request from a
+  stored transaction, for both the form and the quick edit), the transaction row's "my
+  share" calculation and category badge, and the date field's local-date conversion (no
+  time-zone shift) and its iOS/Android wiring.
 
 ### Gotchas
 

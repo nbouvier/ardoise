@@ -71,7 +71,7 @@ export const transaction = {
   amountCents: 4250,
   occurredOn: '2026-09-11',
   comment: null,
-  category: null,
+  category: 'other' as const,
   payer: ada,
   splitMode: 'shares' as const,
   participants: [

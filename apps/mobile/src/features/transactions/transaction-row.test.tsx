@@ -15,7 +15,7 @@ const expense: Transaction = {
   amountCents: 1000,
   occurredOn: '2026-09-11',
   comment: null,
-  category: null,
+  category: 'groceries',
   payer: ada,
   splitMode: 'shares',
   participants: [
@@ -63,22 +63,41 @@ describe('TransactionRow', () => {
     expect(screen.getByText('Groceries')).toBeTruthy();
   });
 
-  it('shows the category emoji next to the title, when categorised', async () => {
+  it('always shows the category badge, defaulting to Other', async () => {
+    await render(
+      <TransactionRow transaction={{ ...expense, category: 'other' }} viewerId={ada.id} onPress={jest.fn()} />,
+    );
+
+    expect(screen.getByText('🧾')).toBeTruthy();
+  });
+
+  it('shows the emoji for a specific category', async () => {
+    await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
+
+    expect(screen.getByText('🛒')).toBeTruthy();
+  });
+
+  it('reports a tap on the category badge, separately from the row', async () => {
+    const onPress = jest.fn();
+    const onCategoryPress = jest.fn();
     await render(
       <TransactionRow
-        transaction={{ ...expense, category: 'groceries' }}
+        transaction={expense}
         viewerId={ada.id}
-        onPress={jest.fn()}
+        onPress={onPress}
+        onCategoryPress={onCategoryPress}
       />,
     );
 
-    expect(screen.getByText('🛒 Groceries')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Category: Groceries' }));
+
+    expect(onCategoryPress).toHaveBeenCalledWith(expense);
+    expect(onPress).not.toHaveBeenCalled();
   });
 
-  it('shows no emoji at all when uncategorised', async () => {
+  it('renders the badge as non-interactive when no onCategoryPress is given', async () => {
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={jest.fn()} />);
 
-    expect(screen.queryByText(/^🛒/)).toBeNull();
-    expect(screen.getByText('Groceries')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Category: Groceries' })).toBeNull();
   });
 });

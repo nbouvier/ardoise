@@ -6,14 +6,15 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface CategoryPickerProps {
-  value: TransactionCategory | null;
-  onChange: (value: TransactionCategory | null) => void;
+  value: TransactionCategory;
+  onChange: (value: TransactionCategory) => void;
 }
 
 /**
- * A grid of the fixed preset categories — single-select, and tapping the
- * already-selected one clears it back to "none". No way to add one here;
- * the list is closed (`@splitcount/shared`'s `categories.ts`).
+ * A grid of the fixed preset categories — single-select. Every transaction
+ * has a category (`Other` when none was chosen), so there is no "clear"
+ * gesture: picking `Other` itself is how you get the neutral option. No way
+ * to add one here; the list is closed (`@splitcount/shared`'s `categories.ts`).
  */
 export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
   const theme = useTheme();
@@ -28,7 +29,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
             accessibilityRole="button"
             accessibilityState={{ selected }}
             accessibilityLabel={category.label}
-            onPress={() => onChange(selected ? null : category.key)}
+            onPress={() => onChange(category.key)}
             style={[
               styles.pill,
               { borderColor: theme.text },

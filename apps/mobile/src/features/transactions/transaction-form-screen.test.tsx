@@ -110,7 +110,7 @@ describe('TransactionFormScreen — recording', () => {
         kind: 'expense',
         title: 'Groceries',
         amount: 1000,
-        category: null,
+        category: 'other',
         payerId: ada.id,
         split: {
           mode: 'shares',
@@ -124,7 +124,7 @@ describe('TransactionFormScreen — recording', () => {
     expect(onSaved).toHaveBeenCalledWith(existing);
   });
 
-  it('picks a category, and clears it by tapping it again', async () => {
+  it('defaults to Other and can be switched to another preset', async () => {
     const onSaved = jest.fn();
     await render(
       <TransactionFormScreen
@@ -136,6 +136,11 @@ describe('TransactionFormScreen — recording', () => {
       />,
     );
 
+    expect(screen.getByRole('button', { name: 'Other' })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ selected: true }),
+    );
+
     await fireEvent.changeText(screen.getByLabelText('Title'), 'Groceries');
     await fireEvent.changeText(screen.getByLabelText('Amount'), '10');
     await fireEvent.press(screen.getByRole('button', { name: 'Groceries' }));
@@ -145,16 +150,6 @@ describe('TransactionFormScreen — recording', () => {
       expect.anything(),
       group.id,
       expect.objectContaining({ category: 'groceries' }),
-    );
-
-    // Tapping the same category again clears it.
-    await fireEvent.press(screen.getByRole('button', { name: 'Groceries' }));
-    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-
-    expect(mockCreateTransaction).toHaveBeenLastCalledWith(
-      expect.anything(),
-      group.id,
-      expect.objectContaining({ category: null }),
     );
   });
 

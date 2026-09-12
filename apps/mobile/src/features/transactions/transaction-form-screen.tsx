@@ -1,10 +1,11 @@
-import type {
-  CreateTransactionRequest,
-  GroupDetail,
-  SplitInput,
-  Transaction,
-  TransactionCategory,
-  TransactionKind,
+import {
+  DEFAULT_TRANSACTION_CATEGORY,
+  type CreateTransactionRequest,
+  type GroupDetail,
+  type SplitInput,
+  type Transaction,
+  type TransactionCategory,
+  type TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -23,6 +24,7 @@ import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
 import { MemberSelect } from './member-select';
 import { SplitEditor } from './split-editor';
+import { splitFrom } from './transaction-request';
 
 export interface TransactionFormScreenProps {
   group: GroupDetail;
@@ -51,22 +53,6 @@ function defaultSplit(memberIds: string[]): SplitInput {
   return { mode: 'shares', participants: memberIds.map((userId) => ({ userId, weight: 1 })) };
 }
 
-function splitFrom(transaction: Transaction): SplitInput {
-  if (transaction.splitMode === 'shares') {
-    return {
-      mode: 'shares',
-      participants: transaction.participants.map((p) => ({
-        userId: p.user.id,
-        weight: p.weight ?? 1,
-      })),
-    };
-  }
-  return {
-    mode: 'amount',
-    participants: transaction.participants.map((p) => ({ userId: p.user.id, amount: p.shareCents })),
-  };
-}
-
 /** Add or edit a transaction — one form for both, pre-filled when editing. */
 export function TransactionFormScreen({
   group,
@@ -85,7 +71,9 @@ export function TransactionFormScreen({
   const [amountCents, setAmountCents] = useState<number | null>(initial?.amountCents ?? 0);
   const [occurredOn, setOccurredOn] = useState(initial?.occurredOn ?? today());
   const [comment, setComment] = useState(initial?.comment ?? '');
-  const [category, setCategory] = useState<TransactionCategory | null>(initial?.category ?? null);
+  const [category, setCategory] = useState<TransactionCategory>(
+    initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
+  );
   const [payerId, setPayerId] = useState(initial?.payer.id ?? viewerId);
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'

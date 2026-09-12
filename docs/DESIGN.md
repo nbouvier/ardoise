@@ -76,12 +76,18 @@ shows the toggle, not the empty state.
 Pushed above the tabs, so it has a back button. **Transactions are the primary content**:
 the group's name, an "Archived" note when it applies, **the viewer's own balance**
 ("You are owed 21.25" / "You owe 8.00" / "You're all settled up" — said in words, so it
-never rests on spotting a minus sign), the transaction list
-(`TransactionRow`: category emoji (when set) before the title, date, kind, payer, and the
-viewer's own share, coloured), and a
-primary "Add a transaction" button — absent on an archived group. A row opens the same
-add/edit sheet, pre-filled; on an archived group rows render but are not pressable, read
-only. Empty state: an explanation and the same "Add a transaction" action.
+never rests on spotting a minus sign), the transaction list (`TransactionRow`: title, a
+small square **category badge** to its right showing just the emoji, date, kind, payer,
+and the viewer's own share, coloured), and a primary "Add a transaction" button — absent
+on an archived group. A row opens the same add/edit sheet, pre-filled; on an archived
+group rows render but are not pressable, read only, including the badge. Empty state: an
+explanation and the same "Add a transaction" action.
+
+**Tapping the category badge** opens a small sheet with just the category grid
+(`CategoryPicker`) — a faster path than the full edit sheet for the one thing people
+change most often. Picking a category applies it immediately (a full-replace update
+behind the scenes, everything else about the transaction untouched — see
+`transaction-request.ts`) and closes the sheet; there is no separate save step.
 
 Group management — everything that used to sit directly on this screen — moved behind a
 small "Details" button in the header, opening a sheet: the member list (avatar + name,
@@ -111,19 +117,21 @@ a way back), and a retryable connection error.
 
 One sheet for recording and for editing — editing pre-fills it, and adds a red text-only
 "Delete this transaction". Kind picker (Expense / Income / Transfer), title, amount, date
-(`DatePickerField` — see below), a category grid (`CategoryPicker` — see below), optional
-comment, then "Who paid" (`MemberSelect`, defaulting to the signed-in member). An expense
-or income continues with "Who it concerns" (`SplitEditor`); a transfer replaces it with a
-single "To" picker instead, excluding the payer. "Save" is disabled until the title,
-amount, date and split are all valid — the category is never required.
+(`DatePickerField` — see below), a category grid (`CategoryPicker` — see below, defaulting
+to Other), optional comment, then "Who paid" (`MemberSelect`, defaulting to the signed-in
+member). An expense or income continues with "Who it concerns" (`SplitEditor`); a
+transfer replaces it with a single "To" picker instead, excluding the payer. "Save" is
+disabled until the title, amount, date and split are all valid — the category always has
+a value, so it never blocks saving.
 
 ### Category picker (`src/features/transactions/category-picker.tsx`)
 
 Every preset as an emoji + label pill (`CategoryPicker`), wrapping into a grid — same
-pill styling as the split editor's mode toggle, filled when selected. Single-select, and
-tapping the already-selected pill again clears it: there is no separate "None" pill, the
-selection itself is the toggle. No way to add, rename or reorder a category here — the
-list is fixed (`@splitcount/shared`'s `categories.ts`).
+pill styling as the split editor's mode toggle, filled when selected. Single-select: every
+transaction has a category (`Other` by default), so there is no "clear" gesture — picking
+`Other` itself is the neutral choice. No way to add, rename or reorder a category here —
+the list is fixed (`@splitcount/shared`'s `categories.ts`). Used both in the full add/edit
+sheet and, alone, in the category badge's quick-edit sheet.
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 
