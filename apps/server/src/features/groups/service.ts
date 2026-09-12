@@ -75,24 +75,10 @@ export interface GroupsService {
     userId: string,
     groupId: string,
   ): Promise<{ memberDescendantIds: string[]; excludedCount: number }>;
-  /**
-   * What a reimbursement plan's `subtree` scope covers
-   * (`docs/specs/reimbursements.md`): every descendant of `groupId`, at any
-   * depth, with the name to show it under — **including ones the caller has
-   * not joined**, which is exactly what `subtreeScope` above refuses to do.
-   *
-   * The two are intentionally different and must not be merged. A plan is
-   * about other people's debts too, so a sub-group left out of it would make
-   * the plan disagree with what that sub-group's own members see; the price
-   * is a bounded disclosure of net figures, taken knowingly. Membership in
-   * `groupId` itself is still required, and `groupId` is not in the result —
-   * its caller already holds it, with its name resolved.
-   */
-  reimbursementScope(userId: string, groupId: string): Promise<{ id: string; name: string }[]>;
 }
 
 /**
- * The slice of the transaction ledger a group's rolled-up balance needs: a
+ * The slice of the transaction ledger a group's own balance needs: a
  * user's own net balance in a specific set of groups. Narrow on purpose —
  * `groups` reads the ledger, it does not get to write to it, the same
  * pattern `friends`' `CounterpartyBalances` already uses.
@@ -126,24 +112,22 @@ function nameFor(group: GroupRow, viewerId: string, members: MemberWithUser[]): 
 }
 
 /**
- * The viewer's net balance in `group`, rolled up over its whole sub-tree —
- * the plain sum of their own balance in `group` plus in every descendant, at
- * any depth. A descendant they were never a member of contributes nothing,
- * since they are on none of its transactions (`docs/specs/balances.md`);
- * this holds whether or not it is currently visible to them. Module-level
- * (not a closure over `createGroupsService`) so the invite handler below can
- * compute the same figure for its own summary without a second formula that
- * could drift from this one.
+ * The viewer's own net balance in `group` — that group's transactions and
+ * nothing else. A sub-group keeps its own figure rather than folding into
+ * its parent's: "where do I stand *here*" is the question every screen
+ * showing this asks, and a figure that silently included spaces the viewer
+ * is not looking at could not be reconciled with the group's own member
+ * list (`docs/specs/balances.md`). Module-level (not a closure over
+ * `createGroupsService`) so the invite handler below can compute the same
+ * figure without a second formula that could drift from this one.
  */
-async function rolledUpBalance(
-  repository: GroupsRepository,
+async function ownBalance(
   ledger: GroupBalances,
   userId: string,
-  group: GroupRow,
+  groupId: string,
 ): Promise<number> {
-  const descendantIds = await repository.listDescendantIds(group.id);
-  const balances = await ledger.balancesByGroup(userId, [group.id, ...descendantIds]);
-  return [group.id, ...descendantIds].reduce((sum, id) => sum + (balances.get(id) ?? 0), 0);
+  const balances = await ledger.balancesByGroup(userId, [groupId]);
+  return balances.get(groupId) ?? 0;
 }
 
 /**
@@ -217,11 +201,10 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   }
 
   async function detailOf(group: GroupRow, viewerId: string, role: GroupRole) {
-    const [members, children, ancestors, viewerBalanceCents] = await Promise.all([
+    const [members, children, ancestors] = await Promise.all([
       repository.listMembers(group.id),
       repository.listChildren(group.id),
       repository.listAncestors(group.id),
-      rolledUpBalance(repository, ledger, viewerId, group),
     ]);
     const joinedChildIds = new Set(
       await repository.filterMemberGroupIds(
@@ -229,18 +212,10 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         children.map((child) => child.group.id),
       ),
     );
-    // Only a joined sub-group contributes a balance — an unjoined one has the
-    // viewer on none of its transactions, so it is always `0` without a query
-    // (mirrors `rolledUpBalance`'s own reasoning for an unvisited descendant).
-    const childBalanceEntries = await Promise.all(
-      children
-        .filter((child) => joinedChildIds.has(child.group.id))
-        .map(async (child) => {
-          const balance = await rolledUpBalance(repository, ledger, viewerId, child.group);
-          return [child.group.id, balance] as const;
-        }),
-    );
-    const childBalances = new Map(childBalanceEntries);
+    // One ledger read for this group and each sub-group shown with a figure
+    // of its own. An unjoined sub-group is not asked for at all: the viewer
+    // is on none of its transactions, so it is `0` without a query.
+    const balances = await ledger.balancesByGroup(viewerId, [group.id, ...joinedChildIds]);
 
     return {
       ...summaryOf(
@@ -248,7 +223,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         nameFor(group, viewerId, members),
         members.length,
         children.length,
-        viewerBalanceCents,
+        balances.get(group.id) ?? 0,
       ),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
@@ -262,7 +237,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         name: child.group.name ?? 'Untitled group',
         memberCount: child.memberCount,
         viewerIsMember: joinedChildIds.has(child.group.id),
-        viewerBalanceCents: childBalances.get(child.group.id) ?? 0,
+        viewerBalanceCents: balances.get(child.group.id) ?? 0,
       })),
       ancestors: ancestors.map((ancestor) => ({
         id: ancestor.id,
@@ -345,35 +320,23 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         return [];
       }
 
-      // One ledger read for every root and its whole sub-tree, rather than
-      // one per group: the roll-up is a client of `transactions`' ledger, not
-      // a second implementation of it, and this is the same batching
-      // `rolledUpBalance` does for a single group.
-      const descendantsByRoot = new Map(
-        await Promise.all(
-          rows.map(
-            async ({ group }) =>
-              [group.id, await repository.listDescendantIds(group.id)] as const,
-          ),
-        ),
+      // One ledger read for every listed group, rather than one per group:
+      // the balance is a client of `transactions`' ledger, not a second
+      // implementation of it.
+      const balances = await ledger.balancesByGroup(
+        userId,
+        rows.map(({ group }) => group.id),
       );
-      const everyGroupId = rows.flatMap(({ group }) => [
-        group.id,
-        ...(descendantsByRoot.get(group.id) ?? []),
-      ]);
-      const balances = await ledger.balancesByGroup(userId, everyGroupId);
 
-      return rows.map(({ group, memberCount, subgroupCount }) => {
-        const ids = [group.id, ...(descendantsByRoot.get(group.id) ?? [])];
-        const viewerBalanceCents = ids.reduce((sum, id) => sum + (balances.get(id) ?? 0), 0);
-        return summaryOf(
+      return rows.map(({ group, memberCount, subgroupCount }) =>
+        summaryOf(
           group,
           group.name ?? 'Untitled group',
           memberCount,
           subgroupCount,
-          viewerBalanceCents,
-        );
-      });
+          balances.get(group.id) ?? 0,
+        ),
+      );
     },
 
     async get(userId, groupId) {
@@ -536,18 +499,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       return detailOf(group, userId, 'member');
     },
 
-    async reimbursementScope(userId, groupId) {
-      await requireMembership(userId, groupId);
-      const descendants = await repository.listDescendants(groupId);
-      // No membership filter, unlike `subtreeScope` right below: that is
-      // this feature's one deliberate departure, and the reason the two
-      // methods exist side by side instead of sharing an implementation.
-      return descendants.map((descendant) => ({
-        id: descendant.id,
-        name: descendant.name ?? 'Untitled group',
-      }));
-    },
-
     async subtreeScope(userId, groupId) {
       await requireMembership(userId, groupId);
       const descendantIds = await repository.listDescendantIds(groupId);
@@ -608,7 +559,7 @@ export function createGroupInviteHandler(
       const inserted = await repository.addMembers(group.id, [userId]);
       const [children, viewerBalanceCents] = await Promise.all([
         repository.listChildren(group.id),
-        rolledUpBalance(repository, ledger, userId, group),
+        ownBalance(ledger, userId, group.id),
       ]);
 
       return {

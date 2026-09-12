@@ -67,9 +67,10 @@ export interface TransactionsRepository {
   /**
    * `userId`'s own net balance in each of `groupIds`, keyed by group id — the
    * same rule as a group's balance (`computeBalances`), aggregated in SQL and
-   * scoped to a specific set of groups rather than one. A group absent from
-   * the result has no transaction `userId` is party to; the caller (a group's
-   * sub-tree roll-up, `docs/specs/balances.md`) treats that as zero.
+   * scoped to a specific set of groups rather than one — what the group list
+   * needs to show every group's own figure in one read. A group absent from
+   * the result has no transaction `userId` is party to; the caller
+   * (`docs/specs/balances.md`) treats that as zero.
    */
   balancesByGroup(userId: string, groupIds: readonly string[]): Promise<Map<string, number>>;
 }

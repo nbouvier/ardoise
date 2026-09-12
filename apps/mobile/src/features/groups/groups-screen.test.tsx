@@ -71,7 +71,7 @@ describe('GroupsScreen', () => {
     expect(screen.getByText('3 members')).toBeTruthy();
   });
 
-  it("shows the viewer's balance rolled up over the group and its sub-groups", async () => {
+  it("shows the viewer's own balance in the group", async () => {
     mockFetchGroups.mockResolvedValue([{ ...trip, viewerBalanceCents: 2500 }]);
 
     await render(<GroupsScreen />);

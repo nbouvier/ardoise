@@ -21,11 +21,10 @@ export interface GroupBalancesProps {
 /**
  * Where the viewer stands against the group, in one line — the answer to
  * "what do I owe here" without opening the details sheet. `amountCents` is
- * the group's `viewerBalanceCents`: for a group with sub-groups this is
- * already rolled up over the whole sub-tree (`docs/specs/balances.md`), and
- * it travels with the group itself, so there is no separate loading state to
- * wait on here — unlike the per-member list below, which stays scoped to
- * this one group and has its own.
+ * the group's `viewerBalanceCents` — this group's own transactions, never a
+ * sub-group's (`docs/specs/balances.md`) — and it travels with the group
+ * itself, so there is no separate loading state to wait on here, unlike the
+ * per-member list below.
  */
 export function ViewerBalance({ amountCents }: { amountCents: number }) {
   return (
