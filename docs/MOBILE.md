@@ -100,6 +100,25 @@ npm run mobile:android   # or: npm run mobile:ios
 The web target needs nothing — `react-native-svg` renders real SVG there. No config
 plugin, only autolinking.
 
+## App icon and splash
+
+Both are **generated from `src/components/brand-mark.tsx`**, the SVG mark drawn from the
+design tokens (`docs/DESIGN.md`): `assets/images/icon.png`, `splash-icon.png`,
+`favicon.png` and the three `android-icon-*.png` adaptive layers are flat exports of it.
+If the mark changes, regenerate them rather than editing the PNGs.
+
+`app.json` carries the splash and adaptive-icon background colours, so they are **native
+config**: after changing the mark, the icons or those colours, an existing dev build keeps
+showing the old ones until it is regenerated.
+
+```bash
+npm run prebuild --workspace @splitcount/mobile
+npm run mobile:android   # or: npm run mobile:ios
+```
+
+The `ios.icon` key (an Icon Composer `.icon` bundle) was removed along with the Expo
+starter art — iOS now uses the same `icon.png` as everything else.
+
 ## Cloud builds (EAS) — alternative
 
 For a dev build without local native toolchains (e.g. iOS from Windows), use EAS Build.

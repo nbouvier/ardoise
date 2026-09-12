@@ -8,10 +8,13 @@ export default function AppTabs() {
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
   return (
+    // The tab bar is a surface, not the canvas, and the active tab carries the
+    // brand hue — the one place navigation says which app this is.
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={colors.surface}
+      indicatorColor={colors.primarySoft}
+      tintColor={colors.primary}
+      labelStyle={{ selected: { color: colors.primary } }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Groups</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person.3" md="groups" />
