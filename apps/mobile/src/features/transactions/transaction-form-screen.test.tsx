@@ -12,6 +12,9 @@ const group: GroupDetail = {
   kind: 'standard',
   name: 'Trip',
   memberCount: 2,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
   members: [
@@ -19,6 +22,8 @@ const group: GroupDetail = {
     { ...grace, role: 'member' },
   ],
   viewerRole: 'owner',
+  subgroups: [],
+  ancestors: [],
 };
 
 const existing: Transaction = {

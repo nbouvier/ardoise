@@ -12,6 +12,7 @@ const groupAccessFailures: Record<GroupAccessReason, { status: number; error: st
   owner_cannot_leave: { status: 409, error: 'owner_cannot_leave' },
   cannot_remove_owner: { status: 409, error: 'cannot_remove_owner' },
   not_friends: { status: 400, error: 'not_friends' },
+  max_depth_reached: { status: 409, error: 'max_depth_reached' },
 };
 
 export interface GroupAccessFailure {

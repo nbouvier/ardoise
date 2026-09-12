@@ -22,6 +22,9 @@ const group = {
   kind: 'standard' as const,
   name: 'Corsica 2026',
   memberCount: 3,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };

@@ -50,6 +50,9 @@ export const groupSummary = {
   kind: 'standard' as const,
   name: 'Corsica 2026',
   memberCount: 2,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };
@@ -61,6 +64,8 @@ export const groupDetail = {
     { ...grace, role: 'member' as const },
   ],
   viewerRole: 'owner' as const,
+  subgroups: [],
+  ancestors: [],
 };
 
 export const transaction = {

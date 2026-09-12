@@ -224,20 +224,30 @@ Shared error codes:
 | `404`  | `group_not_found`      | No such group, or the caller is not a member                |
 | `403`  | `not_group_owner`      | Deleting is owner-only                                      |
 | `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
-| `409`  | `group_archived`       | An archived group takes no new members and issues no links  |
+| `409`  | `group_archived`       | An archived group, or one whose ancestor is archived, takes no new members and issues no links |
 | `409`  | `owner_cannot_leave`   | The owner cannot leave while other members remain           |
 | `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
+| `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, archivedAt, createdAt }`, with `kind`
-one of `standard` / `pair`. `GroupDetail` adds `members` (a `FriendSummary` plus `role`)
-and `viewerRole`. A **pair group stores no name**: the API fills it with the *other*
-member's name, so each side sees who they share with.
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is `null` for a root
+group; `depth` is `0` for a root group and capped at `4`; `subgroupCount` is the number of
+*direct* sub-groups only. `GroupDetail` adds `members` (a `FriendSummary` plus `role`),
+`viewerRole`, `subgroups` (the group's direct sub-groups — see below) and `ancestors`
+(root-first, empty for a root group). A **pair group stores no name**: the API fills it
+with the *other* member's name, so each side sees who they share with, and it can neither
+have a parent nor be one.
+
+A `subgroups` entry is `{ id, name, memberCount, viewerIsMember }` — enough to decide
+whether to open it (already a member) or join it, never a member list. An `ancestors`
+entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own `subgroups` —
+they are read from the sub-group's own `GET /groups/:groupId` when opened.
 
 ### `GET /groups`
 
-The caller's groups. **Pair groups are never listed** — they are reached from the friend
-list. Active groups first, then archived ones; alphabetical within each.
+The caller's **root** groups only — a group that is itself a sub-group is reached by
+opening its parent, never listed here. **Pair groups are never listed** — they are reached
+from the friend list. Active groups first, then archived ones; alphabetical within each.
 
 Response `200`: `{ "groups": [ "<GroupSummary>" ] }`
 
@@ -248,9 +258,19 @@ Create a group. `memberIds` is optional and must contain only friends of the cal
 Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"] }` → Response
 `201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
 
+`parentId` is optional and creates a **sub-group** under that group instead of a root
+group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must be a
+standard group, not effectively archived, and not already at the depth cap. Every initial
+member (the creator included) is also added to every ancestor of the new group in the same
+request — membership always flows down the tree.
+
+Request: `{ "name": "Ajaccio weekend", "parentId": "<uuid>" }` → Response
+`201 { "group": "<GroupDetail>" }`, with `parentId` and `depth` set accordingly.
+
 ### `GET /groups/:groupId`
 
-The group and its members. Response `200 { "group": "<GroupDetail>" }`.
+The group, its members, its direct sub-groups and, for a sub-group, its ancestors.
+Response `200 { "group": "<GroupDetail>" }`.
 
 ### `PATCH /groups/:groupId`
 
@@ -266,7 +286,10 @@ Delete the group and everything in it. **Owner only**, irreversible. Response `2
 
 ### `POST /groups/:groupId/members`
 
-Add friends of the caller. Already-members are ignored rather than rejected.
+Add friends of the caller. Already-members are ignored rather than rejected. Each added
+person is also added to every ancestor of `groupId` in the same request — membership
+always flows down the tree (`docs/specs/groups.md`); the response's `memberCount` and
+`subgroups` describe `groupId` itself only.
 
 Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetail>" }`.
 
@@ -282,8 +305,10 @@ allowed to delete. They leave on their own terms, or delete it.
 ### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
 
 The group's invitation link — **one per group**, not per member: any member sees, shares
-and can replace the same one. Same shapes as the `/friends/invite` trio. Accepting adds
-the person to the group; it does **not** create a friendship.
+and can replace the same one, and a sub-group's link is entirely its own, independent of
+its parent's. Same shapes as the `/friends/invite` trio. Accepting adds the person to the
+group, and to every one of its ancestors (`docs/specs/groups.md`); it does **not** create
+a friendship.
 
 ### `POST /groups/pair/:friendId`
 

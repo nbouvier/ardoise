@@ -1,5 +1,5 @@
 import type { GroupRole } from '@splitcount/shared';
-import { aliasedTable, and, asc, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { aliasedTable, and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
@@ -18,6 +18,11 @@ export interface GroupWithCount {
   memberCount: number;
 }
 
+/** A root group as `listGroupsForUser` reports it: its own direct sub-group count too. */
+export interface RootGroupSummary extends GroupWithCount {
+  subgroupCount: number;
+}
+
 export interface MemberWithUser {
   user: UserRow;
   role: GroupRole;
@@ -27,13 +32,21 @@ export interface CreateGroupInput {
   name: string;
   ownerId: string;
   memberIds: readonly string[];
+  /** Creates a sub-group under this group instead of a root group. */
+  parentId?: string | null;
+  /** `parent.depth + 1`, or `0` for a root group. Computed by the caller. */
+  depth?: number;
 }
 
 export interface GroupsRepository {
   findGroupById(groupId: string): Promise<GroupRow | undefined>;
   findMembership(groupId: string, userId: string): Promise<GroupMemberRow | undefined>;
-  /** The user's groups with their member counts. Pair groups are excluded. */
-  listGroupsForUser(userId: string): Promise<GroupWithCount[]>;
+  /**
+   * The user's **root** groups with their member and direct sub-group counts.
+   * Pair groups are excluded, and so is any group that is itself a sub-group —
+   * it is reached by opening its parent, not listed at the top level.
+   */
+  listGroupsForUser(userId: string): Promise<RootGroupSummary[]>;
   listMembers(groupId: string): Promise<MemberWithUser[]>;
   countMembers(groupId: string): Promise<number>;
   createGroup(input: CreateGroupInput): Promise<GroupRow>;
@@ -57,6 +70,12 @@ export interface GroupsRepository {
   findFriendship(pair: FriendshipPair): Promise<{ id: string } | undefined>;
   /** Of `candidateIds`, those who are friends of `userId`. */
   filterFriendIds(userId: string, candidateIds: readonly string[]): Promise<string[]>;
+  /**
+   * Of `groupIds`, those `userId` currently belongs to — used to mark, in a
+   * parent's `subgroups` list, which of its sub-groups the viewer has already
+   * joined.
+   */
+  filterMemberGroupIds(userId: string, groupIds: readonly string[]): Promise<string[]>;
   findGroupByFriendship(friendshipId: string): Promise<GroupRow | undefined>;
   /**
    * Create the group two friends share. Returns the existing one when another
@@ -88,6 +107,28 @@ export interface GroupsRepository {
 /** Postgres returns `count(*)` as a string; normalise at the boundary. */
 const toCount = (value: unknown): number => Number(value ?? 0);
 
+/**
+ * Every ancestor id of a group, nearest parent first, as a plain list — used
+ * both to build `listAncestors`'s ordered rows and to propagate a membership
+ * write up the tree. Bounded by the depth cap (`groups_depth_valid`), and
+ * `parent_id` is immutable after creation, so no cycle guard is needed
+ * (`docs/specs/groups.md`).
+ */
+async function fetchAncestorIds(db: Database, groupId: string): Promise<string[]> {
+  const { rows } = await db.execute<{ id: string }>(sql`
+    WITH RECURSIVE ancestors(id) AS (
+      SELECT parent_id FROM groups WHERE id = ${groupId} AND parent_id IS NOT NULL
+      UNION ALL
+      SELECT g.parent_id
+      FROM groups g
+      JOIN ancestors a ON g.id = a.id
+      WHERE g.parent_id IS NOT NULL
+    )
+    SELECT id FROM ancestors
+  `);
+  return rows.map((row) => row.id);
+}
+
 export function createGroupsRepository(db: Database): GroupsRepository {
   return {
     async findGroupById(groupId) {
@@ -104,23 +145,56 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listGroupsForUser(userId) {
-      // Joined twice: once to find the caller's groups, once to count everyone
-      // in them.
+      // Joined twice: once to find the caller's root groups, once to count
+      // everyone in them.
       const everyone = aliasedTable(groupMembers, 'everyone');
 
-      const rows = await db
+      const own = await db
         .select({ group: groups, memberCount: sql<number>`count(${everyone.id})` })
         .from(groupMembers)
         .innerJoin(groups, eq(groups.id, groupMembers.groupId))
         .innerJoin(everyone, eq(everyone.groupId, groups.id))
-        .where(and(eq(groupMembers.userId, userId), ne(groups.kind, 'pair')))
+        .where(
+          and(
+            eq(groupMembers.userId, userId),
+            ne(groups.kind, 'pair'),
+            // Only root groups: a group that is itself a sub-group is reached
+            // by opening its parent, never listed at the top level.
+            isNull(groups.parentId),
+          ),
+        )
         .groupBy(groups.id)
         // Active groups first, then archived ones; alphabetical within each.
         .orderBy(sql`${groups.archivedAt} is not null`, asc(groups.name));
 
-      return rows.map((row) => ({
+      if (own.length === 0) {
+        return [];
+      }
+
+      // A second, separate query rather than a third join in the one above:
+      // joining both the member count and the sub-group count in a single
+      // query multiplies rows (3 members × 2 sub-groups = 6 rows) before any
+      // aggregation runs, forcing every count into a `distinct` — a plain
+      // `group by parent_id` here is simpler and reads its own index.
+      const subgroupCounts = await db
+        .select({ parentId: groups.parentId, count: sql<number>`count(*)` })
+        .from(groups)
+        .where(
+          inArray(
+            groups.parentId,
+            own.map((row) => row.group.id),
+          ),
+        )
+        .groupBy(groups.parentId);
+
+      const countByParent = new Map(
+        subgroupCounts.map((row) => [row.parentId, toCount(row.count)]),
+      );
+
+      return own.map((row) => ({
         group: row.group,
         memberCount: toCount(row.memberCount),
+        subgroupCount: countByParent.get(row.group.id) ?? 0,
       }));
     },
 
@@ -144,17 +218,44 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async createGroup(input) {
+      const parentId = input.parentId ?? null;
+      const depth = input.depth ?? 0;
+      // Read outside the transaction: `parent_id` is immutable after
+      // creation, so the parent's own ancestor chain cannot change underneath
+      // this call — there is nothing here for a transaction to protect.
+      const ancestorIds = parentId ? [parentId, ...(await fetchAncestorIds(db, parentId))] : [];
+
       return db.transaction(async (tx) => {
         const [group] = await tx
           .insert(groups)
-          .values({ kind: 'standard', name: input.name })
+          .values({ kind: 'standard', name: input.name, parentId, depth })
           .returning();
 
         const others = input.memberIds.filter((id) => id !== input.ownerId);
-        await tx.insert(groupMembers).values([
-          { groupId: group!.id, userId: input.ownerId, role: 'owner' },
-          ...others.map((userId) => ({ groupId: group!.id, userId, role: 'member' })),
-        ]);
+        const everyone = [input.ownerId, ...others];
+
+        // The owner's row at the new group is explicit and always 'owner';
+        // every other initial member's row there is 'member'. Every one of
+        // them (owner included) also needs a row at every ancestor of the new
+        // group — membership flows down the tree, never up on its own
+        // (`docs/specs/groups.md`) — always as 'member': a role is only ever
+        // granted at the level it was actually earned, and `onConflictDoNothing`
+        // leaves an existing row (say, an owner role held there already)
+        // untouched rather than downgrading it.
+        await tx
+          .insert(groupMembers)
+          .values([
+            { groupId: group!.id, userId: input.ownerId, role: 'owner' as const },
+            ...others.map((userId) => ({ groupId: group!.id, userId, role: 'member' as const })),
+            ...ancestorIds.flatMap((ancestorId) =>
+              everyone.map((userId) => ({
+                groupId: ancestorId,
+                userId,
+                role: 'member' as const,
+              })),
+            ),
+          ])
+          .onConflictDoNothing();
 
         return group!;
       });
@@ -177,13 +278,26 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       if (userIds.length === 0) {
         return [];
       }
+      // Membership flows down the tree: adding someone to a group adds them
+      // to every ancestor of it too, in the same insert (`docs/specs/groups.md`).
+      const targets = [groupId, ...(await fetchAncestorIds(db, groupId))];
+
       const inserted = await db
         .insert(groupMembers)
-        .values(userIds.map((userId) => ({ groupId, userId, role: 'member' })))
+        .values(
+          targets.flatMap((targetGroupId) =>
+            userIds.map((userId) => ({ groupId: targetGroupId, userId, role: 'member' })),
+          ),
+        )
         .onConflictDoNothing()
-        .returning({ userId: groupMembers.userId });
+        .returning({ groupId: groupMembers.groupId, userId: groupMembers.userId });
 
-      return inserted.map((row) => row.userId);
+      // Only report what changed at the target group itself — ancestor
+      // memberships are a side effect callers don't branch on (e.g. whether
+      // to report "already a member" for an invite acceptance).
+      return inserted
+        .filter((row) => row.groupId === groupId)
+        .map((row) => row.userId);
     },
 
     async removeMember(groupId, userId) {
@@ -223,6 +337,19 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         );
 
       return rows.map((row) => row.id);
+    },
+
+    async filterMemberGroupIds(userId, groupIds) {
+      if (groupIds.length === 0) {
+        return [];
+      }
+      const rows = await db
+        .select({ groupId: groupMembers.groupId })
+        .from(groupMembers)
+        .where(
+          and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, [...groupIds])),
+        );
+      return rows.map((row) => row.groupId);
     },
 
     async findGroupByFriendship(friendshipId) {
@@ -266,36 +393,14 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listAncestors(groupId) {
-      // Depth is capped at 4 (`groups_depth_valid`), so this recursion is
-      // bounded by construction — no `parent_id` cycle can exist since it is
-      // immutable after creation (`docs/specs/groups.md`).
-      const { rows } = await db.execute<{ id: string }>(sql`
-        WITH RECURSIVE ancestors(id) AS (
-          SELECT parent_id FROM groups WHERE id = ${groupId} AND parent_id IS NOT NULL
-          UNION ALL
-          SELECT g.parent_id
-          FROM groups g
-          JOIN ancestors a ON g.id = a.id
-          WHERE g.parent_id IS NOT NULL
-        )
-        SELECT id FROM ancestors
-      `);
-      if (rows.length === 0) {
+      const ids = await fetchAncestorIds(db, groupId);
+      if (ids.length === 0) {
         return [];
       }
-      // One extra query rather than threading a `level` column through the
-      // recursion: `depth` is already stored on every row, so ordering by it
-      // gives root-first order for free.
-      return db
-        .select()
-        .from(groups)
-        .where(
-          inArray(
-            groups.id,
-            rows.map((row) => row.id),
-          ),
-        )
-        .orderBy(asc(groups.depth));
+      // `depth` is already stored on every row, so ordering by it gives
+      // root-first order for free — no need to thread a `level` column
+      // through the recursive query itself.
+      return db.select().from(groups).where(inArray(groups.id, ids)).orderBy(asc(groups.depth));
     },
 
     async listDescendantIds(groupId) {

@@ -1,4 +1,4 @@
-import type { GroupRole } from '@splitcount/shared';
+import { MAX_GROUP_DEPTH, type GroupRole } from '@splitcount/shared';
 
 import type { GroupRow } from '../../db/schema.js';
 
@@ -16,7 +16,8 @@ export type GroupAccessReason =
   | 'archived'
   | 'owner_cannot_leave'
   | 'cannot_remove_owner'
-  | 'not_friends';
+  | 'not_friends'
+  | 'max_depth_reached';
 
 export class GroupAccessError extends Error {
   constructor(readonly reason: GroupAccessReason) {
@@ -41,6 +42,31 @@ export function assertNotPairGroup(group: GroupRow): void {
 export function assertActive(group: GroupRow): void {
   if (group.archivedAt) {
     throw new GroupAccessError('archived');
+  }
+}
+
+/**
+ * A group is read-only whenever it, *or any ancestor of it*, is archived —
+ * archiving a group makes every sub-group of it effectively archived too,
+ * without writing anything to those sub-groups (`docs/specs/groups.md`).
+ * `ancestors` is the caller's own `listAncestors(group.id)` result; passed in
+ * rather than fetched here so this stays a plain, synchronous assertion like
+ * every other one in this module.
+ */
+export function assertEffectivelyActive(group: GroupRow, ancestors: readonly GroupRow[]): void {
+  if (group.archivedAt || ancestors.some((ancestor) => ancestor.archivedAt !== null)) {
+    throw new GroupAccessError('archived');
+  }
+}
+
+/**
+ * A sub-group cannot nest past the fixed depth cap. Takes the *parent's*
+ * depth, since the check is "would the new group be too deep", asked before
+ * that group exists.
+ */
+export function assertWithinDepthLimit(parentDepth: number): void {
+  if (parentDepth >= MAX_GROUP_DEPTH) {
+    throw new GroupAccessError('max_depth_reached');
   }
 }
 

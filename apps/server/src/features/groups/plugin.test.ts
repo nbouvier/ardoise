@@ -69,6 +69,30 @@ describe('groups routes', () => {
     return response.json().group;
   }
 
+  const createSubgroup = (
+    user: TestUser,
+    parentId: string,
+    name: string,
+    memberIds: string[] = [],
+  ) =>
+    app.inject({
+      method: 'POST',
+      url: '/groups',
+      headers: user.headers,
+      payload: { name, memberIds, parentId },
+    });
+
+  async function createdSubgroup(
+    user: TestUser,
+    parentId: string,
+    name: string,
+    memberIds: string[] = [],
+  ) {
+    const response = await createSubgroup(user, parentId, name, memberIds);
+    expect(response.statusCode).toBe(201);
+    return response.json().group;
+  }
+
   const listGroups = (user: TestUser) =>
     app.inject({ method: 'GET', url: '/groups', headers: user.headers });
 
@@ -474,6 +498,169 @@ describe('groups routes', () => {
 
       expect(response.statusCode).toBe(204);
       expect(await app.db.select().from(groups)).toHaveLength(0);
+    });
+  });
+
+  describe('sub-groups', () => {
+    it('creates a sub-group under a group the caller belongs to', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      expect(sub).toMatchObject({
+        kind: 'standard',
+        name: 'Ajaccio weekend',
+        parentId: root.id,
+        depth: 1,
+        memberCount: 1,
+        subgroupCount: 0,
+        viewerRole: 'owner',
+      });
+      expect(sub.ancestors).toEqual([{ id: root.id, name: 'Corsica 2026' }]);
+
+      const parentDetail = (await getGroup(ada, root.id)).json().group;
+      expect(parentDetail.subgroupCount).toBe(1);
+      expect(parentDetail.subgroups).toEqual([
+        { id: sub.id, name: 'Ajaccio weekend', memberCount: 1, viewerIsMember: true },
+      ]);
+    });
+
+    it('does not list a sub-group at the top level', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const { groups: listed } = (await listGroups(ada)).json();
+
+      expect(listed).toHaveLength(1);
+      expect(listed[0]).toMatchObject({ id: root.id, subgroupCount: 1 });
+    });
+
+    it('refuses to nest under a pair group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+
+      const response = await createSubgroup(ada, pair.id, 'Nested');
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'pair_group_immutable' });
+    });
+
+    it('refuses to create a sub-group under a group the caller does not belong to', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const root = await createdGroup(ada, 'Private');
+
+      const response = await createSubgroup(alan, root.id, 'Intruding');
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: 'group_not_found' });
+    });
+
+    it('allows nesting up to five levels and refuses a sixth', async () => {
+      const ada = await signIn('ada');
+      let current = await createdGroup(ada, 'Depth 0');
+
+      for (let depth = 1; depth <= 4; depth += 1) {
+        current = await createdSubgroup(ada, current.id, `Depth ${depth}`);
+        expect(current.depth).toBe(depth);
+      }
+
+      const response = await createSubgroup(ada, current.id, 'Depth 5');
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'max_depth_reached' });
+    });
+
+    it('refuses to create a sub-group under an archived group', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      await patchGroup(ada, root.id, { archived: true });
+
+      const response = await createSubgroup(ada, root.id, 'Too late');
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
+    it('refuses to create a sub-group when an ancestor (not the direct parent) is archived', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      await patchGroup(ada, root.id, { archived: true });
+
+      const response = await createSubgroup(ada, child.id, 'Too late');
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
+    it('adding a friend to a sub-group also adds them to its ancestors', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/groups/${sub.id}/members`,
+        headers: ada.headers,
+        payload: { memberIds: [grace.userId] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group.memberCount).toBe(2);
+
+      const { groups: graceGroups } = (await listGroups(grace)).json();
+      expect(graceGroups.map((g: { id: string }) => g.id)).toEqual([root.id]);
+      expect((await getGroup(ada, root.id)).json().group.memberCount).toBe(2);
+    });
+
+    it('accepting a sub-group invitation also joins its ancestors', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const { invite } = (await groupInvite(ada, sub.id)).json();
+      const accept = await acceptInvite(alan, invite.code);
+
+      expect(accept.statusCode).toBe(200);
+      const { groups: alanGroups } = (await listGroups(alan)).json();
+      expect(alanGroups.map((g: { id: string }) => g.id)).toEqual([root.id]);
+      expect((await getGroup(alan, sub.id)).statusCode).toBe(200);
+    });
+
+    it('shows every ancestor of a sub-group, root first', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const grandchild = await createdSubgroup(ada, child.id, 'Beach day');
+
+      const detail = (await getGroup(ada, grandchild.id)).json().group;
+
+      expect(detail.ancestors).toEqual([
+        { id: root.id, name: 'Corsica 2026' },
+        { id: child.id, name: 'Ajaccio weekend' },
+      ]);
+    });
+
+    it('lists a sub-group the caller has not joined, marked as such', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const graceDetail = (await getGroup(grace, root.id)).json().group;
+
+      expect(graceDetail.subgroups).toEqual([
+        { id: sub.id, name: 'Ajaccio weekend', memberCount: 1, viewerIsMember: false },
+      ]);
     });
   });
 

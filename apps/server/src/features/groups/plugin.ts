@@ -105,7 +105,12 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       try {
         const group = await groups.create(request.userId!, parsed.data);
         app.log.info(
-          { userId: request.userId, groupId: group.id, memberCount: group.memberCount },
+          {
+            userId: request.userId,
+            groupId: group.id,
+            memberCount: group.memberCount,
+            parentId: group.parentId,
+          },
           'groups.created',
         );
         return reply.code(201).send({ group });

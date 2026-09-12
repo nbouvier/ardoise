@@ -24,6 +24,9 @@ const trip: GroupDetail = {
   kind: 'standard',
   name: 'Corsica 2026',
   memberCount: 2,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
   members: [
@@ -31,6 +34,8 @@ const trip: GroupDetail = {
     { ...grace, role: 'member' },
   ],
   viewerRole: 'owner',
+  subgroups: [],
+  ancestors: [],
 };
 
 /** The implicit group two friends share: named after the other person. */

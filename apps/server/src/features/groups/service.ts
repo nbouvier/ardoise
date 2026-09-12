@@ -16,9 +16,11 @@ import { toUserSummary } from '../users/repository.js';
 import {
   assertActive,
   assertCanLeave,
+  assertEffectivelyActive,
   assertNotPairGroup,
   assertOwner,
   assertRemovable,
+  assertWithinDepthLimit,
   GroupAccessError,
 } from './membership.js';
 import type { GroupsRepository, MemberWithUser } from './repository.js';
@@ -75,26 +77,57 @@ function nameFor(group: GroupRow, viewerId: string, members: MemberWithUser[]): 
 export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const { repository, invites, now = () => new Date() } = deps;
 
-  function summaryOf(group: GroupRow, name: string, memberCount: number): GroupSummary {
+  function summaryOf(
+    group: GroupRow,
+    name: string,
+    memberCount: number,
+    subgroupCount: number,
+  ): GroupSummary {
     return {
       id: group.id,
       kind: group.kind as GroupSummary['kind'],
       name,
       memberCount,
+      parentId: group.parentId,
+      depth: group.depth,
+      subgroupCount,
       archivedAt: group.archivedAt?.toISOString() ?? null,
       createdAt: group.createdAt.toISOString(),
     };
   }
 
   async function detailOf(group: GroupRow, viewerId: string, role: GroupRole) {
-    const members = await repository.listMembers(group.id);
+    const [members, children, ancestors] = await Promise.all([
+      repository.listMembers(group.id),
+      repository.listChildren(group.id),
+      repository.listAncestors(group.id),
+    ]);
+    const joinedChildIds = new Set(
+      await repository.filterMemberGroupIds(
+        viewerId,
+        children.map((child) => child.group.id),
+      ),
+    );
+
     return {
-      ...summaryOf(group, nameFor(group, viewerId, members), members.length),
+      ...summaryOf(group, nameFor(group, viewerId, members), members.length, children.length),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
         role: member.role,
       })),
       viewerRole: role,
+      subgroups: children.map((child) => ({
+        id: child.group.id,
+        // A sub-group is always a standard group (`groups_pair_no_parent`),
+        // so it always carries its own name — no `nameFor` fallback needed.
+        name: child.group.name ?? 'Untitled group',
+        memberCount: child.memberCount,
+        viewerIsMember: joinedChildIds.has(child.group.id),
+      })),
+      ancestors: ancestors.map((ancestor) => ({
+        id: ancestor.id,
+        name: ancestor.name ?? 'Untitled group',
+      })),
     };
   }
 
@@ -150,8 +183,8 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   return {
     async list(userId) {
       const rows = await repository.listGroupsForUser(userId);
-      return rows.map(({ group, memberCount }) =>
-        summaryOf(group, group.name ?? 'Untitled group', memberCount),
+      return rows.map(({ group, memberCount, subgroupCount }) =>
+        summaryOf(group, group.name ?? 'Untitled group', memberCount, subgroupCount),
       );
     },
 
@@ -161,11 +194,29 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     },
 
     async create(userId, input) {
+      let parentId: string | null = null;
+      let depth = 0;
+
+      if (input.parentId) {
+        // Creating a sub-group is available to any member of the parent —
+        // the same people who can add a friend to it — so this is exactly
+        // the membership check every other group action already uses.
+        const { group: parent } = await requireMembership(userId, input.parentId);
+        assertNotPairGroup(parent);
+        const ancestors = await repository.listAncestors(parent.id);
+        assertEffectivelyActive(parent, ancestors);
+        assertWithinDepthLimit(parent.depth);
+        parentId = parent.id;
+        depth = parent.depth + 1;
+      }
+
       const memberIds = await requireFriends(userId, input.memberIds ?? []);
       const group = await repository.createGroup({
         name: input.name,
         ownerId: userId,
         memberIds,
+        parentId,
+        depth,
       });
       return detailOf(group, userId, 'owner');
     },
@@ -287,7 +338,12 @@ export function createGroupInviteHandler(repository: GroupsRepository): InviteHa
 
     async accept({ invite }, userId) {
       const group = await resolveGroup(invite.groupId);
+      // Membership flows down the tree: this also joins every ancestor of
+      // `group` (`docs/specs/groups.md`) — a side effect of `addMembers`, not
+      // something reflected in the summary below, which describes `group`
+      // itself only.
       const inserted = await repository.addMembers(group.id, [userId]);
+      const children = await repository.listChildren(group.id);
 
       return {
         kind: 'group',
@@ -296,6 +352,9 @@ export function createGroupInviteHandler(repository: GroupsRepository): InviteHa
           kind: 'standard',
           name: group.name ?? 'Untitled group',
           memberCount: await repository.countMembers(group.id),
+          parentId: group.parentId,
+          depth: group.depth,
+          subgroupCount: children.length,
           archivedAt: null,
           createdAt: group.createdAt.toISOString(),
         },
