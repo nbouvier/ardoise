@@ -41,7 +41,7 @@ function transaction(overrides: {
   };
 }
 
-const groupSpending = { type: 'spending', scope: 'group' } as const;
+const groupSpending = { type: 'spending' } as const;
 
 describe('categoryBreakdown', () => {
   it('sums each category and orders the slices largest first', () => {
@@ -96,9 +96,7 @@ describe('categoryBreakdown', () => {
     ];
 
     expect(categoryBreakdown(transactions, groupSpending).totalCents).toBe(2000);
-    expect(
-      categoryBreakdown(transactions, { type: 'income', scope: 'group' }).totalCents,
-    ).toBe(700);
+    expect(categoryBreakdown(transactions, { type: 'income' }).totalCents).toBe(700);
   });
 
   it('is empty for a group holding only transfers', () => {
@@ -114,10 +112,10 @@ describe('categoryBreakdown', () => {
     expect(categoryBreakdown([], groupSpending)).toEqual({ totalCents: 0, slices: [] });
   });
 
-  describe('the viewer scope', () => {
-    const viewer = { type: 'spending', scope: 'viewer', viewerId: 'alice' } as const;
+  describe('a chosen subset of participants', () => {
+    const alicesShare = { type: 'spending', participantIds: ['alice'] } as const;
 
-    it('counts the viewer’s own share, not the whole amount', () => {
+    it('counts only the selected member’s own share, not the whole amount', () => {
       const result = categoryBreakdown(
         [
           transaction({
@@ -126,7 +124,7 @@ describe('categoryBreakdown', () => {
             shares: { alice: 1000, bob: 2000 },
           }),
         ],
-        viewer,
+        alicesShare,
       );
 
       expect(result.totalCents).toBe(1000);
@@ -135,22 +133,36 @@ describe('categoryBreakdown', () => {
       ]);
     });
 
-    it('counts nothing for a transaction the viewer paid but does not take part in', () => {
+    it('sums the shares of every selected member', () => {
+      const result = categoryBreakdown(
+        [
+          transaction({
+            category: 'restaurant',
+            amountCents: 3000,
+            shares: { alice: 1000, bob: 2000 },
+          }),
+        ],
+        { type: 'spending', participantIds: ['alice', 'bob'] },
+      );
+
+      expect(result.totalCents).toBe(3000);
+    });
+
+    it('counts nothing for a transaction the selected member paid but does not take part in', () => {
       // Alice is the payer on every transaction this factory builds; here the
       // split concerns Bob alone, so her own breakdown must stay empty.
       const result = categoryBreakdown(
         [transaction({ category: 'gifts', amountCents: 2500, shares: { bob: 2500 } })],
-        viewer,
+        alicesShare,
       );
 
       expect(result).toEqual({ totalCents: 0, slices: [] });
     });
 
-    it('is empty without a viewer id', () => {
+    it('is empty for an empty selection', () => {
       const result = categoryBreakdown([transaction({ amountCents: 500 })], {
         type: 'spending',
-        scope: 'viewer',
-        viewerId: null,
+        participantIds: [],
       });
 
       expect(result).toEqual({ totalCents: 0, slices: [] });

@@ -3,8 +3,8 @@ import { TRANSACTION_CATEGORIES } from './categories.js';
 import type { Transaction } from './transactions.js';
 
 /**
- * What a breakdown measures, and over whose money — the two independent axes a
- * group's statistics are read along (`docs/specs/group-statistics.md`).
+ * What a breakdown measures — one of the two independent axes a group's
+ * statistics are read along (`docs/specs/group-statistics.md`).
  *
  * `spending` and `income` are never mixed into one breakdown: they move money
  * in opposite directions, so a chart summing them would mean nothing.
@@ -12,9 +12,6 @@ import type { Transaction } from './transactions.js';
  * inside the group without the group spending or receiving anything.
  */
 export type StatisticsType = 'spending' | 'income';
-
-/** `group`: each transaction's full amount. `viewer`: only the viewer's share of it. */
-export type StatisticsScope = 'group' | 'viewer';
 
 export interface CategoryBreakdownSlice {
   category: TransactionCategory;
@@ -32,9 +29,14 @@ export interface CategoryBreakdown {
 
 export interface CategoryBreakdownOptions {
   type: StatisticsType;
-  scope: StatisticsScope;
-  /** Required by the `viewer` scope, ignored by the `group` one. */
-  viewerId?: string | null;
+  /**
+   * Which members' money counts. Omitted or `null` means everyone: each
+   * transaction contributes its full amount. Otherwise only the listed
+   * members' own shares are counted — one participant reproduces the old "Me"
+   * scope, all of them reproduces "the group", and anything in between is a
+   * partial breakdown across a chosen subset.
+   */
+  participantIds?: readonly string[] | null;
 }
 
 const kindByType = { spending: 'expense', income: 'income' } as const;
@@ -46,18 +48,17 @@ const categoryOrder = new Map<TransactionCategory, number>(
 
 function amountOf(
   transaction: Transaction,
-  { scope, viewerId }: CategoryBreakdownOptions,
+  { participantIds }: CategoryBreakdownOptions,
 ): number {
-  if (scope === 'group') {
+  if (!participantIds) {
     return transaction.amountCents;
   }
-  if (!viewerId) {
-    return 0;
-  }
-  // What the viewer was *concerned by*, not what they paid: someone who paid
-  // for others without taking part contributes nothing to their own breakdown.
+  // What the selected members were *concerned by*, not what they paid:
+  // someone who paid for others without taking part contributes nothing to a
+  // breakdown that excludes those others.
+  const wanted = new Set(participantIds);
   return transaction.participants
-    .filter((participant) => participant.user.id === viewerId)
+    .filter((participant) => wanted.has(participant.user.id))
     .reduce((sum, participant) => sum + participant.shareCents, 0);
 }
 

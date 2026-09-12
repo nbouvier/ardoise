@@ -90,9 +90,10 @@ interaction is a device concern.
   many generated totals/weights/group sizes, rounding determinism, tie-breaking — the
   transaction request schema's shape per kind, the category preset list (unique keys,
   emoji, label and a distinct colour each), and the statistics breakdown
-  (`categoryBreakdown`): kind filtering (transfers never count), the viewer scope using a
-  participant's share rather than what they paid, ordering, and the two sum invariants —
-  amounts to the total and percentages to exactly 100 — across many generated shapes.
+  (`categoryBreakdown`): kind filtering (transfers never count), a selected subset of
+  participants using their own shares rather than what they paid (single member, several
+  summed, and an empty selection), ordering, and the two sum invariants — amounts to the
+  total and percentages to exactly 100 — across many generated shapes.
 - `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation
@@ -112,8 +113,9 @@ interaction is a device concern.
   local-date conversion (no time-zone shift) and its iOS/Android wiring; and the
   statistics feature (`src/features/statistics/`): the donut geometry (the ring always
   closes, a sliver stays visible, a full ring is drawn as two halves) and the statistics
-  sheet (totals and legend, one arc per category, both toggles, selecting and deselecting
-  a slice, and each empty state saying *which* view is empty).
+  sheet (totals and legend, one arc per category, the type toggle, narrowing and summing
+  the per-member selection, the "select at least one" empty state, selecting and
+  deselecting a slice, and each empty state saying *which* view is empty).
 
 ### Gotchas
 

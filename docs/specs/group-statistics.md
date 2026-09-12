@@ -17,8 +17,8 @@ not do well.
 As a **member of a group**, I want to **see how the group's money is split across
 categories**, so that **I can tell at a glance what we're actually spending on**.
 
-As a **member of a group**, I want to **see the same breakdown limited to my own share**,
-so that **I know what this group cost me, category by category**.
+As a **member of a group**, I want to **narrow the breakdown to one or more members**, so
+that **I can see what this group cost me, or a subset of us, category by category**.
 
 ## Expected behavior
 
@@ -30,15 +30,19 @@ viewer switches between:
 - **Type** — **Spending** (transactions of kind `expense`) or **Income** (kind `income`).
   The two are never mixed into one chart: they move money in opposite directions, and a
   single chart summing them would be meaningless. Spending is the default.
-- **Scope** — **The group** (the full amount of each transaction, whoever paid) or **Me**
-  (only the viewer's own share of each transaction). The group is the default.
+- **Participants** — every group member appears as a selectable chip, **all of them
+  selected by default**. With everyone selected, each transaction contributes its full
+  amount, whoever paid — "the group" in full. Deselecting members narrows the breakdown to
+  the sum of only the selected members' own shares of each transaction; selecting the
+  viewer alone reproduces what used to be called the "Me" scope. At least one member must
+  stay selected for the chart to mean anything.
 
 **Transfers are never counted**, in any combination. A transfer is one member reimbursing
 another: money moving inside the group, not money the group spent or received. Excluding
 them is what keeps the totals honest.
 
-For each of the four combinations, every matching transaction contributes its amount (or
-the viewer's share of it) to its category. The result is:
+For each type and each participant selection, every matching transaction contributes its
+amount (or the sum of the selected members' shares of it) to its category. The result is:
 
 - a **total** — the sum over every category;
 - per category with a non-zero amount: its **amount** and its **percentage of the
@@ -55,7 +59,8 @@ has one (`Other` by default), so nothing falls outside the breakdown.
   scope.
 - **Selecting a category** — by tapping its arc or its legend row — shows that category's
   emoji, label, amount and percentage in the centre instead of the total, and highlights
-  the arc. Selecting it again, or switching type or scope, returns to the total.
+  the arc. Selecting it again, or switching the type or the participant selection, returns
+  to the total.
 - A **legend** under the chart: one row per category, **largest first**, with the
   category's colour, emoji, label, amount and percentage.
 - The breakdown is **reachable from the group screen** and does not displace the
@@ -80,8 +85,9 @@ looked at, with no refresh of its own.
 
 - **Any time filtering** — this month, this year, a custom range. The breakdown covers
   every transaction in the group. A period filter is the most likely next step.
-- **Per-member breakdown** — "what did each member spend on, by category". The scope
-  toggle covers the group and the viewer only.
+- **Per-member breakdown shown at once** — "what did each member spend on, by category",
+  side by side. The participant selector narrows one chart to a subset; it does not draw
+  one chart per member.
 - **Trends over time** — a category's evolution month over month, or any chart other than
   the category donut.
 - **Statistics across groups** — a user's overall spending, all groups combined.
@@ -102,9 +108,11 @@ looked at, with no refresh of its own.
 - **No income at all** (the common case) while the Income type is selected: an empty
   state specific to that combination ("nothing recorded as income"), with the type
   toggle still available to switch back.
-- **Scope "Me" on a group where the viewer is never a participant** (they always paid for
-  others, or recorded nothing): total zero, empty state — the viewer's own share of
+- **A selection where none of the chosen members is ever a participant** (they always paid
+  for others, or recorded nothing): total zero, empty state — the selection's share of
   everything is nothing.
+- **Deselecting every member**: nothing to compute — an empty state asking to select at
+  least one, rather than a zero chart that would read as "nothing recorded".
 - **A single category holding everything**: one arc, 100%, still rendered as a full ring
   rather than a degenerate shape.
 - **Very small shares** (a category worth well under 1% of the total): its arc stays
@@ -127,9 +135,11 @@ looked at, with no refresh of its own.
       total shown in the centre.
 - [ ] Switching the type to Income recomputes the chart over `income` transactions only;
       switching back to Spending restores the `expense` breakdown.
-- [ ] Switching the scope to "Me" recomputes the chart over the viewer's own shares only;
-      the group total and the viewer's total differ whenever the viewer is not the sole
-      participant.
+- [ ] Deselecting members recomputes the chart over the sum of the remaining members'
+      shares only; the total with everyone selected and with only the viewer selected
+      differ whenever the viewer is not the sole participant.
+- [ ] Deselecting every member shows an empty state asking for at least one, rather than a
+      zero chart.
 - [ ] Transfers never appear in any breakdown and never affect any total.
 - [ ] A transaction with no explicit category counts under `Other`.
 - [ ] Tapping an arc or a legend row shows that category's amount and percentage in the
@@ -150,9 +160,10 @@ looked at, with no refresh of its own.
 - **Kind filtering** deserves explicit cases: a group holding all three kinds must
   produce a spending breakdown that ignores incomes and transfers, and an income
   breakdown that ignores expenses and transfers.
-- **Scope "Me"** must use the viewer's participant share, not the transaction amount, and
-  must count a transaction the viewer paid for but does not participate in as zero for
-  them — a likely confusion between "paid" and "concerned".
+- **A selected subset of participants** must use their own share, not the transaction
+  amount, and must count a transaction a selected member paid for but does not
+  participate in as zero — a likely confusion between "paid" and "concerned". Selecting
+  more than one member must sum their shares, not the transaction's full amount.
 - Ordering (largest first) and the exclusion of zero categories are cheap to assert and
   easy to regress.
 
@@ -179,9 +190,12 @@ looked at, with no refresh of its own.
 - Opened as a **sheet from the group screen's header**, next to "Details" — the
   transaction list stays the group's primary content, and the sheet pattern is the one
   the group screen already uses for everything secondary.
-- The two selectors (type, scope) are **segmented toggles above the chart**, reusing the
-  pill styling of the existing kind and split-mode toggles rather than introducing a new
-  control.
+- The type is a **segmented toggle above the chart**, reusing the pill styling of the
+  existing kind and split-mode toggles. Participants are the same pill styling, one chip
+  per member (the viewer's own chip reads "You"), wrapped onto multiple rows and all
+  active by default — tapping a chip toggles that member in or out of the selection.
+- The **ring is noticeably thick** relative to its diameter, so a category holding a small
+  share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the
   category's emoji and label next to its swatch, and the selected arc is identified in
   words in the centre. Colour is a grouping aid, never the only carrier of meaning.
@@ -217,9 +231,10 @@ amounts are financial data and must not be logged
 - **Time filtering** (this month / this year / trip range) is the most requested natural
   extension and deliberately absent from this pass. Whether the default should then stay
   "all time" is undecided.
-- **Per-member breakdown** — "who spends on what" — is plausible but carries a social
-  dimension (it exposes each member's habits to the whole group) that deserves an
-  explicit decision rather than being added by symmetry with the scope toggle.
+- **Per-member breakdown shown side by side** — "who spends on what, member by member" —
+  is plausible but carries a social dimension (it exposes each member's habits to the
+  whole group) that deserves an explicit decision rather than being added by symmetry with
+  the participant selector, which already lets a viewer narrow to one member at a time.
 - Should a category's **colour** ever be configurable, or tied to a theme? It is fixed in
   code today, chosen to read on both themes; custom categories (see
   `docs/specs/transactions.md`) would force the question.

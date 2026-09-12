@@ -6,6 +6,10 @@ import { StatisticsScreen } from './statistics-screen';
 
 const ada = { id: 'ada', name: 'Ada Lovelace', picture: null };
 const grace = { id: 'grace', name: 'Grace Hopper', picture: null };
+const members = [
+  { ...ada, role: 'member' as const },
+  { ...grace, role: 'member' as const },
+];
 
 let sequence = 0;
 
@@ -55,6 +59,7 @@ function renderScreen(
       transactions={transactions}
       status="ready"
       onRetry={jest.fn()}
+      members={members}
       viewerId={ada.id}
       onClose={jest.fn()}
       {...overrides}
@@ -108,7 +113,7 @@ describe('StatisticsScreen', () => {
     expect(screen.queryByTestId('donut-slice-groceries')).toBeNull();
   });
 
-  it('switches to the viewer’s own share', async () => {
+  it('narrows to a single participant’s own share when the others are deselected', async () => {
     await renderScreen([
       transaction({
         category: 'restaurant',
@@ -119,9 +124,33 @@ describe('StatisticsScreen', () => {
 
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Me' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
 
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
+  });
+
+  it('sums the shares of every selected participant', async () => {
+    await renderScreen([
+      transaction({
+        category: 'restaurant',
+        amountCents: 3000,
+        shares: { ada: 1000, grace: 2000 },
+      }),
+    ]);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
+
+    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+  });
+
+  it('explains that no participant is selected rather than drawing an empty ring', async () => {
+    await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'You' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
+
+    expect(screen.getByText(/Select at least one participant/)).toBeTruthy();
   });
 
   it('shows a selected category in the centre, and deselects on a second tap', async () => {
@@ -172,14 +201,16 @@ describe('StatisticsScreen', () => {
     expect(screen.getByText('Nothing recorded as income yet.')).toBeTruthy();
   });
 
-  it('says nothing concerns the viewer when their own share is nothing', async () => {
+  it('says nothing concerns the selected participant when their own share is nothing', async () => {
     await renderScreen([
       transaction({ category: 'gifts', amountCents: 2500, shares: { grace: 2500 } }),
     ]);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Me' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
 
-    expect(screen.getByText(/None of this group’s spending concerns you/)).toBeTruthy();
+    expect(
+      screen.getByText(/None of this group’s spending concerns the selected participants/),
+    ).toBeTruthy();
   });
 
   it('offers a retry when the transactions could not be loaded', async () => {

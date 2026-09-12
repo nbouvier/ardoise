@@ -1,7 +1,7 @@
 import {
   categoryBreakdown,
   categoryDefinition,
-  type StatisticsScope,
+  type GroupMember,
   type StatisticsType,
   type Transaction,
   type TransactionCategory,
@@ -23,32 +23,30 @@ export interface StatisticsScreenProps {
   transactions: readonly Transaction[];
   status: 'loading' | 'ready' | 'error';
   onRetry: () => void;
-  /** The signed-in member, for the "Me" scope. */
+  /** Who can be selected, everyone included by default. */
+  members: readonly GroupMember[];
+  /** The signed-in member, labelled "You" in the participant list. */
   viewerId: string | null;
   onClose: () => void;
 }
 
 const CHART_SIZE = 220;
+const CHART_THICKNESS = 44;
 
 const typeLabels: Record<StatisticsType, string> = {
   spending: 'Spending',
   income: 'Income',
 };
 
-const scopeLabels: Record<StatisticsScope, string> = {
-  group: 'The group',
-  viewer: 'Me',
-};
-
 /**
  * Why there is nothing to show, said precisely: "no income recorded" must not
  * read as "no transactions", or the viewer goes looking for a bug.
  */
-function emptyMessage(type: StatisticsType, scope: StatisticsScope): string {
-  if (scope === 'viewer') {
+function emptyMessage(type: StatisticsType, everyoneSelected: boolean): string {
+  if (!everyoneSelected) {
     return type === 'spending'
-      ? 'None of this group’s spending concerns you yet.'
-      : 'None of this group’s income concerns you yet.';
+      ? 'None of this group’s spending concerns the selected participants.'
+      : 'None of this group’s income concerns the selected participants.';
   }
   return type === 'spending'
     ? 'Nothing spent yet. Transfers between members don’t count — they only move money around.'
@@ -60,22 +58,49 @@ export function StatisticsScreen({
   transactions,
   status,
   onRetry,
+  members,
   viewerId,
   onClose,
 }: StatisticsScreenProps) {
   const [type, setType] = useState<StatisticsType>('spending');
-  const [scope, setScope] = useState<StatisticsScope>('group');
+  // Everyone is selected by default — this is what makes the group's total
+  // match "the group" scope the feature started with.
+  const [selectedMemberIds, setSelectedMemberIds] = useState<ReadonlySet<string>>(
+    () => new Set(members.map((member) => member.id)),
+  );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
 
+  const everyoneSelected = selectedMemberIds.size === members.length;
+
   const breakdown = useMemo(
-    () => categoryBreakdown(transactions, { type, scope, viewerId }),
-    [transactions, type, scope, viewerId],
+    () =>
+      categoryBreakdown(transactions, {
+        type,
+        // Passing `null` for "everyone" rather than every member id keeps the
+        // group total exactly `transaction.amountCents`, immune to any
+        // rounding remainder a shares split assigned only to some of them.
+        participantIds: everyoneSelected ? null : [...selectedMemberIds],
+      }),
+    [transactions, type, everyoneSelected, selectedMemberIds],
   );
 
   /** Switching what is measured makes any selected slice meaningless. */
-  function change<T>(set: (value: T) => void, value: T) {
+  function changeType(value: StatisticsType) {
     setSelected(null);
-    set(value);
+    setType(value);
+  }
+
+  function toggleMember(memberId: string) {
+    setSelected(null);
+    setSelectedMemberIds((current) => {
+      const next = new Set(current);
+      if (next.has(memberId)) {
+        next.delete(memberId);
+      } else {
+        next.add(memberId);
+      }
+      return next;
+    });
   }
 
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
@@ -91,17 +116,17 @@ export function StatisticsScreen({
               key={option}
               label={typeLabels[option]}
               active={type === option}
-              onPress={() => change(setType, option)}
+              onPress={() => changeType(option)}
             />
           ))}
         </View>
         <View style={styles.toggleRow}>
-          {(['group', 'viewer'] as const).map((option) => (
+          {members.map((member) => (
             <Toggle
-              key={option}
-              label={scopeLabels[option]}
-              active={scope === option}
-              onPress={() => change(setScope, option)}
+              key={member.id}
+              label={member.id === viewerId ? 'You' : member.name}
+              active={selectedMemberIds.has(member.id)}
+              onPress={() => toggleMember(member.id)}
             />
           ))}
         </View>
@@ -119,16 +144,23 @@ export function StatisticsScreen({
           </ThemedText>
           <Button label="Try again" variant="secondary" onPress={onRetry} />
         </View>
+      ) : selectedMemberIds.size === 0 ? (
+        <View style={styles.centeredBody}>
+          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+            Select at least one participant to see a breakdown.
+          </ThemedText>
+        </View>
       ) : breakdown.slices.length === 0 ? (
         <View style={styles.centeredBody}>
           <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            {emptyMessage(type, scope)}
+            {emptyMessage(type, everyoneSelected)}
           </ThemedText>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           <DonutChart
             size={CHART_SIZE}
+            thickness={CHART_THICKNESS}
             slices={breakdown.slices.map((slice) => {
               const category = categoryDefinition(slice.category);
               return {
@@ -286,6 +318,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.two,
   },
   toggle: {

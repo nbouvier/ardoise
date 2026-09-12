@@ -117,18 +117,23 @@ a way back), and a retryable connection error.
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
 A sheet, opened from a small "Stats" button in the group header, left of "Details" — the
-transaction list stays the group's primary content. Two rows of pill toggles (same styling
-as the split editor's mode toggle): **Spending / Income**, then **The group / Me**. Under
-them a **donut chart** (`DonutChart`, 220pt, 28pt ring) with one arc per category in that
-category's own colour, and a legend below: colour swatch, emoji + label, percentage, amount
-— largest first.
+transaction list stays the group's primary content. A **Spending / Income** pill row (same
+styling as the split editor's mode toggle), then a wrapped row of **one pill chip per
+group member** — the viewer's own chip reads "You" — all active by default, each
+independently tappable to include or exclude that member. Under them a **donut chart**
+(`DonutChart`, 220pt, 44pt ring — noticeably thick so a small share still reads as an arc,
+not a line) with one arc per category in that category's own colour, and a legend below:
+colour swatch, emoji + label, percentage, amount — largest first.
 
-The donut's hole holds the total for the current toggles ("Total spending", the amount);
+The donut's hole holds the total for the current selection ("Total spending", the amount);
 tapping an arc or a legend row swaps it for that category's emoji, label, amount and
-percentage, and fades the other arcs to 30%. Tapping the same one again, or changing a
-toggle, returns to the total. Colour never carries meaning alone: every slice is repeated
-in the legend with its emoji and label, and the selected one is named in words in the
-centre.
+percentage, and fades the other arcs to 30%. Tapping the same one again, changing the type,
+or toggling a member, returns to the total. With every member selected the total is the
+group's; deselecting members narrows it to the sum of only their own shares — selecting the
+viewer alone reproduces what used to be a separate "Me" toggle. Deselecting every member
+shows an empty state asking to select at least one, instead of drawing a zero-value ring.
+Colour never carries meaning alone: every slice is repeated in the legend with its emoji
+and label, and the selected one is named in words in the centre.
 
 Category colours live with the categories themselves (`@splitcount/shared`'s
 `categories.ts`), mid-lightness so the same thirteen values read on both themes — they are

@@ -282,6 +282,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 transactions={transactionsResult.transactions}
                 status={transactionsResult.status}
                 onRetry={transactionsResult.refresh}
+                members={group.members}
                 viewerId={viewerId}
                 onClose={() => setSheet(null)}
               />
