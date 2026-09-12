@@ -287,8 +287,9 @@ group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must
 effectively active and not already at the depth cap — either kind, standard or the
 implicit pair group. Every initial member (the creator included) is also added to every
 ancestor of the new group in the same request — membership always flows down the tree.
-When `parentId` is `pairRooted`, `memberIds` may contain only the other person in that
-friendship; anyone else is refused with `409 pair_group_immutable`.
+When `parentId` is `pairRooted`, the friendship's other person is added automatically
+regardless of `memberIds` — there is no one else it could legitimately hold — and any id
+other than theirs is refused with `409 pair_group_immutable`.
 
 Request: `{ "name": "Ajaccio weekend", "parentId": "<uuid>" }` → Response
 `201 { "group": "<GroupDetail>" }`, with `parentId` and `depth` set accordingly.

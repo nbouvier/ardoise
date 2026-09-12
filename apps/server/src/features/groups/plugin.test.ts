@@ -725,7 +725,7 @@ describe('groups routes', () => {
   });
 
   describe('sub-groups of a pair group', () => {
-    it('creates a sub-group under the pair group two friends share', async () => {
+    it('creates a sub-group under the pair group two friends share, with both of them in it already', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -734,14 +734,18 @@ describe('groups routes', () => {
       const response = await createSubgroup(ada, pair.id, 'Ski trip');
 
       expect(response.statusCode).toBe(201);
-      expect(response.json().group).toMatchObject({
+      const group = response.json().group;
+      expect(group).toMatchObject({
         kind: 'standard',
         name: 'Ski trip',
         parentId: pair.id,
         depth: 1,
-        memberCount: 1,
+        memberCount: 2,
         pairRooted: true,
       });
+      expect(group.members.map((member: { id: string }) => member.id).sort()).toEqual(
+        [ada.userId, grace.userId].sort(),
+      );
     });
 
     it('reports the pair group itself as pair-rooted', async () => {
@@ -753,7 +757,7 @@ describe('groups routes', () => {
       expect(pair.pairRooted).toBe(true);
     });
 
-    it('lets the other friend see and join it, exactly like any other sub-group', async () => {
+    it('starts the other friend off as a member too, with nothing to join', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -762,12 +766,9 @@ describe('groups routes', () => {
 
       const graceView = (await getGroup(grace, pair.id)).json().group;
       expect(graceView.subgroups).toEqual([
-        expect.objectContaining({ id: sub.id, viewerIsMember: false }),
+        expect.objectContaining({ id: sub.id, viewerIsMember: true }),
       ]);
-
-      const joined = await joinGroup(grace, sub.id);
-      expect(joined.statusCode).toBe(200);
-      expect(joined.json().group.memberCount).toBe(2);
+      expect((await getGroup(grace, sub.id)).statusCode).toBe(200);
     });
 
     it('refuses a third person as an initial member', async () => {
@@ -799,7 +800,7 @@ describe('groups routes', () => {
       expect(response.json()).toEqual({ error: 'pair_group_immutable' });
     });
 
-    it('still allows the other friend to be added directly, without going through join', async () => {
+    it('tolerates re-adding the partner who is already there by default', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);

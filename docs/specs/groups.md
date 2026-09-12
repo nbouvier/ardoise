@@ -150,10 +150,10 @@ ever contain that friendship's own two people**, forever. Concretely:
   group itself (the same upward-flow rule every sub-group follows) and break the one thing
   that defines it. Attempting any of them is refused the same way any other pair-group
   change is (`pair_group_immutable`).
-- **The other friend still reaches it themselves**, through the ordinary
-  unjoined-sub-group toggle described above — they already belong to the pair group (and
-  so to every sub-group's immediate parent along the way), so they see it listed and can
-  join it directly, with no invitation needed.
+- **The other friend is already a member from the moment it is created** — since the
+  friendship's two people are the only ones such a sub-group could ever hold, there is no
+  picking involved and nothing to join: creating one starts both of them in it, unlike an
+  ordinary sub-group's unjoined-until-picked members.
 - **Sharing an invitation link is refused outright** for such a sub-group: there is no one
   it could legitimately be for, since the only other allowed person already has the join
   path above.
@@ -342,10 +342,10 @@ ever contain that friendship's own two people**, forever. Concretely:
       do not create two groups.
 - [ ] Archiving, deleting, renaming, inviting into or adding someone to a pair group is
       refused; creating a sub-group under it is not.
-- [ ] A sub-group nested under a pair group, at any depth, refuses a third person as an
-      initial member, as a later addition, and through an invitation link (which cannot
-      even be generated for it) — while the other friend can still join it themselves, and
-      it can still be renamed, archived, deleted and left normally.
+- [ ] A sub-group nested under a pair group, at any depth, starts with both friends as
+      members already, and refuses a third person as a further initial member, as a later
+      addition, and through an invitation link (which cannot even be generated for it) —
+      while it can still be renamed, archived, deleted and left normally.
 - [ ] Archiving a group makes every one of its sub-groups read-only for membership and
       transactions without changing any sub-group's own archived flag; un-archiving the
       parent restores each sub-group's own prior state exactly.
@@ -457,7 +457,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   is capped at a friendship's two people** (the pair group itself, or a sub-group nested
   under it at any depth), "Add friends" and "share an invitation link" are likewise absent
   and creating a further sub-group there skips the friend picker, since there is never
-  anyone left to offer — the other person self-joins through the toggle above instead.
+  anyone left to offer — the other person is already a member of it from the moment it is
+  created, so it never shows up behind the "not in" toggle above in the first place.
 - Deleting asks for confirmation and states that everything in the group **and its
   sub-groups** is lost; leaving asks for confirmation too, and states how many sub-groups
   it also removes the member from.

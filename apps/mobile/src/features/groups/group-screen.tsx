@@ -707,8 +707,7 @@ function DetailsSheet({
         <ThemedView style={styles.actions}>
           {pairRooted ? (
             <ThemedText type="small" themeColor="textSecondary">
-              Just the two of you here too — the other person joins from the sub-groups list
-              above, not by invitation.
+              Just the two of you here too — no one else can be added.
             </ThemedText>
           ) : null}
 

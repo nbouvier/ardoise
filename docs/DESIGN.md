@@ -136,8 +136,8 @@ details sheet's closing line explains that it is just the two of them. For a sta
 group: "Add friends", "Share an invitation link" (gone when effectively archived — the
 server actually blocks them — **or when the group is `pairRooted`**: itself the pair
 group, or a sub-group nested under one at any depth, which can only ever contain that
-friendship's own two people; a small note explains that the other person joins from the
-sub-groups list instead), "Rename" (gone only when the group's **own** flag is archived,
+friendship's own two people; a small note explains that no one else can be added),
+"Rename" (gone only when the group's **own** flag is archived,
 not an ancestor's — renaming is never blocked server-side, `pairRooted` or not), "Archive
 group" / "Reopen group" (always available, and always reflects the group's own flag, never
 an ancestor's), "Leave group" (hidden for an owner who still has company **or** who solely
@@ -259,9 +259,8 @@ mentions it either, since the caller already knows which group they are in.
 
 When the parent is `pairRooted` (the pair group itself, or a sub-group nested under one),
 the friend picker is **not shown at all** — replaced by a short note that it is just the
-two of them here too — since the only other allowed person always already belongs to the
-new sub-group's own parent and simply joins it themselves from the sub-groups list;
-offering them in a picker would only fail on submit.
+two of them here too — since the only other allowed person is added automatically the
+moment the sub-group is created; offering them in a picker would only fail on submit.
 
 ### Friend picker (`src/features/groups/friend-picker.tsx`)
 

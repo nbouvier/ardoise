@@ -386,8 +386,15 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         ceiling = await pairCeiling(repository, parent);
       }
 
-      const memberIds = await requireFriends(userId, input.memberIds ?? []);
+      let memberIds = await requireFriends(userId, input.memberIds ?? []);
       assertWithinPairCeiling(ceiling, memberIds);
+      if (ceiling) {
+        // A pair-rooted sub-group can only ever hold the friendship's own two
+        // people, so there is no picking involved — both start out as
+        // members instead of leaving the partner to notice and join an
+        // "unjoined" sub-group later.
+        memberIds = [...ceiling];
+      }
       const group = await repository.createGroup({
         name: input.name,
         ownerId: userId,

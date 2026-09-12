@@ -474,9 +474,7 @@ describe('GroupScreen', () => {
       expect(screen.queryByRole('button', { name: 'Share an invitation link' })).toBeNull();
       expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
       expect(
-        screen.getByText(
-          'Just the two of you here too — the other person joins from the sub-groups list above, not by invitation.',
-        ),
+        screen.getByText('Just the two of you here too — no one else can be added.'),
       ).toBeTruthy();
     });
 
