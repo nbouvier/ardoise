@@ -13,6 +13,9 @@ Defined in `apps/mobile/src/constants/theme.ts`:
   (`src/features/transactions/balance-display.ts`) rather than testing the sign by hand.
   Destructive-action red is still written inline at its few call sites — a different
   meaning that happens to share a hue.
+- **Category colours** are not theme tokens: each transaction category owns its colour in
+  `@splitcount/shared`'s `categories.ts`, alongside its emoji and label, and keeps it in
+  both themes. Read it from `categoryDefinition(key).color`, never redefine one per screen.
 - **Spacing** — `Spacing` scale: `half` (2) → `six` (64). Use tokens, not raw numbers.
 - **Fonts** — `Fonts` per platform: `sans`, `serif`, `rounded`, `mono`.
 - **Layout** — `MaxContentWidth` (800), `BottomTabInset` per platform.
@@ -83,6 +86,10 @@ opens the same add/edit sheet, pre-filled; on an archived group rows render but 
 pressable, read only. Empty state: an explanation and the same "Add a transaction"
 action.
 
+The header carries two small text buttons: **"Stats"** (the per-category breakdown, see
+"Group statistics" below) and **"Details"**. Both open sheets; both are present on every
+kind of group, archived or pair included, since both are read-only views.
+
 Group management — everything that used to sit directly on this screen — moved behind a
 small "Details" button in the header, opening a sheet: the member list (avatar + name,
 "Owner" on the owner), **balances** (`GroupBalances`: each member's name next to their
@@ -106,6 +113,35 @@ confirm through an `Alert` that states what is lost.
 
 States: loading, "This group is gone" (deleted, or the viewer was removed — no retry, just
 a way back), and a retryable connection error.
+
+### Group statistics (`src/features/statistics/statistics-screen.tsx`)
+
+A sheet, opened from a small "Stats" button in the group header, left of "Details" — the
+transaction list stays the group's primary content. Two rows of pill toggles (same styling
+as the split editor's mode toggle): **Spending / Income**, then **The group / Me**. Under
+them a **donut chart** (`DonutChart`, 220pt, 28pt ring) with one arc per category in that
+category's own colour, and a legend below: colour swatch, emoji + label, percentage, amount
+— largest first.
+
+The donut's hole holds the total for the current toggles ("Total spending", the amount);
+tapping an arc or a legend row swaps it for that category's emoji, label, amount and
+percentage, and fades the other arcs to 30%. Tapping the same one again, or changing a
+toggle, returns to the total. Colour never carries meaning alone: every slice is repeated
+in the legend with its emoji and label, and the selected one is named in words in the
+centre.
+
+Category colours live with the categories themselves (`@splitcount/shared`'s
+`categories.ts`), mid-lightness so the same thirteen values read on both themes — they are
+not theme tokens and do not change between light and dark.
+
+States: a spinner while the transactions load, the same retryable connection error as the
+list, and empty states that say *which* combination is empty ("Nothing recorded as income
+yet.", "None of this group's spending concerns you yet.") rather than a generic "nothing
+here". A group holding only transfers reads as "Nothing spent yet" with the reason, since
+transfers deliberately do not count.
+
+The sheet reads the transactions the group screen already loaded — no second request, and
+a transaction saved while it is open is reflected when it is reopened.
 
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 
@@ -238,8 +274,9 @@ is stale — restart the dev server rather than working around the type.
 
 Auth screens (sign-in, account, gate), the friends screens, the groups screens and the
 transaction screens are real. The Expo starter Home tab is gone — Groups took its place.
-Groups hold transactions and show balances, and the friend list shows where you stand with
-each person across every group you share; settle-up suggestions are not built yet.
+Groups hold transactions, show balances and break their money down by category, and the
+friend list shows where you stand with each person across every group you share; settle-up
+suggestions are not built yet.
 
 The transaction date field is a native picker (`@expo/ui`) on iOS and Android, a plain
 text field on web (see "Date field" above and `docs/MOBILE.md`).

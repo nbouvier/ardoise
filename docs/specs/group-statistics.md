@@ -71,9 +71,10 @@ has one (`Other` by default), so nothing falls outside the breakdown.
 
 ### Freshness
 
-The breakdown reflects the group's transactions as of when it was opened. Recording,
-editing or deleting a transaction while it is open is not expected to update it live;
-re-opening it shows the new figures.
+The breakdown describes exactly the transactions the group is currently showing — it is
+the same list, read again, not a separate figure that could disagree with it. Recording,
+editing or deleting a transaction is therefore reflected the next time the breakdown is
+looked at, with no refresh of its own.
 
 ## Out of scope
 
@@ -219,5 +220,6 @@ amounts are financial data and must not be logged
 - **Per-member breakdown** — "who spends on what" — is plausible but carries a social
   dimension (it exposes each member's habits to the whole group) that deserves an
   explicit decision rather than being added by symmetry with the scope toggle.
-- Should recording a transaction while the statistics sheet is open refresh it live?
-  Currently no; the sheet is a snapshot from when it was opened.
+- Should a category's **colour** ever be configurable, or tied to a theme? It is fixed in
+  code today, chosen to read on both themes; custom categories (see
+  `docs/specs/transactions.md`) would force the question.

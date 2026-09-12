@@ -140,6 +140,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | The per-friend aggregate filters on "both people are on the transaction", with no group filter at all | Being on a transaction already implies having shared its group. Filtering on *current* membership instead would silently drop the debt of someone who left a shared group |
 | 2026-09-11 | Each friend's balance rides on `GET /friends` rather than its own route; `friendSummarySchema` is left untouched | The friend list has no useful state without the amounts, and a second call would show names before figures. The summary shape is reused by group members, transaction participants and invitation previews, none of which have a balance |
 | 2026-09-11 | The transaction date field uses `@expo/ui`'s `community/datetime-picker`, not a new dependency | `@expo/ui` was already a dependency but not yet linked into the native build; reusing it (SwiftUI `DatePicker` on iOS, a Material dialog on Android) needs the same native rebuild a brand-new picker library would have, for zero added dependency footprint |
+| 2026-09-12 | A group's per-category breakdown is derived on the client, from the transactions the group screen already holds — no endpoint, no stored aggregate | It is the same call the screen already makes, and a second round trip would show a chart after the list it summarises. Valid only while the list is unpaginated (see Open items) |
+| 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@splitcount/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
+| 2026-09-12 | Each category carries its own colour in the shared preset list | A chart and its legend describing different colours for the same category is a defect the type system can prevent; the colour is part of the category, not of the screen |
+| 2026-09-12 | The donut is drawn with `react-native-svg` rather than stacked views | Thirteen arcs, exact hit-testing per slice and one implementation across iOS, Android and web. It is a native dependency, so it costs a dev-build rebuild (`docs/MOBILE.md`) |
 
 ## Open items
 
@@ -179,4 +183,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   transaction as every transaction write — it matches the read pattern exactly, one
   indexed row per friend — with the current computation kept as the recompute oracle.
 - The transaction list has no pagination yet (`docs/specs/transactions.md`); revisit once
-  a group's history grows large enough to matter.
+  a group's history grows large enough to matter. **Paginating it breaks the group
+  statistics silently**: the client-side breakdown would then describe only the loaded
+  page while still reading as the whole group. Whoever paginates the list moves
+  `categoryBreakdown` behind a `GET /groups/:groupId/transactions/statistics` route in the
+  same change — the function is already shared and server-ready.

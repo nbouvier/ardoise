@@ -19,6 +19,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
+import { StatisticsScreen } from '@/features/statistics/statistics-screen';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
@@ -43,8 +44,16 @@ import { useGroup } from './use-group';
  * archive, invite, leave, delete) — everything that used to sit directly on
  * this screen before transactions became its primary content. `invite`,
  * `members` and `rename` are launched from inside it and return to it.
+ * `statistics` is its read-only counterpart, opened from the same header.
  */
-type Sheet = 'details' | 'invite' | 'members' | 'rename' | 'transaction' | null;
+type Sheet =
+  | 'details'
+  | 'invite'
+  | 'members'
+  | 'rename'
+  | 'transaction'
+  | 'statistics'
+  | null;
 
 export function GroupScreen({ groupId }: { groupId: string }) {
   const { status, group, refresh, set } = useGroup(groupId);
@@ -199,15 +208,26 @@ export function GroupScreen({ groupId }: { groupId: string }) {
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
               {group.name}
             </ThemedText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Group details"
-              onPress={() => setSheet('details')}
-              style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Details
-              </ThemedText>
-            </Pressable>
+            <ThemedView style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Group statistics"
+                onPress={() => setSheet('statistics')}
+                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Stats
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Group details"
+                onPress={() => setSheet('details')}
+                style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Details
+                </ThemedText>
+              </Pressable>
+            </ThemedView>
           </ThemedView>
           {archived ? (
             <ThemedText type="small" themeColor="textSecondary">
@@ -254,6 +274,16 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 onArchiveToggle={confirmArchive}
                 onLeave={confirmLeave}
                 onDelete={confirmDelete}
+              />
+            ) : null}
+
+            {sheet === 'statistics' ? (
+              <StatisticsScreen
+                transactions={transactionsResult.transactions}
+                status={transactionsResult.status}
+                onRetry={transactionsResult.refresh}
+                viewerId={viewerId}
+                onClose={() => setSheet(null)}
               />
             ) : null}
 
@@ -618,6 +648,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
   },
   headerTitle: {
     flex: 1,
