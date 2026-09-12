@@ -57,6 +57,14 @@ export interface TransactionsRepository {
    * with, across every group. Positive: that person owes `userId`.
    */
   balancesWith(userId: string): Promise<Map<string, number>>;
+  /**
+   * `userId`'s own net balance in each of `groupIds`, keyed by group id — the
+   * same rule as a group's balance (`computeBalances`), aggregated in SQL and
+   * scoped to a specific set of groups rather than one. A group absent from
+   * the result has no transaction `userId` is party to; the caller (a group's
+   * sub-tree roll-up, `docs/specs/balances.md`) treats that as zero.
+   */
+  balancesByGroup(userId: string, groupIds: readonly string[]): Promise<Map<string, number>>;
 }
 
 function toParticipantRows(
@@ -207,6 +215,60 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       }
       for (const row of owedByCaller) {
         add(row.counterpartyId, -Number(row.deltaCents));
+      }
+
+      return balances;
+    },
+
+    async balancesByGroup(userId, groupIds) {
+      if (groupIds.length === 0) {
+        return new Map();
+      }
+      const scope = [...groupIds];
+
+      // Credited: what `userId` paid in each group (reversed for an income).
+      const signedAmount = sql`case when ${transactions.kind} = 'income'
+        then -${transactions.amountCents} else ${transactions.amountCents} end`;
+      const paid = await db
+        .select({
+          groupId: transactions.groupId,
+          deltaCents: sql<number>`sum(${signedAmount})::int`,
+        })
+        .from(transactions)
+        .where(and(eq(transactions.payerId, userId), inArray(transactions.groupId, scope)))
+        .groupBy(transactions.groupId);
+
+      // Debited: `userId`'s own share as a concerned participant, in each
+      // group. Paying for oneself is not omitted here the way the per-friend
+      // aggregate omits it — it is the same transaction's payer credit
+      // netting against this debit, exactly as `computeBalances` does it.
+      const signedShare = sql`case when ${transactions.kind} = 'income'
+        then -${transactionParticipants.shareCents} else ${transactionParticipants.shareCents} end`;
+      const owed = await db
+        .select({
+          groupId: transactions.groupId,
+          deltaCents: sql<number>`sum(${signedShare})::int`,
+        })
+        .from(transactions)
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(eq(transactionParticipants.userId, userId), inArray(transactions.groupId, scope)),
+        )
+        .groupBy(transactions.groupId);
+
+      const balances = new Map<string, number>();
+      const add = (groupId: string, deltaCents: number) => {
+        balances.set(groupId, (balances.get(groupId) ?? 0) + deltaCents);
+      };
+
+      for (const row of paid) {
+        add(row.groupId, Number(row.deltaCents));
+      }
+      for (const row of owed) {
+        add(row.groupId, -Number(row.deltaCents));
       }
 
       return balances;

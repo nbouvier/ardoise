@@ -135,6 +135,38 @@ describe('groups routes', () => {
       headers: user.headers,
     });
 
+  /** A minimal equal-shares expense, for the balance roll-up tests below. */
+  function expense(payerId: string, participantIds: string[], amount = 1000) {
+    return {
+      kind: 'expense',
+      title: 'Something',
+      amount,
+      occurredOn: '2026-09-11',
+      payerId,
+      split: {
+        mode: 'shares',
+        participants: participantIds.map((userId) => ({ userId, weight: 1 })),
+      },
+    };
+  }
+
+  async function recordExpense(
+    user: TestUser,
+    groupId: string,
+    payerId: string,
+    participantIds: string[],
+    amount = 1000,
+  ) {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/groups/${groupId}/transactions`,
+      headers: user.headers,
+      payload: expense(payerId, participantIds, amount),
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json().transaction;
+  }
+
   describe('POST /groups', () => {
     it('creates a named group owned by its creator', async () => {
       const ada = await signIn('ada');
@@ -936,6 +968,93 @@ describe('groups routes', () => {
 
       expect(response.statusCode).toBe(410);
       expect(response.json()).toEqual({ error: 'invite_gone' });
+    });
+  });
+
+  describe('balance roll-up over a group and its sub-groups', () => {
+    it("equals a root group's own balance when it has no sub-groups", async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      await recordExpense(ada, root.id, ada.userId, [ada.userId, grace.userId], 1000);
+
+      const { groups: listed } = (await listGroups(ada)).json();
+
+      // Ada paid 1000, split evenly two ways: she is owed 500.
+      expect(listed[0].viewerBalanceCents).toBe(500);
+      expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(500);
+    });
+
+    it("sums the viewer's own balance across a root group and its sub-groups", async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+      await recordExpense(ada, root.id, ada.userId, [ada.userId, grace.userId], 1000);
+      await recordExpense(ada, sub.id, ada.userId, [ada.userId, grace.userId], 400);
+
+      const { groups: listed } = (await listGroups(ada)).json();
+
+      expect(listed[0].viewerBalanceCents).toBe(500 + 200);
+      expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(700);
+    });
+
+    it('excludes a sub-group the viewer has never joined', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      await befriend(grace, alan);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId, alan.userId]);
+      // Ada never joins the sub-group; grace and alan run up a balance in it.
+      const sub = await createdSubgroup(grace, root.id, 'Just us', [alan.userId]);
+      await recordExpense(ada, root.id, ada.userId, [ada.userId, grace.userId], 1000);
+      await recordExpense(grace, sub.id, grace.userId, [grace.userId, alan.userId], 800);
+
+      const detail = (await getGroup(ada, root.id)).json().group;
+
+      // Only the root expense counts towards ada: 1000 split with grace.
+      expect(detail.viewerBalanceCents).toBe(500);
+    });
+
+    it('still counts a sub-group the viewer has since left', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+      await recordExpense(ada, sub.id, grace.userId, [ada.userId, grace.userId], 600);
+
+      await removeMember(ada, sub.id, ada.userId);
+
+      const detail = (await getGroup(ada, root.id)).json().group;
+
+      // Grace paid 600 in the sub-group, split with ada: ada still owes 300,
+      // even though she has since left that sub-group.
+      expect(detail.viewerBalanceCents).toBe(-300);
+    });
+
+    it('rolls up a deeply nested tree at every level', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+      const grandchild = await createdSubgroup(ada, child.id, 'Beach day', [grace.userId]);
+      await recordExpense(ada, root.id, ada.userId, [ada.userId, grace.userId], 200);
+      await recordExpense(ada, child.id, ada.userId, [ada.userId, grace.userId], 400);
+      await recordExpense(ada, grandchild.id, ada.userId, [ada.userId, grace.userId], 600);
+
+      const rootDetail = (await getGroup(ada, root.id)).json().group;
+      const childDetail = (await getGroup(ada, child.id)).json().group;
+      const grandchildDetail = (await getGroup(ada, grandchild.id)).json().group;
+
+      expect(grandchildDetail.viewerBalanceCents).toBe(300);
+      expect(childDetail.viewerBalanceCents).toBe(200 + 300);
+      expect(rootDetail.viewerBalanceCents).toBe(100 + 200 + 300);
     });
   });
 

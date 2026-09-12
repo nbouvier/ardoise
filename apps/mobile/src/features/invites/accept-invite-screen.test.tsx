@@ -25,6 +25,7 @@ const group = {
   parentId: null,
   depth: 0,
   subgroupCount: 0,
+  viewerBalanceCents: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };

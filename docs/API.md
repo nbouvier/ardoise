@@ -235,10 +235,16 @@ Shared error codes:
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is `null` for a root
-group; `depth` is `0` for a root group and capped at `4`; `subgroupCount` is the number of
-*direct* sub-groups only. `GroupDetail` adds `members` (a `FriendSummary` plus `role`),
-`viewerRole`, `subgroups` (the group's direct sub-groups — see below), `ancestors`
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is
+`null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
+is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
+position **rolled up over the group and every sub-group nested inside it** — positive means
+they are owed, negative means they owe (`docs/specs/balances.md`); for a group with no
+sub-groups this is simply its own balance, computed the same way as
+`GET /groups/:groupId/transactions/balances` but from the caller's own transactions across
+the whole sub-tree rather than the group's per-member list. `GroupDetail` adds `members` (a
+`FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
+below), `ancestors`
 (root-first, empty for a root group) and `readOnly` — `true` when the group itself is
 archived *or any ancestor of it is*; for a root group this always equals
 `archivedAt !== null`, since it has no ancestors. A **pair group stores no name**: the API

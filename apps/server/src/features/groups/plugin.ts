@@ -7,6 +7,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { createTransactionsRepository } from '../transactions/repository.js';
+
 import { translateGroupAccessError } from './http.js';
 import { createGroupsRepository } from './repository.js';
 import {
@@ -33,14 +35,21 @@ const friendParamsSchema = z.object({ friendId: z.uuid() });
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
     const repository = createGroupsRepository(app.db);
+    // A group's rolled-up balance is a client of the ledger `transactions`
+    // owns — the same way `friends` reads it for the per-friend total. A
+    // repository, not the transactions *service*: nothing here goes through
+    // a group's own membership checks, and `groups` must not depend on the
+    // `transactions` plugin, which itself depends on `groups`.
+    const ledger = createTransactionsRepository(app.db);
     const groups = createGroupsService({
       repository,
       invites: app.invites,
+      ledger,
       now: opts.now,
     });
 
     app.decorate('groups', groups);
-    app.invites.register('group', createGroupInviteHandler(repository));
+    app.invites.register('group', createGroupInviteHandler(repository, ledger));
 
     /**
      * Turn a refusal into its HTTP answer. Refusals are logged with their

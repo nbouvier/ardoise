@@ -65,9 +65,20 @@ export interface GroupsService {
   getPairGroup(userId: string, friendId: string): Promise<GroupDetail>;
 }
 
+/**
+ * The slice of the transaction ledger a group's rolled-up balance needs: a
+ * user's own net balance in a specific set of groups. Narrow on purpose —
+ * `groups` reads the ledger, it does not get to write to it, the same
+ * pattern `friends`' `CounterpartyBalances` already uses.
+ */
+export interface GroupBalances {
+  balancesByGroup(userId: string, groupIds: readonly string[]): Promise<Map<string, number>>;
+}
+
 export interface GroupsServiceDeps {
   repository: GroupsRepository;
   invites: InvitesService;
+  ledger: GroupBalances;
   now?: () => Date;
 }
 
@@ -88,14 +99,36 @@ function nameFor(group: GroupRow, viewerId: string, members: MemberWithUser[]): 
   return other?.user.name ?? 'Shared expenses';
 }
 
+/**
+ * The viewer's net balance in `group`, rolled up over its whole sub-tree —
+ * the plain sum of their own balance in `group` plus in every descendant, at
+ * any depth. A descendant they were never a member of contributes nothing,
+ * since they are on none of its transactions (`docs/specs/balances.md`);
+ * this holds whether or not it is currently visible to them. Module-level
+ * (not a closure over `createGroupsService`) so the invite handler below can
+ * compute the same figure for its own summary without a second formula that
+ * could drift from this one.
+ */
+async function rolledUpBalance(
+  repository: GroupsRepository,
+  ledger: GroupBalances,
+  userId: string,
+  group: GroupRow,
+): Promise<number> {
+  const descendantIds = await repository.listDescendantIds(group.id);
+  const balances = await ledger.balancesByGroup(userId, [group.id, ...descendantIds]);
+  return [group.id, ...descendantIds].reduce((sum, id) => sum + (balances.get(id) ?? 0), 0);
+}
+
 export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
-  const { repository, invites, now = () => new Date() } = deps;
+  const { repository, invites, ledger, now = () => new Date() } = deps;
 
   function summaryOf(
     group: GroupRow,
     name: string,
     memberCount: number,
     subgroupCount: number,
+    viewerBalanceCents: number,
   ): GroupSummary {
     return {
       id: group.id,
@@ -105,16 +138,18 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       parentId: group.parentId,
       depth: group.depth,
       subgroupCount,
+      viewerBalanceCents,
       archivedAt: group.archivedAt?.toISOString() ?? null,
       createdAt: group.createdAt.toISOString(),
     };
   }
 
   async function detailOf(group: GroupRow, viewerId: string, role: GroupRole) {
-    const [members, children, ancestors] = await Promise.all([
+    const [members, children, ancestors, viewerBalanceCents] = await Promise.all([
       repository.listMembers(group.id),
       repository.listChildren(group.id),
       repository.listAncestors(group.id),
+      rolledUpBalance(repository, ledger, viewerId, group),
     ]);
     const joinedChildIds = new Set(
       await repository.filterMemberGroupIds(
@@ -124,7 +159,13 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     );
 
     return {
-      ...summaryOf(group, nameFor(group, viewerId, members), members.length, children.length),
+      ...summaryOf(
+        group,
+        nameFor(group, viewerId, members),
+        members.length,
+        children.length,
+        viewerBalanceCents,
+      ),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
         role: member.role,
@@ -214,9 +255,39 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   return {
     async list(userId) {
       const rows = await repository.listGroupsForUser(userId);
-      return rows.map(({ group, memberCount, subgroupCount }) =>
-        summaryOf(group, group.name ?? 'Untitled group', memberCount, subgroupCount),
+      if (rows.length === 0) {
+        return [];
+      }
+
+      // One ledger read for every root and its whole sub-tree, rather than
+      // one per group: the roll-up is a client of `transactions`' ledger, not
+      // a second implementation of it, and this is the same batching
+      // `rolledUpBalance` does for a single group.
+      const descendantsByRoot = new Map(
+        await Promise.all(
+          rows.map(
+            async ({ group }) =>
+              [group.id, await repository.listDescendantIds(group.id)] as const,
+          ),
+        ),
       );
+      const everyGroupId = rows.flatMap(({ group }) => [
+        group.id,
+        ...(descendantsByRoot.get(group.id) ?? []),
+      ]);
+      const balances = await ledger.balancesByGroup(userId, everyGroupId);
+
+      return rows.map(({ group, memberCount, subgroupCount }) => {
+        const ids = [group.id, ...(descendantsByRoot.get(group.id) ?? [])];
+        const viewerBalanceCents = ids.reduce((sum, id) => sum + (balances.get(id) ?? 0), 0);
+        return summaryOf(
+          group,
+          group.name ?? 'Untitled group',
+          memberCount,
+          subgroupCount,
+          viewerBalanceCents,
+        );
+      });
     },
 
     async get(userId, groupId) {
@@ -370,7 +441,10 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
  * What a `group` invitation does: joining the group it points at. Registered
  * with the invites feature, which owns the code and its lifecycle.
  */
-export function createGroupInviteHandler(repository: GroupsRepository): InviteHandler {
+export function createGroupInviteHandler(
+  repository: GroupsRepository,
+  ledger: GroupBalances,
+): InviteHandler {
   /**
    * A group that was deleted, or archived since the link was shared —
    * itself, or any ancestor of it — takes no new members: the holder's next
@@ -409,7 +483,10 @@ export function createGroupInviteHandler(repository: GroupsRepository): InviteHa
       // something reflected in the summary below, which describes `group`
       // itself only.
       const inserted = await repository.addMembers(group.id, [userId]);
-      const children = await repository.listChildren(group.id);
+      const [children, viewerBalanceCents] = await Promise.all([
+        repository.listChildren(group.id),
+        rolledUpBalance(repository, ledger, userId, group),
+      ]);
 
       return {
         kind: 'group',
@@ -421,6 +498,7 @@ export function createGroupInviteHandler(repository: GroupsRepository): InviteHa
           parentId: group.parentId,
           depth: group.depth,
           subgroupCount: children.length,
+          viewerBalanceCents,
           archivedAt: null,
           createdAt: group.createdAt.toISOString(),
         },
