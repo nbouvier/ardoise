@@ -29,6 +29,11 @@ people. It is **drawn in SVG from the theme tokens**, not shipped as a bitmap, s
 identity has exactly one source. The app icon, splash glyph, favicon and Android
 adaptive layers are exports of that same mark.
 
+Every tab screen opens with the mark and the "SplitCount" wordmark **before** the name of
+the page — the app introduces itself first, the section second — via `ScreenHeader`. A
+page title is never the largest, boldest text at the top of a tab screen; it sits smaller
+and in `textSecondary` beneath the wordmark.
+
 ## Tokens
 
 All in `apps/mobile/src/constants/theme.ts`. Reach for a token, never a literal.
@@ -111,8 +116,15 @@ or box**; a screen that styles its own is a bug in this document.
   group's initials, a category's emoji, a sub-group's `↳`. Takes an explicit `color` when
   the subject owns one (a category), a seed otherwise.
 - **`BrandMark`** — the logo, drawn from the tokens.
-- **`ScreenHeader`** — the top of a tab screen: large title, optional caption, room for
-  one screen-level action. Every tab opens the same way.
+- **`Icon`** — the app's small glyph set (`plus`, `link`, `close`), drawn as strokes on a
+  24×24 grid rather than an icon font, coloured through `theme` like everything else.
+- **`IconButton`** — a round, label-less action for a single unambiguous glyph: `primary`
+  (brand-filled circle) or `ghost` (soft brand wash), same two surfaces as `Button`.
+- **`ScreenHeader`** — the top of a tab screen: **SplitCount's own identity first** — the
+  `BrandMark` and wordmark, small — the current page named underneath in smaller,
+  secondary-coloured type, with an optional trailing caption and room for one screen-level
+  action. Every tab opens the same way, and reads as SplitCount before it reads as "Groups"
+  or "Friends".
 - **`ThemedText`** — `title`, `subtitle` (a screen's own name), `sectionTitle` (a block
   inside a screen), `overline` (a small all-caps label above a block — quiet structure,
   never a sentence), `amount` (a figure that must read as a figure), `default`, `small`,
@@ -129,6 +141,10 @@ or box**; a screen that styles its own is a bug in this document.
 - A spinner is `theme.primary`, never `theme.text`.
 - Colour never carries meaning alone: a balance is said in words ("You owe 8.00"), a
   chart slice is repeated in a legend with its emoji and label.
+- An action that branches into a couple of related choices (add → create or join) is a
+  single **`IconButton`** opening a small **action menu** — a `Card` of `MenuRow`s
+  (a soft brand icon + a label) anchored near the button — rather than a text button per
+  choice or a label-less button whose single meaning has to be guessed.
 
 ## Screens
 
@@ -156,8 +172,13 @@ The landing screen, **root groups only** — a sub-group is reached by opening i
 card**: a medallion carrying the group's initials, the name, the member count, and the
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
 `docs/specs/balances.md`). Empty state: a brand card with a glyph, "No groups yet" and
-what a group is for. A footer holds the primary "Create a group" and the invitation-code
-entry.
+what a group is for.
+
+A footer holds a single primary **`IconButton`** (`plus`, bottom-right) rather than a
+"Create a group" text button: it opens an **action menu** with "Create a group" and "Join
+a group" (`link` icon). "Create a group" opens the same creation sheet as before; "Join a
+group" opens a sheet holding the invitation-code entry — submitting a code closes the
+sheet and hands off to `InvitePrompt`, which is what actually confirms and joins.
 
 **Archived groups** sit under a "Show archived (n)" brand-coloured toggle at the bottom,
 rendered `muted` with "n members · archived" when revealed — hidden rather than greyed
@@ -313,9 +334,11 @@ separate hit area at the end. Empty state: a brand card. A footer holds the prim
 ### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
 
 An `overline` "Got an invitation code?", a `TextField` and a secondary "Open" (disabled
-until something is typed, submittable from the keyboard). **Rendered identically at the
-bottom of both the Friends and Groups tabs** — one component, so neither tab has to know
-which kind of code the visitor is holding.
+until something is typed, submittable from the keyboard). **The same component on both
+the Friends and Groups tabs** — neither has to know which kind of code the visitor is
+holding — rendered at the bottom of the Friends tab and inside the Groups tab's "Join a
+group" sheet. An optional `onSubmitted` callback lets a host sheet close itself once the
+code is handed off.
 
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 
