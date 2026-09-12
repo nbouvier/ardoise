@@ -1,4 +1,10 @@
-import type { GroupDetail, GroupMember, Transaction } from '@splitcount/shared';
+import type {
+  GroupAncestor,
+  GroupDetail,
+  GroupMember,
+  SubgroupSummary,
+  Transaction,
+} from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -20,6 +26,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
+import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
 import { TransactionFormScreen } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
@@ -29,11 +36,13 @@ import { useTheme } from '@/hooks/use-theme';
 import {
   addGroupMembers,
   deleteGroup,
+  joinGroup,
   removeGroupMember,
   updateGroup,
 } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
+import { CreateGroupScreen } from './create-group-screen';
 import { FriendPicker } from './friend-picker';
 import { GroupInviteScreen } from './group-invite-screen';
 import { groupsChanged } from './groups-changed';
@@ -45,6 +54,7 @@ import { useGroup } from './use-group';
  * this screen before transactions became its primary content. `invite`,
  * `members` and `rename` are launched from inside it and return to it.
  * `statistics` is its read-only counterpart, opened from the same header.
+ * `createSubgroup` is launched from the sub-groups section.
  */
 type Sheet =
   | 'details'
@@ -53,6 +63,7 @@ type Sheet =
   | 'rename'
   | 'transaction'
   | 'statistics'
+  | 'createSubgroup'
   | null;
 
 export function GroupScreen({ groupId }: { groupId: string }) {
@@ -135,15 +146,35 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   // A pair group belongs to a friendship: nobody can be added, and it cannot be
   // renamed, archived or deleted. Those actions are absent rather than
-  // disabled — they can never apply. Transactions are the exception: they work
-  // exactly like a standard group.
+  // disabled — they can never apply. Transactions and sub-groups are the
+  // exception: they both work exactly like a standard group, except every
+  // sub-group nested under a pair group is itself `pairRooted` (below).
   const managed = group.kind === 'standard';
-  const archived = group.archivedAt !== null;
+  // The group's *own* archived flag — drives the archive toggle's own label
+  // and action. `readOnly` is the effective one (itself or any ancestor
+  // archived, docs/specs/groups.md) and gates everything that is actually
+  // blocked server-side: transactions, membership changes, invitations,
+  // creating a sub-group. The two are equal for a root group, since it has no
+  // ancestors.
+  const ownArchived = group.archivedAt !== null;
+  const readOnly = group.readOnly;
+  // This group — or a pair group somewhere above it — can only ever contain
+  // the two people of a friendship, however deep its own sub-groups go
+  // (`docs/specs/groups.md`). "Add friends" and "share an invitation link"
+  // have no one left to add and are hidden; the other person still reaches
+  // it through the ordinary unjoined-sub-group toggle, since they already
+  // belong to every ancestor.
+  const pairRooted = group.pairRooted;
   const isOwner = group.viewerRole === 'owner';
   const alone = group.memberCount === 1;
+  const hasSubgroups = group.subgroupCount > 0;
+
+  function openGroup(id: string) {
+    router.push({ pathname: '/groups/[id]', params: { id } });
+  }
 
   function confirmArchive() {
-    void run('archive', () => updateGroup(authorizedFetch, groupId, { archived: !archived }));
+    void run('archive', () => updateGroup(authorizedFetch, groupId, { archived: !ownArchived }));
   }
 
   function confirmLeave() {
@@ -151,9 +182,11 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       return;
     }
     // Alone, leaving deletes the group — say so rather than surprise them.
+    // Any sub-groups come with the same loss, since leaving cascades down.
+    const scope = hasSubgroups ? ' and every sub-group nested inside it' : '';
     const warning = alone
-      ? `Leave “${group!.name}”? You’re the only member, so the group is deleted.`
-      : `Leave “${group!.name}”?`;
+      ? `Leave “${group!.name}”? You’re the only member, so the group${scope} is deleted.`
+      : `Leave “${group!.name}”?${hasSubgroups ? ' This also removes you from its sub-groups.' : ''}`;
 
     Alert.alert('Leave group', warning, [
       { text: 'Cancel', style: 'cancel' },
@@ -171,9 +204,10 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   }
 
   function confirmDelete() {
+    const scope = hasSubgroups ? ', and every sub-group nested inside it,' : '';
     Alert.alert(
       'Delete group',
-      `Delete “${group!.name}” permanently? Everything in it is lost, for everyone.`,
+      `Delete “${group!.name}” permanently? Everything in it${scope} is lost, for everyone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -190,6 +224,28 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     );
   }
 
+  function confirmJoin(subgroup: SubgroupSummary) {
+    Alert.alert('Join this group?', `Join “${subgroup.name}”?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Join',
+        onPress: () => {
+          setBusy(true);
+          joinGroup(authorizedFetch, subgroup.id)
+            .then(() => {
+              groupsChanged.notify();
+              openGroup(subgroup.id);
+            })
+            .catch((error: unknown) => {
+              logger.warn('groups.join.failed', errorFields(error));
+              Alert.alert('That didn’t work', 'Check your connection and try again.');
+            })
+            .finally(() => setBusy(false));
+        },
+      },
+    ]);
+  }
+
   function openNewTransaction() {
     setEditingTransaction(null);
     setSheet('transaction');
@@ -204,6 +260,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     <ThemedView style={styles.container}>
       <ThemedView style={styles.content}>
         <ThemedView style={styles.header}>
+          {group.ancestors.length > 0 ? (
+            <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
+          ) : null}
           <ThemedView style={styles.headerRow}>
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
               {group.name}
@@ -229,22 +288,34 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               </Pressable>
             </ThemedView>
           </ThemedView>
-          {archived ? (
+          {readOnly ? (
             <ThemedText type="small" themeColor="textSecondary">
               Archived — read-only until it’s reopened.
             </ThemedText>
           ) : null}
-          {viewerId ? <ViewerBalance result={balancesResult} viewerId={viewerId} /> : null}
+          <ViewerBalance amountCents={group.viewerBalanceCents} />
         </ThemedView>
+
+        {/* Standard and pair groups can both have sub-groups — the pair
+            group's own DetailsSheet message covers the "no one new here"
+            part; this section is the same for both kinds. */}
+        <SubgroupsSection
+          subgroups={group.subgroups}
+          readOnly={readOnly}
+          busy={busy}
+          onOpen={openGroup}
+          onJoin={confirmJoin}
+          onCreate={() => setSheet('createSubgroup')}
+        />
 
         <TransactionList
           result={transactionsResult}
           viewerId={viewerId}
-          archived={archived}
+          archived={readOnly}
           onOpen={openTransaction}
         />
 
-        {archived ? null : (
+        {readOnly ? null : (
           <ThemedView style={styles.footer}>
             <Button label="Add a transaction" onPress={openNewTransaction} />
           </ThemedView>
@@ -263,7 +334,9 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                 group={group}
                 balances={balancesResult}
                 managed={managed}
-                archived={archived}
+                readOnly={readOnly}
+                pairRooted={pairRooted}
+                ownArchived={ownArchived}
                 isOwner={isOwner}
                 alone={alone}
                 busy={busy}
@@ -277,11 +350,23 @@ export function GroupScreen({ groupId }: { groupId: string }) {
               />
             ) : null}
 
+            {sheet === 'createSubgroup' ? (
+              <CreateGroupScreen
+                parentId={groupId}
+                pairRooted={pairRooted}
+                onCreated={(created) => {
+                  groupsChanged.notify();
+                  setSheet(null);
+                  openGroup(created.id);
+                }}
+                onCancel={() => setSheet(null)}
+              />
+            ) : null}
+
             {sheet === 'statistics' ? (
               <StatisticsScreen
-                transactions={transactionsResult.transactions}
-                status={transactionsResult.status}
-                onRetry={transactionsResult.refresh}
+                groupId={groupId}
+                hasSubgroups={hasSubgroups}
                 members={group.members}
                 viewerId={viewerId}
                 onClose={() => setSheet(null)}
@@ -356,6 +441,149 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   );
 }
 
+/** Every ancestor of a sub-group, root first, each one tappable. */
+function Breadcrumb({
+  ancestors,
+  onOpen,
+}: {
+  ancestors: readonly GroupAncestor[];
+  onOpen: (groupId: string) => void;
+}) {
+  return (
+    <ThemedView style={styles.breadcrumb}>
+      {ancestors.map((ancestor, index) => (
+        <ThemedView key={ancestor.id} style={styles.breadcrumbItem}>
+          {index > 0 ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {' › '}
+            </ThemedText>
+          ) : null}
+          <Pressable onPress={() => onOpen(ancestor.id)}>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {ancestor.name}
+            </ThemedText>
+          </Pressable>
+        </ThemedView>
+      ))}
+    </ThemedView>
+  );
+}
+
+/**
+ * A group's direct sub-groups, above the transaction list. Ones the viewer
+ * has already joined are always shown; ones they have not are hidden by
+ * default behind a toggle, mirroring the group list's archived-groups
+ * pattern (`docs/specs/groups.md`).
+ */
+function SubgroupsSection({
+  subgroups,
+  readOnly,
+  busy,
+  onOpen,
+  onJoin,
+  onCreate,
+}: {
+  subgroups: readonly SubgroupSummary[];
+  readOnly: boolean;
+  busy: boolean;
+  onOpen: (groupId: string) => void;
+  onJoin: (subgroup: SubgroupSummary) => void;
+  onCreate: () => void;
+}) {
+  const [showUnjoined, setShowUnjoined] = useState(false);
+  const joined = subgroups.filter((subgroup) => subgroup.viewerIsMember);
+  const unjoined = subgroups.filter((subgroup) => !subgroup.viewerIsMember);
+
+  if (subgroups.length === 0 && readOnly) {
+    return null;
+  }
+
+  return (
+    <ThemedView style={styles.subgroups}>
+      <ThemedView style={styles.subgroupsHeader}>
+        <ThemedText type="smallBold">Sub-groups</ThemedText>
+        {readOnly ? null : (
+          <Pressable accessibilityRole="button" onPress={onCreate} disabled={busy}>
+            <ThemedText type="small" themeColor="textSecondary">
+              + Create
+            </ThemedText>
+          </Pressable>
+        )}
+      </ThemedView>
+
+      {joined.map((subgroup) => (
+        <SubgroupRow key={subgroup.id} subgroup={subgroup} onPress={() => onOpen(subgroup.id)} />
+      ))}
+
+      {unjoined.length > 0 ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowUnjoined((shown) => !shown)}
+            style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {showUnjoined
+                ? 'Hide sub-groups I’m not in'
+                : `Show sub-groups I’m not in (${unjoined.length})`}
+            </ThemedText>
+          </Pressable>
+          {showUnjoined
+            ? unjoined.map((subgroup) => (
+                <SubgroupRow
+                  key={subgroup.id}
+                  subgroup={subgroup}
+                  muted
+                  onPress={() => onJoin(subgroup)}
+                />
+              ))
+            : null}
+        </>
+      ) : null}
+
+      {joined.length === 0 && unjoined.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          No sub-groups yet.
+        </ThemedText>
+      ) : null}
+    </ThemedView>
+  );
+}
+
+function SubgroupRow({
+  subgroup,
+  muted = false,
+  onPress,
+}: {
+  subgroup: SubgroupSummary;
+  muted?: boolean;
+  onPress: () => void;
+}) {
+  const members =
+    subgroup.memberCount === 1 ? '1 member' : `${subgroup.memberCount} members`;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={subgroup.name}
+      onPress={onPress}
+      style={({ pressed }) => [styles.subgroupRow, pressed && styles.pressed]}>
+      <ThemedView style={muted ? styles.muted : undefined}>
+        <ThemedText numberOfLines={1}>{subgroup.name}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {muted ? `${members} · not joined` : members}
+        </ThemedText>
+        {/* Not joined means none of the viewer's transactions can be in this
+            sub-tree, so the balance is always exactly 0 — not worth a line. */}
+        {muted ? null : (
+          <ThemedText type="small" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
+            {groupBalanceLabel(subgroup.viewerBalanceCents)}
+          </ThemedText>
+        )}
+      </ThemedView>
+    </Pressable>
+  );
+}
+
 function TransactionList({
   result,
   viewerId,
@@ -425,7 +653,9 @@ function DetailsSheet({
   group,
   balances,
   managed,
-  archived,
+  readOnly,
+  pairRooted,
+  ownArchived,
   isOwner,
   alone,
   busy,
@@ -440,7 +670,12 @@ function DetailsSheet({
   group: GroupDetail;
   balances: UseBalancesResult;
   managed: boolean;
-  archived: boolean;
+  /** Itself or an ancestor archived — gates what the server actually blocks. */
+  readOnly: boolean;
+  /** This group's whole tree is capped at a friendship's two people — hides "Add friends"/"Invite". */
+  pairRooted: boolean;
+  /** The group's own flag — drives the archive toggle's own label and action. */
+  ownArchived: boolean;
   isOwner: boolean;
   alone: boolean;
   busy: boolean;
@@ -470,7 +705,13 @@ function DetailsSheet({
 
       {managed ? (
         <ThemedView style={styles.actions}>
-          {archived ? null : (
+          {pairRooted ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Just the two of you here too — no one else can be added.
+            </ThemedText>
+          ) : null}
+
+          {readOnly || pairRooted ? null : (
             <>
               <Button label="Add friends" variant="secondary" disabled={busy} onPress={onAddFriends} />
               <Button
@@ -479,12 +720,14 @@ function DetailsSheet({
                 disabled={busy}
                 onPress={onInvite}
               />
-              <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
             </>
+          )}
+          {readOnly ? null : (
+            <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
           )}
 
           <Button
-            label={archived ? 'Reopen group' : 'Archive group'}
+            label={ownArchived ? 'Reopen group' : 'Archive group'}
             variant="secondary"
             busy={busy}
             onPress={onArchiveToggle}
@@ -662,6 +905,25 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.two,
   },
+  breadcrumb: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  breadcrumbItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subgroups: {
+    gap: Spacing.one,
+  },
+  subgroupsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  subgroupRow: {
+    paddingVertical: Spacing.two,
+  },
   list: {
     paddingVertical: Spacing.two,
   },
@@ -710,6 +972,12 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
+  },
+  toggle: {
+    paddingVertical: Spacing.one,
+  },
+  muted: {
+    opacity: 0.55,
   },
   sheet: {
     flex: 1,

@@ -8,7 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { centsToText } from './amount-input';
-import { balanceTone } from './balance-display';
+import { balanceTone, groupBalanceLabel } from './balance-display';
 import type { UseBalancesResult } from './use-balances';
 
 export interface GroupBalancesProps {
@@ -20,30 +20,17 @@ export interface GroupBalancesProps {
 
 /**
  * Where the viewer stands against the group, in one line — the answer to
- * "what do I owe here" without opening the details sheet. Renders nothing
- * until the balances have loaded once, and keeps showing the last known
- * figure while a reload is in flight rather than blinking after every saved
- * transaction.
+ * "what do I owe here" without opening the details sheet. `amountCents` is
+ * the group's `viewerBalanceCents`: for a group with sub-groups this is
+ * already rolled up over the whole sub-tree (`docs/specs/balances.md`), and
+ * it travels with the group itself, so there is no separate loading state to
+ * wait on here — unlike the per-member list below, which stays scoped to
+ * this one group and has its own.
  */
-export function ViewerBalance({
-  result,
-  viewerId,
-}: {
-  result: UseBalancesResult;
-  viewerId: string;
-}) {
-  const mine = result.balances.find((balance) => balance.userId === viewerId);
-  if (!mine) {
-    return null;
-  }
-
+export function ViewerBalance({ amountCents }: { amountCents: number }) {
   return (
-    <ThemedText type="smallBold" themeColor={balanceTone(mine.amountCents)}>
-      {mine.amountCents === 0
-        ? 'You’re all settled up'
-        : mine.amountCents > 0
-          ? `You are owed ${centsToText(mine.amountCents)}`
-          : `You owe ${centsToText(-mine.amountCents)}`}
+    <ThemedText type="smallBold" themeColor={balanceTone(amountCents)}>
+      {groupBalanceLabel(amountCents)}
     </ThemedText>
   );
 }

@@ -5,6 +5,8 @@ import {
   type Balance,
   type CreateTransactionRequest,
   type Transaction,
+  type TransactionsListResponse,
+  type TransactionsListScope,
   type UpdateTransactionRequest,
 } from '@splitcount/shared';
 
@@ -14,13 +16,21 @@ const transactionsPath = (groupId: string) => `/groups/${encodeURIComponent(grou
 const transactionPath = (groupId: string, transactionId: string) =>
   `${transactionsPath(groupId)}/${encodeURIComponent(transactionId)}`;
 
-/** A group's transactions, most recent first — the server does the ordering. */
+/**
+ * A group's transactions, most recent first — the server does the ordering.
+ * `scope: 'subtree'` adds those of every sub-group the caller belongs to
+ * (`docs/specs/group-statistics.md`); the default, `'group'`, is what the
+ * plain transaction list always uses.
+ */
 export async function fetchTransactions(
   fetcher: AuthorizedFetch,
   groupId: string,
-): Promise<Transaction[]> {
-  const response = await fetcher(transactionsPath(groupId));
-  return (await parsedJson(response, transactionsListResponseSchema)).transactions;
+  scope: TransactionsListScope = 'group',
+): Promise<TransactionsListResponse> {
+  const response = await fetcher(
+    scope === 'subtree' ? `${transactionsPath(groupId)}?scope=subtree` : transactionsPath(groupId),
+  );
+  return parsedJson(response, transactionsListResponseSchema);
 }
 
 export async function fetchTransaction(

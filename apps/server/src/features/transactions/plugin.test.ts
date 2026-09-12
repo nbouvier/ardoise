@@ -69,6 +69,22 @@ describe('transactions routes', () => {
     return response.json().group as { id: string };
   }
 
+  async function createdSubgroup(
+    user: TestUser,
+    parentId: string,
+    name: string,
+    memberIds: string[] = [],
+  ) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/groups',
+      headers: user.headers,
+      payload: { name, memberIds, parentId },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json().group as { id: string };
+  }
+
   const archiveGroup = (user: TestUser, groupId: string, archived: boolean) =>
     app.inject({
       method: 'PATCH',
@@ -91,8 +107,12 @@ describe('transactions routes', () => {
     return response.json().transaction;
   }
 
-  const listTx = (user: TestUser, groupId: string) =>
-    app.inject({ method: 'GET', url: `/groups/${groupId}/transactions`, headers: user.headers });
+  const listTx = (user: TestUser, groupId: string, scope?: string) =>
+    app.inject({
+      method: 'GET',
+      url: `/groups/${groupId}/transactions${scope ? `?scope=${scope}` : ''}`,
+      headers: user.headers,
+    });
 
   const getTx = (user: TestUser, groupId: string, txId: string) =>
     app.inject({
@@ -335,6 +355,23 @@ describe('transactions routes', () => {
       expect(response.json()).toEqual({ error: 'group_archived' });
     });
 
+    it('refuses recording on a sub-group whose ancestor is archived', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await app.inject({
+        method: 'POST',
+        url: '/groups',
+        headers: ada.headers,
+        payload: { name: 'Ajaccio weekend', parentId: root.id },
+      });
+      await archiveGroup(ada, root.id, true);
+
+      const response = await createTx(ada, sub.json().group.id, expense(ada.userId, [ada.userId]));
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
     it('answers a non-member with not found, never a hint the group exists', async () => {
       const ada = await signIn('ada');
       const alan = await signIn('alan');
@@ -390,6 +427,65 @@ describe('transactions routes', () => {
       const group = await createdGroup(ada, 'Trip');
 
       expect((await listTx(alan, group.id)).statusCode).toBe(404);
+    });
+
+    describe('scope=subtree', () => {
+      it("adds a sub-group's transactions, with no excluded count", async () => {
+        const ada = await signIn('ada');
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+        const inSub = await createdTx(ada, sub.id, expense(ada.userId, [ada.userId]));
+
+        const plain = await listTx(ada, root.id);
+        const subtree = await listTx(ada, root.id, 'subtree');
+
+        expect(plain.json().transactions.map((t: { id: string }) => t.id)).toEqual([
+          inRoot.id,
+        ]);
+        expect(plain.json().excludedSubgroupCount).toBe(0);
+
+        const subtreeIds = subtree.json().transactions.map((t: { id: string }) => t.id);
+        expect(subtreeIds.sort()).toEqual([inRoot.id, inSub.id].sort());
+        expect(subtree.json().excludedSubgroupCount).toBe(0);
+      });
+
+      it('excludes a sub-group the caller has not joined, and reports it', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+        // Ada never joins the sub-group grace creates under the same root.
+        const sub = await createdSubgroup(grace, root.id, 'Just grace');
+        await createdTx(grace, sub.id, expense(grace.userId, [grace.userId]));
+        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+
+        const response = await listTx(ada, root.id, 'subtree');
+
+        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
+          inRoot.id,
+        ]);
+        expect(response.json().excludedSubgroupCount).toBe(1);
+      });
+
+      it('rolls up several levels of nesting', async () => {
+        const ada = await signIn('ada');
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+        const grandchild = await createdSubgroup(ada, child.id, 'Beach day');
+        const rootTx = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+        const childTx = await createdTx(ada, child.id, expense(ada.userId, [ada.userId]));
+        const grandchildTx = await createdTx(
+          ada,
+          grandchild.id,
+          expense(ada.userId, [ada.userId]),
+        );
+
+        const response = await listTx(ada, root.id, 'subtree');
+
+        const ids = response.json().transactions.map((t: { id: string }) => t.id);
+        expect(ids.sort()).toEqual([rootTx.id, childTx.id, grandchildTx.id].sort());
+      });
     });
   });
 

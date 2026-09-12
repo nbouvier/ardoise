@@ -1,5 +1,10 @@
-import type { Transaction, TransactionCategory, TransactionKind } from '@splitcount/shared';
-import { describe, expect, it, jest } from '@jest/globals';
+import type {
+  Transaction,
+  TransactionCategory,
+  TransactionKind,
+  TransactionsListResponse,
+} from '@splitcount/shared';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { StatisticsScreen } from './statistics-screen';
@@ -50,15 +55,33 @@ function transaction({
   };
 }
 
-function renderScreen(
+const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
+// Stable across renders, like the real memoised auth context — a fresh object
+// per call would make authorizedFetch a new reference every render, which
+// use-transactions.ts's effect depends on, looping forever.
+const mockAuthContext = { authorizedFetch: jest.fn() };
+
+jest.mock('@/features/auth/use-auth', () => ({
+  useAuth: () => mockAuthContext,
+}));
+
+jest.mock('@/lib/api/transactions', () => ({
+  fetchTransactions: () => mockFetchTransactions(),
+}));
+
+beforeEach(() => {
+  mockFetchTransactions.mockReset();
+});
+
+async function renderScreen(
   transactions: Transaction[],
   overrides: Partial<Parameters<typeof StatisticsScreen>[0]> = {},
 ) {
+  mockFetchTransactions.mockResolvedValue({ transactions, excludedSubgroupCount: 0 });
   return render(
     <StatisticsScreen
-      transactions={transactions}
-      status="ready"
-      onRetry={jest.fn()}
+      groupId="group-1"
+      hasSubgroups={false}
       members={members}
       viewerId={ada.id}
       onClose={jest.fn()}
@@ -74,8 +97,8 @@ describe('StatisticsScreen', () => {
       transaction({ category: 'travel', amountCents: 1000 }),
     ]);
 
+    expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('40.00');
     expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('40.00');
     expect(screen.getByRole('button', { name: 'Groceries, 30.00, 75%' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Travel, 10.00, 25%' })).toBeTruthy();
   });
@@ -86,7 +109,7 @@ describe('StatisticsScreen', () => {
       transaction({ category: 'travel', amountCents: 1000 }),
     ]);
 
-    expect(screen.getByTestId('donut-slice-groceries')).toBeTruthy();
+    expect(await screen.findByTestId('donut-slice-groceries')).toBeTruthy();
     expect(screen.getByTestId('donut-slice-travel')).toBeTruthy();
     expect(screen.queryByTestId('donut-slice-housing')).toBeNull();
   });
@@ -97,7 +120,7 @@ describe('StatisticsScreen', () => {
       transaction({ kind: 'transfer', category: 'groceries', amountCents: 5000 }),
     ]);
 
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+    expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
   });
 
   it('switches to the group’s income', async () => {
@@ -105,6 +128,7 @@ describe('StatisticsScreen', () => {
       transaction({ category: 'groceries', amountCents: 3000 }),
       transaction({ kind: 'income', category: 'gifts', amountCents: 800 }),
     ]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Income' }));
 
@@ -122,7 +146,7 @@ describe('StatisticsScreen', () => {
       }),
     ]);
 
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+    expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
 
@@ -137,6 +161,7 @@ describe('StatisticsScreen', () => {
         shares: { ada: 1000, grace: 2000 },
       }),
     ]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
@@ -146,6 +171,7 @@ describe('StatisticsScreen', () => {
 
   it('explains that no participant is selected rather than drawing an empty ring', async () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'You' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
@@ -158,6 +184,7 @@ describe('StatisticsScreen', () => {
       transaction({ category: 'groceries', amountCents: 3000 }),
       transaction({ category: 'travel', amountCents: 1000 }),
     ]);
+    await screen.findByTestId('statistics-centre-amount');
 
     const row = screen.getByRole('button', { name: 'Travel, 10.00, 25%' });
     await fireEvent.press(row);
@@ -177,6 +204,7 @@ describe('StatisticsScreen', () => {
       transaction({ category: 'groceries', amountCents: 3000 }),
       transaction({ kind: 'income', category: 'gifts', amountCents: 800 }),
     ]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Groceries, 30.00, 100%' }));
     expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent(/Groceries/);
@@ -189,12 +217,13 @@ describe('StatisticsScreen', () => {
   it('explains an empty group rather than drawing an empty ring', async () => {
     await renderScreen([]);
 
-    expect(screen.getByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
     expect(screen.queryByTestId('donut-chart')).toBeNull();
   });
 
   it('says that no income was recorded, not that there is nothing at all', async () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Income' }));
 
@@ -205,6 +234,7 @@ describe('StatisticsScreen', () => {
     await renderScreen([
       transaction({ category: 'gifts', amountCents: 2500, shares: { grace: 2500 } }),
     ]);
+    await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Grace Hopper' }));
 
@@ -214,18 +244,98 @@ describe('StatisticsScreen', () => {
   });
 
   it('offers a retry when the transactions could not be loaded', async () => {
-    const onRetry = jest.fn();
-    await renderScreen([], { status: 'error', onRetry });
+    mockFetchTransactions.mockRejectedValue(new Error('offline'));
+    await render(
+      <StatisticsScreen
+        groupId="group-1"
+        hasSubgroups={false}
+        members={members}
+        viewerId={ada.id}
+        onClose={jest.fn()}
+      />,
+    );
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    mockFetchTransactions.mockResolvedValue({ transactions: [], excludedSubgroupCount: 0 });
+    await fireEvent.press(retry);
 
-    expect(onRetry).toHaveBeenCalled();
+    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
   });
 
   it('waits on the transactions rather than showing an empty chart', async () => {
-    await renderScreen([], { status: 'loading' });
+    mockFetchTransactions.mockReturnValue(new Promise(() => undefined));
+    await render(
+      <StatisticsScreen
+        groupId="group-1"
+        hasSubgroups={false}
+        members={members}
+        viewerId={ada.id}
+        onClose={jest.fn()}
+      />,
+    );
 
     expect(screen.getByTestId('statistics-loading')).toBeTruthy();
     expect(screen.queryByText(/Nothing spent yet/)).toBeNull();
+  });
+
+  describe('sub-groups', () => {
+    it('includes sub-groups by default and offers to exclude them', async () => {
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
+        excludedSubgroupCount: 2,
+      });
+
+      await render(
+        <StatisticsScreen
+          groupId="group-1"
+          hasSubgroups
+          members={members}
+          viewerId={ada.id}
+          onClose={jest.fn()}
+        />,
+      );
+
+      await screen.findByTestId('statistics-centre-amount');
+      expect(
+        screen.getByRole('button', { name: 'Include sub-groups' }).props.accessibilityState
+          .selected,
+      ).toBe(true);
+      expect(screen.getByText('2 sub-groups you’re not in aren’t included.')).toBeTruthy();
+    });
+
+    it('shows no toggle for a group with no sub-groups', async () => {
+      await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      expect(screen.queryByRole('button', { name: 'Include sub-groups' })).toBeNull();
+    });
+
+    it('excludes sub-groups when toggled off, and clears any selection', async () => {
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
+        excludedSubgroupCount: 0,
+      });
+
+      await render(
+        <StatisticsScreen
+          groupId="group-1"
+          hasSubgroups
+          members={members}
+          viewerId={ada.id}
+          onClose={jest.fn()}
+        />,
+      );
+      await screen.findByTestId('statistics-centre-amount');
+      await fireEvent.press(screen.getByRole('button', { name: 'Groceries, 30.00, 100%' }));
+
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [transaction({ category: 'travel', amountCents: 500 })],
+        excludedSubgroupCount: 0,
+      });
+      await fireEvent.press(screen.getByRole('button', { name: 'Include sub-groups' }));
+
+      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('5.00');
+      expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');
+    });
   });
 });

@@ -12,6 +12,10 @@ personally.
 It is the "better expense tracking" half of the product promise — the part Tricount does
 not do well.
 
+Since groups can nest (`docs/specs/groups.md`), the same question comes up one level
+higher: did *the trip as a whole* go on food or on hotels, once its sub-groups are counted
+too? The breakdown answers this with a third toggle, alongside type and participants.
+
 ## User story
 
 As a **member of a group**, I want to **see how the group's money is split across
@@ -36,13 +40,25 @@ viewer switches between:
   the sum of only the selected members' own shares of each transaction; selecting the
   viewer alone reproduces what used to be called the "Me" scope. At least one member must
   stay selected for the chart to mean anything.
+- **Scope** — for a group with sub-groups, whether the breakdown covers **this group
+  alone** or **this group and every sub-group nested inside it**, at any depth. Including
+  sub-groups is the default: the natural reading of "this trip's spending" is the whole
+  trip, not just the top-level bucket, and it matches the rolled-up balance the group
+  screen already shows (`docs/specs/balances.md`). A group with no sub-groups has nothing
+  for this toggle to change, and it is not shown.
+
+The **participant chips never change** based on scope: every member of a sub-group is
+necessarily already a member of the group itself (`docs/specs/groups.md`), so the group's
+own member list is always the complete set of people who could appear on any transaction
+in scope, whether or not sub-groups are included.
 
 **Transfers are never counted**, in any combination. A transfer is one member reimbursing
-another: money moving inside the group, not money the group spent or received. Excluding
-them is what keeps the totals honest.
+another: money moving inside a group, not money the group (or its sub-groups) spent or
+received. Excluding them is what keeps the totals honest.
 
-For each type and each participant selection, every matching transaction contributes its
-amount (or the sum of the selected members' shares of it) to its category. The result is:
+For each type, participant selection and scope, every matching transaction — the group's
+own, plus those of its sub-groups when scope includes them — contributes its amount (or
+the sum of the selected members' shares of it) to its category. The result is:
 
 - a **total** — the sum over every category;
 - per category with a non-zero amount: its **amount** and its **percentage of the
@@ -59,8 +75,8 @@ has one (`Other` by default), so nothing falls outside the breakdown.
   scope.
 - **Selecting a category** — by tapping its arc or its legend row — shows that category's
   emoji, label, amount and percentage in the centre instead of the total, and highlights
-  the arc. Selecting it again, or switching the type or the participant selection, returns
-  to the total.
+  the arc. Selecting it again, or switching the type, the participant selection, or the
+  sub-groups scope, returns to the total.
 - A **legend** under the chart: one row per category, **largest first**, with the
   category's colour, emoji, label, amount and percentage.
 - The breakdown is **reachable from the group screen** and does not displace the
@@ -69,17 +85,26 @@ has one (`Other` by default), so nothing falls outside the breakdown.
 ### Where it applies
 
 - Available on every group the viewer belongs to, **including the implicit pair group**
-  and **including an archived group** — it is a read-only view of transactions that
-  remain visible either way.
+  (which can neither have sub-groups nor show the scope toggle) and **including an
+  archived group** — it is a read-only view of transactions that remain visible either
+  way.
 - Non-members see nothing, exactly as for every other group route: the group itself is
   "not found" to them.
+- **A sub-group the viewer has not joined is excluded from the "including sub-groups"
+  scope**, for the same reason it contributes nothing to the rolled-up balance
+  (`docs/specs/balances.md`): the viewer is on none of its transactions, so there is
+  nothing of theirs to count, whether or not that sub-group is currently visible to them
+  in the group's sub-group list. When this leaves out at least one sub-group, the view
+  says so in one line ("n sub-groups you're not in aren't included") rather than silently
+  presenting a partial sum as if it were the whole trip.
 
 ### Freshness
 
-The breakdown describes exactly the transactions the group is currently showing — it is
-the same list, read again, not a separate figure that could disagree with it. Recording,
-editing or deleting a transaction is therefore reflected the next time the breakdown is
-looked at, with no refresh of its own.
+The breakdown describes exactly the transactions the group (and, in scope, its
+sub-groups) is currently showing — it is the same lists, read again, not a separate figure
+that could disagree with them. Recording, editing or deleting a transaction anywhere in
+scope is therefore reflected the next time the breakdown is looked at, with no refresh of
+its own.
 
 ## Out of scope
 
@@ -125,6 +150,19 @@ looked at, with no refresh of its own.
   breakdown, consistently with balances, which also keep them.
 - **Failing to load the transactions**: the breakdown shows the same retryable error as
   the transaction list, never an empty chart that would read as "nothing spent".
+- **A group with no sub-groups**: no scope toggle is shown at all — there is nothing for
+  it to change, and showing a toggle that does nothing would be confusing rather than
+  neutral.
+- **Every sub-group in scope excluded because the viewer is in none of them**: scope
+  "including sub-groups" then behaves exactly like "this group alone", with the "n
+  sub-groups not included" note still shown so the totals are not mistaken for the whole
+  trip.
+- **Switching scope while a category is selected**: the same rule as switching type or
+  participants — the selection clears, since the amounts it referred to may no longer
+  mean the same thing.
+- **A sub-group deleted, archived, or left between the group screen loading and the
+  breakdown being opened**: reflected the next time the breakdown reads its data, same as
+  any other transaction-affecting change — no separate staleness rule for sub-groups.
 
 ## Acceptance criteria
 
@@ -150,6 +188,14 @@ looked at, with no refresh of its own.
       view, and the viewer can switch back.
 - [ ] The statistics view is available on a pair group and on an archived group.
 - [ ] A failure to load the group's transactions is reported with a way to retry.
+- [ ] For a group with sub-groups, a scope toggle defaults to including every sub-group's
+      transactions, at any depth, in the breakdown; switching it to "this group alone"
+      recomputes over only the group's own transactions.
+- [ ] A group with no sub-groups shows no scope toggle.
+- [ ] A sub-group the viewer has not joined never contributes to the "including
+      sub-groups" scope, and its exclusion is stated when it affects the total.
+- [ ] The participant chips are always the group's own member list, unaffected by the
+      scope toggle.
 
 ## Testing considerations
 
@@ -166,24 +212,34 @@ looked at, with no refresh of its own.
   more than one member must sum their shares, not the transaction's full amount.
 - Ordering (largest first) and the exclusion of zero categories are cheap to assert and
   easy to regress.
+- **Scope must never leak an unjoined sub-group's amounts.** A test generating a tree
+  where the viewer belongs to some sub-groups and not others must show the "including
+  sub-groups" breakdown identical to one computed only from the joined ones.
 
 ## Data / API considerations
 
-- **No new persisted data and no new endpoint.** The breakdown is derived on the fly from
-  the transactions the client already loads for the group, the way balances are derived
-  rather than stored (`docs/ARCHITECTURE.md`).
-- **The aggregation lives in `@splitcount/shared`** as a pure function, so the rule for
-  what counts — and the percentage rounding — has one definition, and so a server-side
-  endpoint can reuse it unchanged if one becomes necessary.
+- **No new persisted data.** The breakdown itself is still derived on the fly, the way
+  balances are (`docs/ARCHITECTURE.md`); nesting adds a data-fetching question, not a
+  storage one.
+- **The aggregation lives in `@splitcount/shared`** as a pure function operating on a flat
+  list of transactions, unchanged by sub-groups: scope is resolved into *which*
+  transactions are handed to it, not into new logic inside it. The rule for what counts —
+  and the percentage rounding — keeps its one definition.
 - **Each category gains a fixed colour**, alongside its emoji and label, in the same
   shared preset list. A category's colour is part of its identity, used by the chart and
   its legend together; it is not chosen per screen.
-- **This is only viable while the client holds every transaction of a group.** The
+- **A group's transaction list gains a `scope` query parameter** (`group`, the default, or
+  `subtree`) so the client can ask for the group's own transactions or for the group's
+  together with every sub-group's the caller is a member of, in one call — see
+  `docs/API.md`. This is what "including sub-groups" is built from; the plain
+  `GET /groups/:groupId/transactions` used by the transaction list itself is unaffected
+  and keeps returning only that group's own transactions.
+- **This is only viable while the client holds every transaction in scope.** The
   transaction list is unpaginated today (an open question in
   `docs/specs/transactions.md`); the moment it is paginated, a client-side breakdown would
   silently describe only the loaded page, and the aggregation must move behind a
-  `GET /groups/:groupId/transactions/statistics` route. Recorded as an open question
-  below and in `docs/ARCHITECTURE.md`.
+  `GET /groups/:groupId/transactions/statistics` route that accepts the same `scope`.
+  Recorded as an open question below and in `docs/ARCHITECTURE.md`.
 
 ## UX / UI considerations
 
@@ -206,6 +262,10 @@ looked at, with no refresh of its own.
   read as "no transactions".
 - Amounts follow the formatting already used by the transaction list and balances; no new
   money formatting.
+- The **scope toggle** sits alongside the type toggle, same pill styling, and is present
+  only for a group that has sub-groups. When it excludes at least one unjoined sub-group,
+  a single small line under the toggles states how many — worded plainly ("n sub-groups
+  you're not in aren't included"), not as a warning.
 
 ## Observability
 
@@ -222,6 +282,10 @@ amounts are financial data and must not be logged
   read.
 - The breakdown must never be derived from anything other than the group in view — a
   statistic is not a way to learn about a group the viewer does not belong to.
+- **Including sub-groups never widens what the viewer can see.** The `subtree` scope is
+  resolved server-side to the group plus only the descendants the caller is currently a
+  member of; a sub-group they cannot read contributes nothing and is never named, exactly
+  as it contributes nothing to the rolled-up balance (`docs/specs/balances.md`).
 
 ## Open questions
 
@@ -238,3 +302,6 @@ amounts are financial data and must not be logged
 - Should a category's **colour** ever be configurable, or tied to a theme? It is fixed in
   code today, chosen to read on both themes; custom categories (see
   `docs/specs/transactions.md`) would force the question.
+- **Should the scope toggle's choice be remembered** per group, so a member who always
+  wants the whole trip does not re-select it every time they open the sheet? Deliberately
+  simple (always defaults to including sub-groups) for this pass.

@@ -11,6 +11,10 @@ const trip: GroupSummary = {
   kind: 'standard',
   name: 'Corsica 2026',
   memberCount: 3,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
+  viewerBalanceCents: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };
@@ -65,6 +69,14 @@ describe('GroupsScreen', () => {
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
     expect(screen.getByText('3 members')).toBeTruthy();
+  });
+
+  it("shows the viewer's balance rolled up over the group and its sub-groups", async () => {
+    mockFetchGroups.mockResolvedValue([{ ...trip, viewerBalanceCents: 2500 }]);
+
+    await render(<GroupsScreen />);
+
+    expect(await screen.findByText('You are owed 25.00')).toBeTruthy();
   });
 
   it('hides archived groups behind a toggle that counts them', async () => {

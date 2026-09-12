@@ -49,8 +49,8 @@ beforeEach(() => {
   onCancel.mockReset();
 });
 
-const renderScreen = () =>
-  render(<CreateGroupScreen onCreated={onCreated} onCancel={onCancel} />);
+const renderScreen = (parentId?: string) =>
+  render(<CreateGroupScreen onCreated={onCreated} onCancel={onCancel} parentId={parentId} />);
 
 describe('CreateGroupScreen', () => {
   it('will not create a group without a name', async () => {
@@ -117,5 +117,36 @@ describe('CreateGroupScreen', () => {
     expect(await screen.findByText(/couldn’t create the group/)).toBeTruthy();
     expect(screen.getByLabelText('Group name').props.value).toBe('Corsica 2026');
     expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  describe('as a sub-group', () => {
+    const parentId = '99999999-9999-4999-8999-999999999999';
+
+    it('titles itself and sends the parent along', async () => {
+      await renderScreen(parentId);
+      await screen.findByText('Grace Hopper');
+
+      expect(screen.getByText('New sub-group')).toBeTruthy();
+
+      await fireEvent.changeText(screen.getByLabelText('Group name'), 'Ajaccio weekend');
+      await fireEvent.press(screen.getByRole('button', { name: /create sub-group/i }));
+
+      expect(mockCreateGroup).toHaveBeenCalledWith({
+        name: 'Ajaccio weekend',
+        memberIds: [],
+        parentId,
+      });
+    });
+
+    it('says so when creation fails', async () => {
+      mockCreateGroup.mockRejectedValue(new Error('offline'));
+      await renderScreen(parentId);
+      await screen.findByText('Grace Hopper');
+
+      await fireEvent.changeText(screen.getByLabelText('Group name'), 'Ajaccio weekend');
+      await fireEvent.press(screen.getByRole('button', { name: /create sub-group/i }));
+
+      expect(await screen.findByText(/couldn’t create the sub-group/)).toBeTruthy();
+    });
   });
 });

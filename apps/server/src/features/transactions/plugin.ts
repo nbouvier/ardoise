@@ -1,4 +1,8 @@
-import { createTransactionRequestSchema, updateTransactionRequestSchema } from '@splitcount/shared';
+import {
+  createTransactionRequestSchema,
+  transactionsListScopeSchema,
+  updateTransactionRequestSchema,
+} from '@splitcount/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
@@ -84,6 +88,7 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
         userId: string;
         reply: FastifyReply;
         body: unknown;
+        query: unknown;
       }) => Promise<unknown>,
     ) {
       return async (request: FastifyRequest, reply: FastifyReply) => {
@@ -97,6 +102,7 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
             userId: request.userId!,
             reply,
             body: request.body,
+            query: request.query,
           });
         } catch (error) {
           return replyRefused(reply, error, request.userId, params.data.groupId);
@@ -109,9 +115,17 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
     app.get(
       '/groups/:groupId/transactions',
       authenticated,
-      route(groupParamsSchema, async ({ params, userId, reply }) =>
-        reply.send({ transactions: await transactions.list(userId, params.groupId) }),
-      ),
+      route(groupParamsSchema, async ({ params, userId, reply, query }) => {
+        // An unrecognised scope falls back to the default rather than a 400
+        // — nothing about it changes the shape of the answer, only its
+        // completeness, so failing softly is kinder than failing loudly.
+        const scope = transactionsListScopeSchema.safeParse(
+          (query as Record<string, unknown> | undefined)?.scope,
+        );
+        return reply.send(
+          await transactions.list(userId, params.groupId, scope.success ? scope.data : undefined),
+        );
+      }),
     );
 
     app.get(

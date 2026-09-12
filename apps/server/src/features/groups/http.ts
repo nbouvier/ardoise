@@ -2,16 +2,21 @@ import { GroupAccessError, type GroupAccessReason } from './membership.js';
 
 /**
  * HTTP mapping of a refused group operation. `not_found` is deliberately what
- * a non-member gets: a `403` would confirm that the group exists.
+ * a non-member gets: a `403` would confirm that the group exists. The one
+ * exception is `join_required` — a member of a group's immediate parent who
+ * has not joined it already knows the group exists, since it is shown to
+ * them in the parent's own sub-group list (`docs/specs/groups.md`).
  */
 const groupAccessFailures: Record<GroupAccessReason, { status: number; error: string }> = {
   not_found: { status: 404, error: 'group_not_found' },
+  join_required: { status: 403, error: 'join_required' },
   not_owner: { status: 403, error: 'not_group_owner' },
   pair_immutable: { status: 409, error: 'pair_group_immutable' },
   archived: { status: 409, error: 'group_archived' },
   owner_cannot_leave: { status: 409, error: 'owner_cannot_leave' },
   cannot_remove_owner: { status: 409, error: 'cannot_remove_owner' },
   not_friends: { status: 400, error: 'not_friends' },
+  max_depth_reached: { status: 409, error: 'max_depth_reached' },
 };
 
 export interface GroupAccessFailure {

@@ -144,8 +144,25 @@ export const transactionSchema = z.object({
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
+/**
+ * `GET /groups/:groupId/transactions?scope=`. `group` (the default) is the
+ * group's own transactions only. `subtree` adds those of every descendant
+ * the caller belongs to, for the group-statistics "including sub-groups"
+ * view (`docs/specs/group-statistics.md`) — a sub-group the caller has not
+ * joined never contributes, whether or not it is visible to them.
+ */
+export const transactionsListScopeSchema = z.enum(['group', 'subtree']);
+export type TransactionsListScope = z.infer<typeof transactionsListScopeSchema>;
+
+/**
+ * `excludedSubgroupCount` is only ever non-zero for `scope=subtree`: how
+ * many of the group's descendants were left out because the caller does not
+ * belong to them, so the view can say so rather than presenting a partial
+ * sum as the whole tree's.
+ */
 export const transactionsListResponseSchema = z.object({
   transactions: z.array(transactionSchema),
+  excludedSubgroupCount: z.number().int().nonnegative(),
 });
 export type TransactionsListResponse = z.infer<typeof transactionsListResponseSchema>;
 

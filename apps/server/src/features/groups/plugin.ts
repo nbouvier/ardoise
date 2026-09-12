@@ -7,6 +7,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { createTransactionsRepository } from '../transactions/repository.js';
+
 import { translateGroupAccessError } from './http.js';
 import { createGroupsRepository } from './repository.js';
 import {
@@ -33,14 +35,21 @@ const friendParamsSchema = z.object({ friendId: z.uuid() });
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
     const repository = createGroupsRepository(app.db);
+    // A group's rolled-up balance is a client of the ledger `transactions`
+    // owns — the same way `friends` reads it for the per-friend total. A
+    // repository, not the transactions *service*: nothing here goes through
+    // a group's own membership checks, and `groups` must not depend on the
+    // `transactions` plugin, which itself depends on `groups`.
+    const ledger = createTransactionsRepository(app.db);
     const groups = createGroupsService({
       repository,
       invites: app.invites,
+      ledger,
       now: opts.now,
     });
 
     app.decorate('groups', groups);
-    app.invites.register('group', createGroupInviteHandler(repository));
+    app.invites.register('group', createGroupInviteHandler(repository, ledger));
 
     /**
      * Turn a refusal into its HTTP answer. Refusals are logged with their
@@ -105,7 +114,12 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       try {
         const group = await groups.create(request.userId!, parsed.data);
         app.log.info(
-          { userId: request.userId, groupId: group.id, memberCount: group.memberCount },
+          {
+            userId: request.userId,
+            groupId: group.id,
+            memberCount: group.memberCount,
+            parentId: group.parentId,
+          },
           'groups.created',
         );
         return reply.code(201).send({ group });
@@ -172,7 +186,7 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId/members/:userId',
       authenticated,
       route(memberParamsSchema, async ({ params, userId, reply }) => {
-        const { groupDeleted } = await groups.removeMember(
+        const { groupDeleted, removedFromDescendantCount } = await groups.removeMember(
           userId,
           params.groupId,
           params.userId,
@@ -183,10 +197,23 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
             groupId: params.groupId,
             left: params.userId === userId,
             groupDeleted,
+            removedFromDescendantCount,
           },
           'groups.members.removed',
         );
         return reply.code(204).send();
+      }),
+    );
+
+    // A sub-group visible in a group the caller already belongs to; lighter
+    // than an invitation link (no friendship check, docs/specs/groups.md).
+    app.post(
+      '/groups/:groupId/join',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply }) => {
+        const group = await groups.join(userId, params.groupId);
+        app.log.info({ userId, groupId: group.id }, 'groups.joined');
+        return reply.send({ group });
       }),
     );
 

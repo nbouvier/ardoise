@@ -215,29 +215,63 @@ caller's **membership** before anything else.
 
 A group the caller does not belong to is answered `404 { "error": "group_not_found" }`,
 never `403` — a non-member must not be able to tell a group they cannot see from one that
-does not exist.
+does not exist. **The one exception is `join_required`**: a member of a group's immediate
+parent who has not joined it already knows it exists — it is shown to them in the parent's
+own `subgroups` list — so every route that would otherwise answer `group_not_found`
+answers `403 { "error": "join_required" }` for exactly that case instead
+(`docs/specs/groups.md`). This never applies transitively to a sibling or grandchild.
 
 Shared error codes:
 
 | Status | Code                   | Meaning                                                    |
 | ------ | ---------------------- | ---------------------------------------------------------- |
 | `404`  | `group_not_found`      | No such group, or the caller is not a member                |
+| `403`  | `join_required`        | The caller belongs to the group's immediate parent but hasn't joined it |
 | `403`  | `not_group_owner`      | Deleting is owner-only                                      |
-| `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group     |
-| `409`  | `group_archived`       | An archived group takes no new members and issues no links  |
-| `409`  | `owner_cannot_leave`   | The owner cannot leave while other members remain           |
+| `409`  | `pair_group_immutable` | The operation can never apply to an implicit pair group, or would bring a third person into a sub-group nested under one |
+| `409`  | `group_archived`       | An archived group, or one whose ancestor is archived, takes no new members and issues no links |
+| `409`  | `owner_cannot_leave`   | The owner cannot leave — or be removed — while other members remain in the group or in a sub-group they solely own |
 | `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
+| `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, archivedAt, createdAt }`, with `kind`
-one of `standard` / `pair`. `GroupDetail` adds `members` (a `FriendSummary` plus `role`)
-and `viewerRole`. A **pair group stores no name**: the API fills it with the *other*
-member's name, so each side sees who they share with.
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is
+`null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
+is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
+position **rolled up over the group and every sub-group nested inside it** — positive means
+they are owed, negative means they owe (`docs/specs/balances.md`); for a group with no
+sub-groups this is simply its own balance, computed the same way as
+`GET /groups/:groupId/transactions/balances` but from the caller's own transactions across
+the whole sub-tree rather than the group's per-member list. `GroupDetail` adds `members` (a
+`FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
+below), `ancestors`
+(root-first, empty for a root group), `readOnly` — `true` when the group itself is
+archived *or any ancestor of it is*; for a root group this always equals
+`archivedAt !== null`, since it has no ancestors — and `pairRooted`. A **pair group stores
+no name**: the API fills it with the *other* member's name, so each side sees who they
+share with. A pair group's own parent is always `null`, and it can never be nested under
+something else — but it *can* be a parent: a friendship can have sub-groups, exactly like a
+standard group. `pairRooted` is `true` for the pair group itself and for every sub-group
+nested under it, at any depth: such a group can only ever contain that friendship's own two
+people, so `POST /groups` (as an initial member) and `POST /groups/:groupId/members` both
+refuse a third person there with `pair_group_immutable`, and
+`POST /groups/:groupId/invite` / `POST .../invite/rotate` refuse outright rather than issue
+a link with no one left to legitimately send it to. The other friend still reaches it
+through `POST /groups/:groupId/join` instead, same as any other unjoined sub-group.
+
+A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
+enough to decide whether to open it (already a member) or join it and show where the
+viewer stands, never a member list. `viewerBalanceCents` is rolled up over *that*
+sub-group's own sub-tree exactly like the top-level figure (see above), and is always `0`
+when `viewerIsMember` is `false`, since a non-member is on none of its transactions. An
+`ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own
+`subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when opened.
 
 ### `GET /groups`
 
-The caller's groups. **Pair groups are never listed** — they are reached from the friend
-list. Active groups first, then archived ones; alphabetical within each.
+The caller's **root** groups only — a group that is itself a sub-group is reached by
+opening its parent, never listed here. **Pair groups are never listed** — they are reached
+from the friend list. Active groups first, then archived ones; alphabetical within each.
 
 Response `200`: `{ "groups": [ "<GroupSummary>" ] }`
 
@@ -248,9 +282,22 @@ Create a group. `memberIds` is optional and must contain only friends of the cal
 Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"] }` → Response
 `201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
 
+`parentId` is optional and creates a **sub-group** under that group instead of a root
+group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must be
+effectively active and not already at the depth cap — either kind, standard or the
+implicit pair group. Every initial member (the creator included) is also added to every
+ancestor of the new group in the same request — membership always flows down the tree.
+When `parentId` is `pairRooted`, the friendship's other person is added automatically
+regardless of `memberIds` — there is no one else it could legitimately hold — and any id
+other than theirs is refused with `409 pair_group_immutable`.
+
+Request: `{ "name": "Ajaccio weekend", "parentId": "<uuid>" }` → Response
+`201 { "group": "<GroupDetail>" }`, with `parentId` and `depth` set accordingly.
+
 ### `GET /groups/:groupId`
 
-The group and its members. Response `200 { "group": "<GroupDetail>" }`.
+The group, its members, its direct sub-groups and, for a sub-group, its ancestors.
+Response `200 { "group": "<GroupDetail>" }`.
 
 ### `PATCH /groups/:groupId`
 
@@ -266,30 +313,55 @@ Delete the group and everything in it. **Owner only**, irreversible. Response `2
 
 ### `POST /groups/:groupId/members`
 
-Add friends of the caller. Already-members are ignored rather than rejected.
+Add friends of the caller. Already-members are ignored rather than rejected. Each added
+person is also added to every ancestor of `groupId` in the same request — membership
+always flows down the tree (`docs/specs/groups.md`); the response's `memberCount` and
+`subgroups` describe `groupId` itself only.
 
 Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetail>" }`.
 
 ### `DELETE /groups/:groupId/members/:userId`
 
 Remove a member, or leave when `userId` is the caller. Response `204`, and removing
-someone who already left is a no-op. When the last member leaves, the group is deleted
-with its contents.
+someone who already left is a no-op. This also removes that person from every one of
+`groupId`'s descendants, since nobody can remain in a sub-group of a group they are no
+longer part of (`docs/specs/groups.md`). When the last member of a group leaves, it is
+deleted with its contents; the same applies to any descendant left with nobody in it by
+this cascade.
 
 The **owner cannot be removed** by another member: that would leave a group nobody is
-allowed to delete. They leave on their own terms, or delete it.
+allowed to delete. They leave on their own terms, or delete it. The same refusal
+(`409 owner_cannot_leave`) now also covers cascading someone out of a sub-group they solely
+own while others remain in it — leaving or being removed from `groupId` would strand it.
+
+### `POST /groups/:groupId/join`
+
+Join a sub-group that is visible because the caller already belongs to its immediate
+parent — lighter than an invitation link: no friendship check, since membership in the
+parent is already a stronger signal of trust. Joins that sub-group only; the caller's
+membership in every one of its ancestors already holds (`docs/specs/groups.md`).
+Idempotent — calling it again when already a member returns the group unchanged, without
+altering an existing role (e.g. an owner stays the owner).
+
+Response `200 { "group": "<GroupDetail>" }`. `404 group_not_found` for a root group, or for
+a sub-group whose immediate parent the caller does not belong to. `409 group_archived` when
+the sub-group or an ancestor of it is archived.
 
 ### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
 
 The group's invitation link — **one per group**, not per member: any member sees, shares
-and can replace the same one. Same shapes as the `/friends/invite` trio. Accepting adds
-the person to the group; it does **not** create a friendship.
+and can replace the same one, and a sub-group's link is entirely its own, independent of
+its parent's. Same shapes as the `/friends/invite` trio. Accepting adds the person to the
+group, and to every one of its ancestors (`docs/specs/groups.md`); it does **not** create
+a friendship. The get-or-create and rotate routes refuse (`409 pair_group_immutable`) for
+a `pairRooted` group — there is no one an invitation to one could legitimately be for.
 
 ### `POST /groups/pair/:friendId`
 
 The group the caller shares with a friend, **created on first access**. Idempotent, and
 safe under concurrency: the unique constraint on the friendship guarantees one group per
-pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends.
+pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends. This
+group can be used as `parentId` on `POST /groups` — a friendship can have sub-groups.
 
 ## Transactions
 
@@ -298,8 +370,9 @@ the caller's group membership first, exactly like every other group route — a 
 gets `404 { "error": "group_not_found" }`. **Unlike every other group route, these work
 identically on the implicit pair group** — transactions are the point of it.
 
-An **archived group is fully read-only for transactions**: `POST`, `PATCH` and `DELETE`
-all refuse with `409 { "error": "group_archived" }`; `GET` still works.
+A group that is **archived — itself, or any ancestor of it — is fully read-only for
+transactions** (`readOnly` on `GroupDetail`, `docs/specs/groups.md`): `POST`, `PATCH` and
+`DELETE` all refuse with `409 { "error": "group_archived" }`; `GET` still works.
 
 Shared error codes, beyond the ones `groups` already defines:
 
@@ -351,7 +424,18 @@ categories dynamically; the emoji and label for each key are a client-side looku
 ### `GET /groups/:groupId/transactions`
 
 The group's transactions, most recent first (by date, then by recording order for
-same-day entries). Response `200 { "transactions": ["<Transaction>"] }`.
+same-day entries). Response
+`200 { "transactions": ["<Transaction>"], "excludedSubgroupCount": 0 }`.
+
+`?scope=` (`group`, the default, or `subtree`) controls whether sub-groups are included
+(`docs/specs/group-statistics.md`). With `scope=subtree`, the response also contains every
+transaction of the group's descendants **the caller currently belongs to**, at any depth —
+a sub-group the caller has not joined contributes nothing, whether or not it is visible to
+them. `excludedSubgroupCount` is then the number of descendants left out for that reason;
+it is always `0` for `scope=group` and for a group with no sub-groups. An unrecognised
+`scope` value falls back to `group` rather than `400` — the client just gets a smaller
+answer, not a broken one. The plain transaction list itself always uses the default
+`scope=group` and is unaffected by any of this.
 
 ### `POST /groups/:groupId/transactions`
 

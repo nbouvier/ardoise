@@ -1,11 +1,20 @@
-import type { Balance, FriendSummary, GroupDetail, Transaction } from '@splitcount/shared';
+import type {
+  Balance,
+  FriendSummary,
+  GroupDetail,
+  SubgroupSummary,
+  Transaction,
+  TransactionsListResponse,
+} from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
 
 import { GroupScreen } from './group-screen';
+import { groupsChanged } from './groups-changed';
 
 const ada: FriendSummary = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -24,6 +33,10 @@ const trip: GroupDetail = {
   kind: 'standard',
   name: 'Corsica 2026',
   memberCount: 2,
+  parentId: null,
+  depth: 0,
+  subgroupCount: 0,
+  viewerBalanceCents: 0,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
   members: [
@@ -31,6 +44,10 @@ const trip: GroupDetail = {
     { ...grace, role: 'member' },
   ],
   viewerRole: 'owner',
+  subgroups: [],
+  ancestors: [],
+  readOnly: false,
+  pairRooted: false,
 };
 
 /** The implicit group two friends share: named after the other person. */
@@ -44,6 +61,7 @@ const pair: GroupDetail = {
     { ...grace, role: 'member' },
   ],
   viewerRole: 'member',
+  pairRooted: true,
 };
 
 const groceries: Transaction = {
@@ -72,9 +90,12 @@ const balances: Balance[] = [
 ];
 
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
-const mockFetchTransactions = jest.fn<() => Promise<Transaction[]>>();
+const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<() => Promise<Transaction>>();
+const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
+const mockPush = jest.fn();
+const mockBack = jest.fn();
 
 const mockAuthContext = {
   authorizedFetch: jest.fn(),
@@ -87,10 +108,12 @@ jest.mock('@/features/auth/use-auth', () => ({
 
 jest.mock('@/lib/api/groups', () => ({
   fetchGroup: () => mockFetchGroup(),
+  createGroup: jest.fn(),
   updateGroup: jest.fn(),
   deleteGroup: jest.fn(),
   addGroupMembers: jest.fn(),
   removeGroupMember: jest.fn(),
+  joinGroup: () => mockJoinGroup(),
   fetchGroupInvite: jest.fn(),
   rotateGroupInvite: jest.fn(),
 }));
@@ -109,14 +132,20 @@ jest.mock('@/lib/api/friends', () => ({
 }));
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
 beforeEach(() => {
   mockFetchGroup.mockReset().mockResolvedValue(trip);
-  mockFetchTransactions.mockReset().mockResolvedValue([]);
+  mockFetchTransactions.mockReset().mockResolvedValue({
+    transactions: [],
+    excludedSubgroupCount: 0,
+  });
   mockFetchBalances.mockReset().mockResolvedValue([]);
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
+  mockJoinGroup.mockReset().mockResolvedValue(trip);
+  mockPush.mockReset();
+  mockBack.mockReset();
 });
 
 async function openDetails() {
@@ -125,7 +154,10 @@ async function openDetails() {
 
 describe('GroupScreen', () => {
   it('shows the group name and its transactions', async () => {
-    mockFetchTransactions.mockResolvedValue([groceries]);
+    mockFetchTransactions.mockResolvedValue({
+      transactions: [groceries],
+      excludedSubgroupCount: 0,
+    });
 
     await render(<GroupScreen groupId={trip.id} />);
 
@@ -151,8 +183,11 @@ describe('GroupScreen', () => {
     expect(await screen.findByLabelText('Title')).toBeTruthy();
   });
 
-  it('opens the statistics on the transactions it already loaded', async () => {
-    mockFetchTransactions.mockResolvedValue([groceries]);
+  it('opens the statistics, which fetch their own data', async () => {
+    mockFetchTransactions.mockResolvedValue({
+      transactions: [groceries],
+      excludedSubgroupCount: 0,
+    });
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -162,8 +197,10 @@ describe('GroupScreen', () => {
     expect(await screen.findByTestId('statistics-centre-label')).toHaveTextContent(
       'Total spending',
     );
-    // The list is read once by the screen: opening the sheet asks for nothing more.
-    expect(mockFetchTransactions).toHaveBeenCalledTimes(1);
+    // The statistics view defaults to including sub-groups — a scope the
+    // plain transaction list never requests — so it fetches on its own
+    // rather than reusing the list's call (docs/specs/group-statistics.md).
+    expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
   });
 
   it('tells the Friends tab to reload after a transaction is saved', async () => {
@@ -220,7 +257,11 @@ describe('GroupScreen', () => {
   });
 
   it('hides "Add a transaction" and drops the membership actions of an archived group', async () => {
-    mockFetchGroup.mockResolvedValue({ ...trip, archivedAt: '2026-09-12T12:00:00.000Z' });
+    mockFetchGroup.mockResolvedValue({
+      ...trip,
+      archivedAt: '2026-09-12T12:00:00.000Z',
+      readOnly: true,
+    });
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -246,17 +287,19 @@ describe('GroupScreen', () => {
   });
 
   it('answers "where do I stand" on the screen itself, without opening the details', async () => {
-    mockFetchGroup.mockResolvedValue(trip);
+    // Ada is owed 21.25 — said in words, not left to a leading "+". Sourced
+    // from the group's own viewerBalanceCents (already rolled up over any
+    // sub-groups), not the per-member balances list.
+    mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: 2125 });
     mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
 
-    // Ada is owed 21.25 — said in words, not left to a leading "+".
     expect(await screen.findByText('You are owed 21.25')).toBeTruthy();
   });
 
   it('states the viewer’s own side when they are the one owing', async () => {
-    mockFetchGroup.mockResolvedValue(trip);
+    mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: -800 });
     mockFetchBalances.mockResolvedValue([
       { userId: ada.id, amountCents: -800 },
       { userId: grace.id, amountCents: 800 },
@@ -308,5 +351,179 @@ describe('GroupScreen', () => {
 
     expect(await screen.findByText(/couldn’t load this group/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy();
+  });
+
+  describe('sub-groups', () => {
+    const joinedSub: SubgroupSummary = {
+      id: '77777777-7777-4777-8777-777777777777',
+      name: 'Ajaccio weekend',
+      memberCount: 2,
+      viewerIsMember: true,
+      viewerBalanceCents: -1250,
+    };
+
+    const unjoinedSub: SubgroupSummary = {
+      id: '88888888-8888-4888-8888-888888888888',
+      name: 'Bastia weekend',
+      memberCount: 1,
+      viewerIsMember: false,
+      viewerBalanceCents: 0,
+    };
+
+    it('shows a joined sub-group and opens it directly', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('Ajaccio weekend'));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/groups/[id]',
+        params: { id: joinedSub.id },
+      });
+      expect(mockJoinGroup).not.toHaveBeenCalled();
+    });
+
+    it('shows a joined sub-group’s own rolled-up balance', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+
+      expect(await screen.findByText('You owe 12.50')).toBeTruthy();
+    });
+
+    it('hides an unjoined sub-group behind a toggle', async () => {
+      mockFetchGroup.mockResolvedValue({
+        ...trip,
+        subgroups: [joinedSub, unjoinedSub],
+        subgroupCount: 2,
+      });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Ajaccio weekend');
+
+      expect(screen.queryByText('Bastia weekend')).toBeNull();
+      expect(screen.getByText('Show sub-groups I’m not in (1)')).toBeTruthy();
+
+      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+
+      expect(await screen.findByText('Bastia weekend')).toBeTruthy();
+      expect(screen.getByText(/not joined/)).toBeTruthy();
+    });
+
+    it('asks for confirmation before joining an unjoined sub-group', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(
+        screen.getByText('Show sub-groups I’m not in (1)'),
+      );
+      await fireEvent.press(await screen.findByText('Bastia weekend'));
+
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Join this group?',
+        expect.stringContaining('Bastia weekend'),
+        expect.anything(),
+      );
+      expect(mockJoinGroup).not.toHaveBeenCalled();
+
+      alertSpy.mockRestore();
+    });
+
+    it('joins and navigates once confirmed', async () => {
+      const alertSpy = jest
+        .spyOn(Alert, 'alert')
+        .mockImplementation((_title, _message, buttons) => {
+          const confirm = buttons?.find((button) => button.text === 'Join');
+          confirm?.onPress?.();
+        });
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+      await fireEvent.press(await screen.findByText('Bastia weekend'));
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith({
+          pathname: '/groups/[id]',
+          params: { id: unjoinedSub.id },
+        });
+      });
+      expect(mockJoinGroup).toHaveBeenCalled();
+
+      alertSpy.mockRestore();
+    });
+
+    it('offers sub-groups on a pair group too, just like a standard one', async () => {
+      mockFetchGroup.mockResolvedValue(pair);
+
+      await render(<GroupScreen groupId={pair.id} />);
+      await screen.findByText('Grace Hopper');
+
+      expect(screen.getByText('Sub-groups')).toBeTruthy();
+      expect(screen.getByText('+ Create')).toBeTruthy();
+    });
+
+    it('hides "add friends" and "invite" for a sub-group nested under a pair group', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('Details'));
+
+      expect(screen.queryByRole('button', { name: 'Add friends' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Share an invitation link' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
+      expect(
+        screen.getByText('Just the two of you here too — no one else can be added.'),
+      ).toBeTruthy();
+    });
+
+    it('skips the friend picker when creating a sub-group under a pair-rooted group', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('+ Create'));
+
+      expect(await screen.findByText('New sub-group')).toBeTruthy();
+      expect(screen.getByText('Just the two of you here too — no one else can be added.')).toBeTruthy();
+      expect(screen.queryByText('Add friends now, or share a link later.')).toBeNull();
+    });
+
+    it('shows a breadcrumb of ancestors and opens one when tapped', async () => {
+      mockFetchGroup.mockResolvedValue({
+        ...trip,
+        name: 'Ajaccio weekend',
+        ancestors: [{ id: 'root-id', name: 'Corsica 2026' }],
+      });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('Corsica 2026'));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/groups/[id]',
+        params: { id: 'root-id' },
+      });
+    });
+
+    it('opens the create-sub-group screen from the sub-groups section', async () => {
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('+ Create'));
+
+      expect(await screen.findByText('New sub-group')).toBeTruthy();
+    });
+
+    it('reloads its subgroups when notified — e.g. right after creating one', async () => {
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Corsica 2026');
+      expect(mockFetchGroup).toHaveBeenCalledTimes(1);
+
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+      await act(async () => {
+        groupsChanged.notify();
+      });
+
+      expect(await screen.findByText('Ajaccio weekend')).toBeTruthy();
+      expect(mockFetchGroup).toHaveBeenCalledTimes(2);
+    });
   });
 });

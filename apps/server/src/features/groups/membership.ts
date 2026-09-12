@@ -1,4 +1,4 @@
-import type { GroupRole } from '@splitcount/shared';
+import { MAX_GROUP_DEPTH, type GroupRole } from '@splitcount/shared';
 
 import type { GroupRow } from '../../db/schema.js';
 
@@ -7,16 +7,21 @@ import type { GroupRow } from '../../db/schema.js';
  *
  * `not_found` covers both "no such group" and "you are not a member": a
  * non-member must not be able to tell a group they cannot see from one that
- * does not exist.
+ * does not exist. `join_required` is the one deliberate exception: a member
+ * of a group's immediate parent who has not joined it already knows it
+ * exists — it is shown to them in the parent's own sub-group list
+ * (`docs/specs/groups.md`).
  */
 export type GroupAccessReason =
   | 'not_found'
+  | 'join_required'
   | 'not_owner'
   | 'pair_immutable'
   | 'archived'
   | 'owner_cannot_leave'
   | 'cannot_remove_owner'
-  | 'not_friends';
+  | 'not_friends'
+  | 'max_depth_reached';
 
 export class GroupAccessError extends Error {
   constructor(readonly reason: GroupAccessReason) {
@@ -29,7 +34,11 @@ export class GroupAccessError extends Error {
  * A pair group is immutable by construction: it belongs to a friendship, always
  * has exactly those two people, and lives and dies with it. Renaming,
  * archiving, deleting, inviting into it or changing who is in it can never
- * apply.
+ * apply. Its sub-groups are ordinary standard groups — they can be renamed,
+ * archived, deleted, left — but the same `pair_immutable` reason also covers
+ * trying to bring a third person into any of them (`pairCeiling` in the
+ * groups service), since that could only ever happen by propagating a new
+ * membership up into this same immutable group.
  */
 export function assertNotPairGroup(group: GroupRow): void {
   if (group.kind === 'pair') {
@@ -37,10 +46,53 @@ export function assertNotPairGroup(group: GroupRow): void {
   }
 }
 
+/**
+ * Whether `group`'s tree can only ever contain the two people of a
+ * friendship — either `group` itself is that implicit pair group, or one of
+ * its ancestors is. `ancestors` is root-first (`listAncestors`), so index `0`
+ * is the root; a pair group can never itself have a parent
+ * (`groups_pair_no_parent`), so it can only ever appear there or as `group`
+ * itself.
+ */
+export function isPairRooted(group: GroupRow, ancestors: readonly GroupRow[]): boolean {
+  return (ancestors[0] ?? group).kind === 'pair';
+}
+
 /** An archived group is inactive: it takes no new members and issues no links. */
 export function assertActive(group: GroupRow): void {
   if (group.archivedAt) {
     throw new GroupAccessError('archived');
+  }
+}
+
+/**
+ * A group is read-only whenever it, *or any ancestor of it*, is archived —
+ * archiving a group makes every sub-group of it effectively archived too,
+ * without writing anything to those sub-groups (`docs/specs/groups.md`).
+ * `ancestors` is the caller's own `listAncestors(group.id)` result; passed in
+ * rather than fetched here so this stays a plain, synchronous predicate like
+ * every other check in this module. The single definition both the
+ * throwing assertion below and `GroupDetail.readOnly` are built from.
+ */
+export function isEffectivelyArchived(group: GroupRow, ancestors: readonly GroupRow[]): boolean {
+  return group.archivedAt !== null || ancestors.some((ancestor) => ancestor.archivedAt !== null);
+}
+
+/** Throws when {@link isEffectivelyArchived} would be `true`. */
+export function assertEffectivelyActive(group: GroupRow, ancestors: readonly GroupRow[]): void {
+  if (isEffectivelyArchived(group, ancestors)) {
+    throw new GroupAccessError('archived');
+  }
+}
+
+/**
+ * A sub-group cannot nest past the fixed depth cap. Takes the *parent's*
+ * depth, since the check is "would the new group be too deep", asked before
+ * that group exists.
+ */
+export function assertWithinDepthLimit(parentDepth: number): void {
+  if (parentDepth >= MAX_GROUP_DEPTH) {
+    throw new GroupAccessError('max_depth_reached');
   }
 }
 

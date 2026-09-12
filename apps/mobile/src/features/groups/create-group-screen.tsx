@@ -17,9 +17,27 @@ import { groupsChanged } from './groups-changed';
 export interface CreateGroupScreenProps {
   onCreated: (group: GroupDetail) => void;
   onCancel: () => void;
+  /**
+   * Creates a sub-group under this group instead of a root group
+   * (`docs/specs/groups.md`). The parent is implicit — there is no field for
+   * it, since this screen is only ever opened from inside that parent.
+   */
+  parentId?: string;
+  /**
+   * The parent is a pair group, or is itself nested under one — the new
+   * sub-group can only ever contain that friendship's own two people, so
+   * there is no one to offer in a friend picker (`docs/specs/groups.md`). The
+   * other person joins it themselves from the parent's sub-groups list.
+   */
+  pairRooted?: boolean;
 }
 
-export function CreateGroupScreen({ onCreated, onCancel }: CreateGroupScreenProps) {
+export function CreateGroupScreen({
+  onCreated,
+  onCancel,
+  parentId,
+  pairRooted = false,
+}: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
   const [name, setName] = useState('');
@@ -44,12 +62,17 @@ export function CreateGroupScreen({ onCreated, onCancel }: CreateGroupScreenProp
       const group = await createGroup(authorizedFetch, {
         name: name.trim(),
         memberIds: [...selected],
+        parentId,
       });
       groupsChanged.notify();
       onCreated(group);
     } catch (cause: unknown) {
       logger.warn('groups.create.failed', errorFields(cause));
-      setError('We couldn’t create the group. Check your connection and try again.');
+      setError(
+        parentId
+          ? 'We couldn’t create the sub-group. Check your connection and try again.'
+          : 'We couldn’t create the group. Check your connection and try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -57,7 +80,7 @@ export function CreateGroupScreen({ onCreated, onCancel }: CreateGroupScreenProp
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="subtitle">New group</ThemedText>
+      <ThemedText type="subtitle">{parentId ? 'New sub-group' : 'New group'}</ThemedText>
 
       <TextInput
         accessibilityLabel="Group name"
@@ -73,11 +96,18 @@ export function CreateGroupScreen({ onCreated, onCancel }: CreateGroupScreenProp
         ]}
       />
 
-      <ThemedText type="small" themeColor="textSecondary">
-        Add friends now, or share a link later.
-      </ThemedText>
-
-      <FriendPicker selected={selected} onToggle={toggle} />
+      {pairRooted ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Just the two of you here too — no one else can be added.
+        </ThemedText>
+      ) : (
+        <>
+          <ThemedText type="small" themeColor="textSecondary">
+            Add friends now, or share a link later.
+          </ThemedText>
+          <FriendPicker selected={selected} onToggle={toggle} />
+        </>
+      )}
 
       {error ? (
         <ThemedText type="small" style={styles.error}>
@@ -87,7 +117,7 @@ export function CreateGroupScreen({ onCreated, onCancel }: CreateGroupScreenProp
 
       <ThemedView style={styles.actions}>
         <Button
-          label="Create group"
+          label={parentId ? 'Create sub-group' : 'Create group'}
           busy={busy}
           disabled={name.trim().length === 0}
           onPress={() => void handleCreate()}

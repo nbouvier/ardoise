@@ -19,6 +19,8 @@ function group(overrides: Partial<GroupRow> = {}): GroupRow {
     kind: 'standard',
     name: 'Corsica',
     friendshipId: null,
+    parentId: null,
+    depth: 0,
     archivedAt: null,
     createdAt: now,
     updatedAt: now,
