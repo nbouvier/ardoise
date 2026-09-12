@@ -238,11 +238,10 @@ Shared error codes:
 `GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
 is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
-position **rolled up over the group and every sub-group nested inside it** — positive means
-they are owed, negative means they owe (`docs/specs/balances.md`); for a group with no
-sub-groups this is simply its own balance, computed the same way as
-`GET /groups/:groupId/transactions/balances` but from the caller's own transactions across
-the whole sub-tree rather than the group's per-member list. `GroupDetail` adds `members` (a
+position **in that group alone** — positive means they are owed, negative means they owe
+(`docs/specs/balances.md`). It is the caller's own entry of
+`GET /groups/:groupId/transactions/balances`, and a sub-group is never folded into it.
+`GroupDetail` adds `members` (a
 `FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
 below), `ancestors`
 (root-first, empty for a root group), `readOnly` — `true` when the group itself is
@@ -261,8 +260,8 @@ through `POST /groups/:groupId/join` instead, same as any other unjoined sub-gro
 
 A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
 enough to decide whether to open it (already a member) or join it and show where the
-viewer stands, never a member list. `viewerBalanceCents` is rolled up over *that*
-sub-group's own sub-tree exactly like the top-level figure (see above), and is always `0`
+viewer stands, never a member list. `viewerBalanceCents` is the viewer's own balance in
+*that* sub-group, on the same terms as the top-level figure (see above), and is always `0`
 when `viewerIsMember` is `false`, since a non-member is on none of its transactions. An
 `ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own
 `subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when opened.
@@ -502,7 +501,8 @@ left with an unsettled balance still appears too. Computed on the fly from the
 transactions, not stored — see `docs/ARCHITECTURE.md`.
 
 This is a net against the **group**, not against a person: it cannot say who owes whom.
-For that, see `balanceCents` on `GET /friends` and `docs/specs/balances.md`.
+For that, see `balanceCents` on `GET /friends` and `docs/specs/balances.md`; for who
+should pay whom to clear the group, see the reimbursement plan below.
 
 Response `200`:
 
@@ -510,6 +510,15 @@ Response `200`:
 { "balances": [{ "userId": "<uuid>", "amountCents": 500 }] }
 ```
 
+> **The reimbursement plan has no route.** Who should pay whom to clear a group is
+> derived from these balances by `planReimbursements` in `@splitcount/shared`, on the
+> client, so the plan and the balance list can never disagree
+> (`docs/specs/reimbursements.md`). Acting on it uses the ordinary
+> `POST /groups/:groupId/transactions` with `kind: "transfer"`; there is no settlement
+> record. An earlier `GET .../reimbursements` route existed while a plan could span a
+> group's sub-tree, and was removed with that scope.
+
 ## Planned
 
-- Settle-up suggestions (minimising the number of payments to clear a group's balances).
+- Settling with one person across every group they share, from the friend list
+  (`docs/specs/reimbursements.md`, Open questions).

@@ -33,10 +33,9 @@ export function balanceWithPerson(amountCents: number): string {
 }
 
 /**
- * Where the viewer stands against a group, in words — used both for a
- * group's own balance and for the rolled-up figure over a group and its
- * sub-groups (`docs/specs/balances.md`); the two read identically, since to
- * the viewer they answer the same question.
+ * Where the viewer stands against one group, in words — the group screen's
+ * own line and the group list's row read identically, since both answer the
+ * same question about the same figure (`docs/specs/balances.md`).
  */
 export function groupBalanceLabel(amountCents: number): string {
   if (amountCents === 0) {

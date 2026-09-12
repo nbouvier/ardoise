@@ -43,9 +43,11 @@ viewer switches between:
 - **Scope** — for a group with sub-groups, whether the breakdown covers **this group
   alone** or **this group and every sub-group nested inside it**, at any depth. Including
   sub-groups is the default: the natural reading of "this trip's spending" is the whole
-  trip, not just the top-level bucket, and it matches the rolled-up balance the group
-  screen already shows (`docs/specs/balances.md`). A group with no sub-groups has nothing
-  for this toggle to change, and it is not shown.
+  trip, not just the top-level bucket. This is the **only** view in the product that
+  crosses into sub-groups, and it says so on the toggle — balances and the reimbursement
+  plan are each scoped to one group (`docs/specs/balances.md`,
+  `docs/specs/reimbursements.md`). A group with no sub-groups has nothing for this toggle
+  to change, and it is not shown.
 
 The **participant chips never change** based on scope: every member of a sub-group is
 necessarily already a member of the group itself (`docs/specs/groups.md`), so the group's
@@ -91,7 +93,7 @@ has one (`Other` by default), so nothing falls outside the breakdown.
 - Non-members see nothing, exactly as for every other group route: the group itself is
   "not found" to them.
 - **A sub-group the viewer has not joined is excluded from the "including sub-groups"
-  scope**, for the same reason it contributes nothing to the rolled-up balance
+  scope**, for the same reason it contributes nothing to any balance of theirs
   (`docs/specs/balances.md`): the viewer is on none of its transactions, so there is
   nothing of theirs to count, whether or not that sub-group is currently visible to them
   in the group's sub-group list. When this leaves out at least one sub-group, the view
@@ -285,7 +287,7 @@ amounts are financial data and must not be logged
 - **Including sub-groups never widens what the viewer can see.** The `subtree` scope is
   resolved server-side to the group plus only the descendants the caller is currently a
   member of; a sub-group they cannot read contributes nothing and is never named, exactly
-  as it contributes nothing to the rolled-up balance (`docs/specs/balances.md`).
+  as it contributes nothing to any balance of theirs (`docs/specs/balances.md`).
 
 ## Open questions
 

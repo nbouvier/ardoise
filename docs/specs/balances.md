@@ -14,13 +14,14 @@ different answers are needed, and they are not the same number:
 
 Both answers are derived from the transaction record. Neither is a stored total.
 
-Since groups can nest (`docs/specs/groups.md`), a third answer follows from the same
-logic: **a group and everything nested inside it**, rolled into the one figure the group
-list shows — "where do I stand on this trip as a whole", without opening every sub-group
-to add it up by hand.
+Since groups can nest (`docs/specs/groups.md`), a third answer was tried and
+**deliberately dropped**: rolling a group's sub-groups into its figure. It read as a
+surprise rather than a convenience — a number under a group's name that no list inside
+that group could account for. Every balance here is therefore scoped to **one group**,
+and a sub-group carries its own.
 
-**Settle-up — suggesting who should pay whom to clear everything** — remains out of
-scope; see Out of scope.
+**Who should pay whom to clear a group** is its own feature, derived from these
+balances: `docs/specs/reimbursements.md`.
 
 ## User story
 
@@ -46,25 +47,24 @@ going group by group**.
 "Group details" sheet and onto the group screen itself. The full per-member list stays in
 the sheet.
 
-### Balance across a group and its sub-groups
+### One group, one figure
 
-- The **group list** shows, next to each root group, the viewer's balance **rolled up
-  over that group and every sub-group nested inside it** — the plain sum of their own
-  balance in the group itself plus their own balance in each descendant, at any depth.
-- The **group screen** shows this same rolled-up figure where the plain group balance
-  used to sit, for a group that has sub-groups; a group with none has a rolled-up figure
-  that is simply its own balance, so no separate "does this group have sub-groups"
-  branching is visible to the user.
-- The **details sheet's per-member list stays scoped to the one group** — it is not
-  rolled up. The roll-up answers "where do I stand on the whole trip"; the per-member list
-  answers "who do I owe inside this specific space", and mixing the two would make neither
-  question answerable.
-- **A sub-group the viewer has never joined contributes nothing** to the roll-up, because
-  they cannot be a party to any of its transactions (`docs/specs/groups.md`). This holds
-  whether or not the sub-group is currently visible to them.
-- **A sub-group the viewer has since left still contributes** whatever they were owed or
-  owed at the time, unchanged from how a plain group balance already keeps a departed
-  member's entry.
+- Every balance shown for a group covers **that group's own transactions only**. A
+  sub-group is never folded into its parent, at any depth.
+- The **group list** shows, next to each group, the viewer's balance in it. The **group
+  screen** shows the same figure for the group being looked at, and each sub-group in the
+  sub-groups section shows its own.
+- This is what keeps the figure **accountable**: the number under a group's name is
+  exactly the sum of what the group's own transaction list and per-member balances say.
+  A rolled-up figure could not be reconciled with anything on screen, which is why it was
+  dropped.
+- A **sub-group the viewer has not joined** shows no figure of theirs — they are on none
+  of its transactions (`docs/specs/groups.md`) — and it is `0`, never a blank or an error.
+- A **group the viewer has left** keeps whatever was owed there, unchanged; they simply
+  no longer see it, since the group is no longer theirs to open.
+- "Where do I stand across this whole trip" is therefore **not a question this product
+  answers** — by choice. Per-person totals across every group (below) are the
+  cross-cutting view that replaced it.
 
 ### Balance with one person
 
@@ -144,15 +144,13 @@ properties the display depends on:
   shown as settled because a figure could not be read.
 - **A transaction where the viewer is both the payer and a concerned member**: the two
   contributions net out, exactly as they do in a group balance.
-- **A root group with no sub-groups**: its rolled-up figure is exactly its own balance —
-  nothing behaves differently just because the roll-up exists as a concept.
-- **A sub-group the viewer has never joined**: contributes zero to the parent's rolled-up
-  figure, since they are on none of its transactions — even though the sub-group itself
-  may be visible to them (`docs/specs/groups.md`).
-- **A sub-group the viewer has since left**: still contributes whatever was owed while
-  they were a member, the same as a plain group balance keeps a departed member's entry.
-- **A deeply nested tree**: the roll-up sums every descendant at every depth, not only
-  direct sub-groups.
+- **A group whose only money moved in its sub-groups**: it reads as settled, and each
+  sub-group carries its own figure. Correct, and the point of scoping to one group.
+- **A sub-group the viewer has never joined**: shows `0` in the parent's sub-groups
+  section — they are on none of its transactions — even though the sub-group itself is
+  visible to them (`docs/specs/groups.md`).
+- **A deeply nested tree**: every level shows its own figure; none of them includes
+  another.
 
 ## Acceptance criteria
 
@@ -173,15 +171,14 @@ properties the display depends on:
 - [ ] The viewer's own balance is visible on the group screen itself, without opening the
       details sheet.
 - [ ] The per-member balance list remains available in the group details sheet, unchanged,
-      and stays scoped to that one group even when it has sub-groups.
+      and stays scoped to that one group.
 - [ ] A friend balance is computed only from transactions the viewer is party to, so no
       route can expose a group, a member or an amount the viewer cannot already see.
-- [ ] The group list shows, for each root group, the viewer's balance rolled up over that
-      group and every sub-group nested inside it, at any depth.
-- [ ] A sub-group the viewer has never joined contributes nothing to that roll-up.
-- [ ] For a generated tree of groups and transactions, a member's rolled-up balance for a
-      root group equals the sum of their own balance in that group and in each of its
-      descendants.
+- [ ] The group list shows, for each group, the viewer's balance in that group alone.
+- [ ] A group's figure equals the sum of its own transactions' effect on the viewer, and
+      does not move when money is spent in one of its sub-groups.
+- [ ] Each level of a nested tree shows its own figure, none including another's.
+- [ ] A sub-group the viewer has not joined shows `0` in its parent's sub-groups section.
 
 ## Testing considerations
 
@@ -197,14 +194,9 @@ properties the display depends on:
   left, is the main integration scenario.
 - Authorization: the aggregate is built from transactions the caller is party to; a test
   must show a friend's balance never includes a transaction the caller is not on.
-- **The roll-up is the new load-bearing property**: for a generated tree of groups (some
-  archived, some nested several levels deep) and transactions scattered across them, a
-  member's rolled-up figure for a root group must equal the sum of their own balance in
-  it plus their own balance in every descendant — checked against the per-group balance
-  the group screen already computes, never a second independent implementation.
-- A sub-group the caller is not a member of must contribute nothing to the roll-up, even
-  when it is visible to them in the parent's sub-group list — visibility of a group's
-  existence must never leak into its balance.
+- **Containment is worth a regression test**: money spent in a sub-group must not move
+  its parent's figure, at any depth. It is the behaviour that replaced the roll-up, and
+  the one a future "show the whole trip" change would silently break.
 
 ## Data / API considerations
 
@@ -228,14 +220,11 @@ See `docs/API.md` for the authoritative surface.
   the names. The friend-list entry gets its own shape; the summary used for group members,
   transaction participants and invitation previews stays unchanged and carries no balance.
 - Amounts are integer cents, as everywhere else.
-- **The rolled-up group figure is also not stored**: it is the plain-group balance
-  computation, applied to the group plus every id in its descendant set, summed in the
-  application. The descendant set itself is derived from `groups.parent_id`
-  (`docs/specs/groups.md`), not cached.
-- The roll-up rides on **the same response that already carries the plain balance** for a
-  group with sub-groups — `GET /groups` carries each root group's rolled-up figure, and
-  `GET /groups/:groupId/transactions/balances` stays exactly what it is today, a single
-  group's per-member list, unrolled. No new balance route is introduced.
+- The viewer's own figure **rides on the group it belongs to**: `GET /groups` and
+  `GET /groups/:groupId` each carry it, scoped to that group, and a group's `subgroups`
+  entries carry their own. `GET /groups/:groupId/transactions/balances` remains the one
+  group's per-member list. No balance route of its own, and no descendant walk in any of
+  them.
 
 ## UX / UI considerations
 
@@ -248,14 +237,12 @@ See `docs/API.md` for the authoritative surface.
   list, and a money figure there is noise.
 - **Group screen**: the viewer's own balance appears on the screen itself, above the
   transaction list — the answer to "where do I stand" without a tap. Worded as what the
-  viewer is owed or owes, not as a bare signed number, and neutral when settled. For a
-  group with sub-groups this is the rolled-up figure; nothing in the wording distinguishes
-  a rolled-up figure from a plain one, since to the viewer it answers the same question.
+  viewer is owed or owes, not as a bare signed number, and neutral when settled. It is
+  this group's figure, and the per-member list below it adds up to exactly that.
 - The per-member list stays in the details sheet, as specified in
-  `docs/specs/transactions.md`, and stays scoped to the one group — it is never rolled up,
-  since "who owes whom inside this space" is a different question from "where do I stand
-  overall".
-- **Group list row**: the same rolled-up figure, styled exactly like the group-screen one.
+  `docs/specs/transactions.md`, scoped to the same group as the line above it.
+- **Group list row**: the same figure for each group, styled exactly like the
+  group-screen one.
 - Both are **read-only displays**: nothing here is actionable, because acting on a
   balance is recording a transfer, which already has its own flow.
 
@@ -278,10 +265,9 @@ See `docs/API.md` for the authoritative surface.
 - Balances are derived on read and carry no authorization of their own beyond the above —
   there is no balance route that bypasses the membership checks transactions already
   enforce.
-- **A group's rolled-up balance is not a way to learn about a sub-group the caller cannot
-  otherwise reach.** It only ever sums transactions the caller is a party to, so a
-  sub-group they were never a member of contributes zero and discloses nothing about its
-  contents, whether or not that sub-group happens to be visible to them.
+- **No group's figure discloses anything about a sub-group.** Each is computed from that
+  group's own transactions, so a sub-group the caller has not joined contributes nothing
+  anywhere — there is no aggregate for its contents to leak into.
 
 ## Open questions
 

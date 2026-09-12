@@ -35,12 +35,11 @@ export const MAX_GROUP_DEPTH = 4;
  *
  * `parentId` is `null` for a root group. `subgroupCount` is the number of
  * *direct* sub-groups only — see `subgroups` on `GroupDetail` for the list
- * itself. `viewerBalanceCents` is the viewer's own net position, rolled up
- * over the group **and every sub-group nested inside it** at any depth —
- * positive means the viewer is owed, negative means they owe
- * (`docs/specs/balances.md`). For a group with no sub-groups this is simply
- * its own balance; a sub-group the viewer has never joined contributes
- * nothing to it, whether or not that sub-group is visible to them.
+ * itself. `viewerBalanceCents` is the viewer's own net position **in this
+ * group alone** — positive means they are owed, negative means they owe
+ * (`docs/specs/balances.md`). A sub-group is never folded into its parent's
+ * figure: each space answers "where do I stand here", and each carries its
+ * own.
  */
 export const groupSummarySchema = z.object({
   id: z.uuid(),
@@ -67,7 +66,7 @@ export const subgroupSummarySchema = z.object({
   name: z.string().min(1),
   memberCount: z.number().int().positive(),
   viewerIsMember: z.boolean(),
-  /** Rolled up over this sub-group's own sub-tree, `0` when not a member. */
+  /** The viewer's own balance in this sub-group, `0` when not a member. */
   viewerBalanceCents: z.number().int(),
 });
 export type SubgroupSummary = z.infer<typeof subgroupSummarySchema>;

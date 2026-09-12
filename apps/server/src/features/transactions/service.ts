@@ -45,7 +45,11 @@ export interface TransactionsService {
     input: UpdateTransactionRequest,
   ): Promise<Transaction>;
   remove(userId: string, groupId: string, transactionId: string): Promise<void>;
-  /** Every current (and formerly-owing) member's net balance. Sums to zero. */
+  /**
+   * Every current (and formerly-owing) member's net balance. Sums to zero —
+   * which is also what lets the client derive the reimbursement plan from
+   * it (`planReimbursements`, `docs/specs/reimbursements.md`).
+   */
   balances(userId: string, groupId: string): Promise<Balance[]>;
 }
 

@@ -85,7 +85,10 @@ interaction is a device concern.
   same guard that blocks every other pair-group mutation), archived-group read-only
   behaviour, cross-group transaction access, cascade deletion, and the category field
   (round-trips, defaults to Other, an unknown value is refused, resets to Other when none
-  is given).
+  is given). Group balances are covered in `features/groups/plugin.test.ts`, including
+  **containment**: a sub-group's own figure stays in the sub-group, a parent's is its own,
+  every level of a nested tree carries its own, and an unjoined sub-group shows `0` — the
+  regression guarding the removed sub-tree roll-up.
 - `packages/shared`: the split algorithm (`splitByShares`) — the sum invariant across
   many generated totals/weights/group sizes, rounding determinism, tie-breaking — the
   transaction request schema's shape per kind, the category preset list (unique keys,
@@ -93,7 +96,11 @@ interaction is a device concern.
   (`categoryBreakdown`): kind filtering (transfers never count), a selected subset of
   participants using their own shares rather than what they paid (single member, several
   summed, and an empty selection), ordering, and the two sum invariants — amounts to the
-  total and percentages to exactly 100 — across many generated shapes.
+  total and percentages to exactly 100 — across many generated shapes; and the
+  reimbursement planner (`planReimbursements`): the clearing property and the
+  payment-count bound over 200 generated balance sets, exact-match pairing, a chain of
+  debts collapsing into one payment, zero-balance people left out, and independence from
+  input order.
 - `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
   auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
   invitation feature (`src/features/invites/`): pending-invite store and the confirmation
@@ -115,7 +122,15 @@ interaction is a device concern.
   closes, a sliver stays visible, a full ring is drawn as two halves) and the statistics
   sheet (totals and legend, one arc per category, the type toggle, narrowing and summing
   the per-member selection, the "select at least one" empty state, selecting and
-  deselecting a slice, and each empty state saying *which* view is empty).
+  deselecting a slice, and each empty state saying *which* view is empty); and the
+  reimbursements feature (`src/features/reimbursements/`): a chain of debts shown as one
+  payment, each payment worded from the viewer's point of view with their own first,
+  recording one by tapping it, the explained (not silent) refusal on an archived group or
+  with a former member, the settled state, and the derived-from-balances states — the
+  balances' spinner while they load, their retry on failure, and never a "settled" read
+  produced by a failure — plus, on the group screen, the plan opening from the header and
+  handing a pre-filled transfer to the transaction form (the debtor as payer, not the
+  viewer).
 
 ### Gotchas
 

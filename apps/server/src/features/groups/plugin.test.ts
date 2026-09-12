@@ -143,7 +143,7 @@ describe('groups routes', () => {
       headers: user.headers,
     });
 
-  /** A minimal equal-shares expense, for the balance roll-up tests below. */
+  /** A minimal equal-shares expense, for the balance tests below. */
   function expense(payerId: string, participantIds: string[], amount = 1000) {
     return {
       kind: 'expense',
@@ -1119,8 +1119,8 @@ describe('groups routes', () => {
     });
   });
 
-  describe('balance roll-up over a group and its sub-groups', () => {
-    it("equals a root group's own balance when it has no sub-groups", async () => {
+  describe("a group's own balance", () => {
+    it("is the viewer's net position in that group", async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -1134,7 +1134,7 @@ describe('groups routes', () => {
       expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(500);
     });
 
-    it("sums the viewer's own balance across a root group and its sub-groups", async () => {
+    it("leaves a sub-group's balance in the sub-group", async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -1145,11 +1145,14 @@ describe('groups routes', () => {
 
       const { groups: listed } = (await listGroups(ada)).json();
 
-      expect(listed[0].viewerBalanceCents).toBe(500 + 200);
-      expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(700);
+      // The root's own 1000, split evenly: 500. The sub-group's 400 stays
+      // its own 200 and is not folded into the parent.
+      expect(listed[0].viewerBalanceCents).toBe(500);
+      expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(500);
+      expect((await getGroup(ada, sub.id)).json().group.viewerBalanceCents).toBe(200);
     });
 
-    it("carries a joined sub-group's own rolled-up balance in its parent's subgroups list", async () => {
+    it("carries a joined sub-group's own balance in its parent's subgroups list", async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -1164,7 +1167,7 @@ describe('groups routes', () => {
       ]);
     });
 
-    it('excludes a sub-group the viewer has never joined', async () => {
+    it('shows nothing for a sub-group the viewer has never joined', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       const alan = await signIn('alan');
@@ -1179,28 +1182,27 @@ describe('groups routes', () => {
 
       const detail = (await getGroup(ada, root.id)).json().group;
 
-      // Only the root expense counts towards ada: 1000 split with grace.
       expect(detail.viewerBalanceCents).toBe(500);
+      expect(detail.subgroups).toEqual([
+        expect.objectContaining({ id: sub.id, viewerBalanceCents: 0 }),
+      ]);
     });
 
-    it('still counts a sub-group the viewer has since left', async () => {
+    it('keeps a debt run up in a sub-group out of its parent', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
       const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
       const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+      // Grace paid 600 in the sub-group, split with ada: ada owes 300 there.
       await recordExpense(ada, sub.id, grace.userId, [ada.userId, grace.userId], 600);
 
-      await removeMember(ada, sub.id, ada.userId);
-
-      const detail = (await getGroup(ada, root.id)).json().group;
-
-      // Grace paid 600 in the sub-group, split with ada: ada still owes 300,
-      // even though she has since left that sub-group.
-      expect(detail.viewerBalanceCents).toBe(-300);
+      expect((await getGroup(ada, sub.id)).json().group.viewerBalanceCents).toBe(-300);
+      // Nothing was spent in the root, so that is what the root says.
+      expect((await getGroup(ada, root.id)).json().group.viewerBalanceCents).toBe(0);
     });
 
-    it('rolls up a deeply nested tree at every level', async () => {
+    it('gives every level of a nested tree its own figure', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
@@ -1216,8 +1218,8 @@ describe('groups routes', () => {
       const grandchildDetail = (await getGroup(ada, grandchild.id)).json().group;
 
       expect(grandchildDetail.viewerBalanceCents).toBe(300);
-      expect(childDetail.viewerBalanceCents).toBe(200 + 300);
-      expect(rootDetail.viewerBalanceCents).toBe(100 + 200 + 300);
+      expect(childDetail.viewerBalanceCents).toBe(200);
+      expect(rootDetail.viewerBalanceCents).toBe(100);
     });
   });
 

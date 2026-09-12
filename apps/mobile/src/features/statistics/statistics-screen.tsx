@@ -67,8 +67,10 @@ export function StatisticsScreen({
 }: StatisticsScreenProps) {
   const [type, setType] = useState<StatisticsType>('spending');
   // Sub-groups are included by default — the natural reading of "this trip's
-  // spending" is the whole trip, and it matches the rolled-up balance the
-  // group screen already shows (`docs/specs/balances.md`).
+  // spending" is the whole trip. This is the one view in the product that
+  // crosses into sub-groups, and it says so on the toggle: balances and the
+  // reimbursement plan are each scoped to one group
+  // (`docs/specs/balances.md`).
   const [scope, setScope] = useState<TransactionsListScope>(hasSubgroups ? 'subtree' : 'group');
   const { status, transactions, excludedSubgroupCount, refresh } = useTransactions(
     groupId,

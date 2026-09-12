@@ -35,7 +35,7 @@ const friendParamsSchema = z.object({ friendId: z.uuid() });
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
     const repository = createGroupsRepository(app.db);
-    // A group's rolled-up balance is a client of the ledger `transactions`
+    // A group's balance is a client of the ledger `transactions`
     // owns — the same way `friends` reads it for the per-friend total. A
     // repository, not the transactions *service*: nothing here goes through
     // a group's own membership checks, and `groups` must not depend on the

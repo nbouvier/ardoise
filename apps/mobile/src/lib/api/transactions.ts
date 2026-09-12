@@ -81,3 +81,4 @@ export async function fetchBalances(
   const response = await fetcher(`${transactionsPath(groupId)}/balances`);
   return (await parsedJson(response, balancesResponseSchema)).balances;
 }
+

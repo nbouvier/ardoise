@@ -14,8 +14,8 @@ export interface GroupRowProps {
 }
 
 /**
- * One line of the group list: name, size, and where the viewer stands —
- * rolled up over the group and every sub-group nested inside it
+ * One line of the group list: name, size, and where the viewer stands in
+ * that group — its own transactions, not its sub-groups'
  * (`docs/specs/balances.md`).
  */
 export function GroupRow({ group, onPress, muted = false }: GroupRowProps) {

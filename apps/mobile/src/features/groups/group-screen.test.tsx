@@ -92,7 +92,7 @@ const balances: Balance[] = [
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
-const mockCreateTransaction = jest.fn<() => Promise<Transaction>>();
+const mockCreateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -121,7 +121,7 @@ jest.mock('@/lib/api/groups', () => ({
 jest.mock('@/lib/api/transactions', () => ({
   fetchTransactions: () => mockFetchTransactions(),
   fetchBalances: () => mockFetchBalances(),
-  createTransaction: () => mockCreateTransaction(),
+  createTransaction: (...args: unknown[]) => mockCreateTransaction(...args),
   updateTransaction: jest.fn(),
   deleteTransaction: jest.fn(),
 }));
@@ -201,6 +201,78 @@ describe('GroupScreen', () => {
     // plain transaction list never requests — so it fetches on its own
     // rather than reusing the list's call (docs/specs/group-statistics.md).
     expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the reimbursement plan from the header', async () => {
+    mockFetchBalances.mockResolvedValue(balances);
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
+    ).toBeTruthy();
+  });
+
+  it('pre-fills a transfer from a suggested reimbursement', async () => {
+    mockFetchBalances.mockResolvedValue(balances);
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
+    );
+
+    // The transfer form, with the payment already written out: the amount,
+    // and Grace — not the viewer — as the payer.
+    expect(await screen.findByLabelText('Title')).toHaveProp('value', 'Reimbursement');
+    expect(screen.getByLabelText('Amount')).toHaveProp('value', '21.25');
+    expect(
+      screen.getByRole('button', { name: 'Transfer' }).props.accessibilityState,
+    ).toMatchObject({ selected: true });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    // Grace pays Ada — the payer is the debtor the plan named, not the
+    // viewer who happened to tap it.
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      trip.id,
+      expect.objectContaining({
+        kind: 'transfer',
+        title: 'Reimbursement',
+        amount: 2125,
+        payerId: grace.id,
+        toUserId: ada.id,
+      }),
+    );
+  });
+
+  it('returns to the plan once the reimbursement is recorded', async () => {
+    mockFetchBalances.mockResolvedValue(balances);
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
+    );
+
+    // Saving refreshes the balances the plan is derived from; nothing is
+    // owed any more, so the plan it returns to reads as settled.
+    mockFetchBalances.mockResolvedValue([
+      { userId: ada.id, amountCents: 0 },
+      { userId: grace.id, amountCents: 0 },
+    ]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    // The plan's own settled state, not the group screen's balance line —
+    // both say "settled up", only this one says who to.
+    expect(await screen.findByText('Nobody owes anybody here.')).toBeTruthy();
   });
 
   it('tells the Friends tab to reload after a transaction is saved', async () => {
@@ -288,8 +360,7 @@ describe('GroupScreen', () => {
 
   it('answers "where do I stand" on the screen itself, without opening the details', async () => {
     // Ada is owed 21.25 — said in words, not left to a leading "+". Sourced
-    // from the group's own viewerBalanceCents (already rolled up over any
-    // sub-groups), not the per-member balances list.
+    // from the group's own viewerBalanceCents, not the per-member list.
     mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: 2125 });
     mockFetchBalances.mockResolvedValue(balances);
 
@@ -383,7 +454,7 @@ describe('GroupScreen', () => {
       expect(mockJoinGroup).not.toHaveBeenCalled();
     });
 
-    it('shows a joined sub-group’s own rolled-up balance', async () => {
+    it('shows a joined sub-group’s own balance', async () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);
