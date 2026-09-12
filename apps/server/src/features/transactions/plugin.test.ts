@@ -335,6 +335,23 @@ describe('transactions routes', () => {
       expect(response.json()).toEqual({ error: 'group_archived' });
     });
 
+    it('refuses recording on a sub-group whose ancestor is archived', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await app.inject({
+        method: 'POST',
+        url: '/groups',
+        headers: ada.headers,
+        payload: { name: 'Ajaccio weekend', parentId: root.id },
+      });
+      await archiveGroup(ada, root.id, true);
+
+      const response = await createTx(ada, sub.json().group.id, expense(ada.userId, [ada.userId]));
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: 'group_archived' });
+    });
+
     it('answers a non-member with not found, never a hint the group exists', async () => {
       const ada = await signIn('ada');
       const alan = await signIn('alan');

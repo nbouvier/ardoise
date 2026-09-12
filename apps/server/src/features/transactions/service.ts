@@ -163,9 +163,14 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     return groups.get(userId, groupId);
   }
 
-  /** An archived group is fully read-only for transactions. */
+  /**
+   * A group that is archived — itself, or any ancestor of it — is fully
+   * read-only for transactions (`docs/specs/groups.md`). `readOnly` already
+   * carries that combined check; a root group's is exactly its own
+   * `archivedAt !== null`, since it has no ancestors.
+   */
   function requireActive(group: GroupDetail): void {
-    if (group.archivedAt !== null) {
+    if (group.readOnly) {
       throw new GroupAccessError('archived');
     }
   }

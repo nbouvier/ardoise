@@ -354,8 +354,9 @@ the caller's group membership first, exactly like every other group route — a 
 gets `404 { "error": "group_not_found" }`. **Unlike every other group route, these work
 identically on the implicit pair group** — transactions are the point of it.
 
-An **archived group is fully read-only for transactions**: `POST`, `PATCH` and `DELETE`
-all refuse with `409 { "error": "group_archived" }`; `GET` still works.
+A group that is **archived — itself, or any ancestor of it — is fully read-only for
+transactions** (`readOnly` on `GroupDetail`, `docs/specs/groups.md`): `POST`, `PATCH` and
+`DELETE` all refuse with `409 { "error": "group_archived" }`; `GET` still works.
 
 Shared error codes, beyond the ones `groups` already defines:
 
