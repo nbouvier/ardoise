@@ -1,6 +1,5 @@
 import {
   createTransactionRequestSchema,
-  reimbursementScopeSchema,
   transactionsListScopeSchema,
   updateTransactionRequestSchema,
 } from '@splitcount/shared';
@@ -135,39 +134,6 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
       route(groupParamsSchema, async ({ params, userId, reply }) =>
         reply.send({ balances: await transactions.balances(userId, params.groupId) }),
       ),
-    );
-
-    app.get(
-      '/groups/:groupId/transactions/reimbursements',
-      authenticated,
-      route(groupParamsSchema, async ({ params, userId, reply, query }) => {
-        // Same soft fallback as the transaction list's scope: an
-        // unrecognised value narrows the answer rather than failing it —
-        // and it narrows towards the group alone, which is the scope that
-        // discloses least (`docs/specs/reimbursements.md`).
-        const scope = reimbursementScopeSchema.safeParse(
-          (query as Record<string, unknown> | undefined)?.scope,
-        );
-        const plan = await transactions.reimbursements(
-          userId,
-          params.groupId,
-          scope.success ? scope.data : undefined,
-        );
-        app.log.info(
-          {
-            userId,
-            groupId: params.groupId,
-            scope: plan.scope,
-            // Counts, never amounts: a plan is financial data
-            // (`docs/guidelines/LOGGING.md`), but its shape is what makes a
-            // surprising one diagnosable.
-            positionCount: plan.positions.length,
-            reimbursementCount: plan.reimbursements.length,
-          },
-          'transactions.reimbursements.read',
-        );
-        return reply.send(plan);
-      }),
     );
 
     app.post(

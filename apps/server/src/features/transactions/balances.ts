@@ -46,39 +46,6 @@ export function computeBalances(
   return balances;
 }
 
-/**
- * Every party's net balance in each group separately — `computeBalances`
- * applied per group rather than to the union of them, keyed by group id.
- *
- * What a reimbursement plan's attribution needs: summing the result over
- * groups gives a person's net position over the whole scope, and each entry
- * says which group that position came from, so the plan can be justified
- * without a second, independent notion of a balance
- * (`docs/specs/reimbursements.md`). A group with no transaction at all is
- * absent rather than present and empty.
- */
-export function computeBalancesByGroup(
-  transactions: readonly TransactionRow[],
-  participantsByTransactionId: ReadonlyMap<string, readonly TransactionParticipantRow[]>,
-): Map<string, Map<string, number>> {
-  const byGroupId = new Map<string, TransactionRow[]>();
-  for (const transaction of transactions) {
-    const list = byGroupId.get(transaction.groupId);
-    if (list) {
-      list.push(transaction);
-    } else {
-      byGroupId.set(transaction.groupId, [transaction]);
-    }
-  }
-
-  return new Map(
-    [...byGroupId].map(([groupId, rows]) => [
-      groupId,
-      computeBalances(rows, participantsByTransactionId),
-    ]),
-  );
-}
-
 /** An income moves money the other way; an expense and a transfer do not. */
 function signOf(transaction: TransactionRow): 1 | -1 {
   return transaction.kind === 'income' ? -1 : 1;

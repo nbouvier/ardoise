@@ -1,10 +1,5 @@
-import type {
-  GroupMember,
-  NetPosition,
-  ReimbursementScope,
-  SuggestedReimbursement,
-} from '@splitcount/shared';
-import { useState } from 'react';
+import { planReimbursements, type Balance, type GroupMember } from '@splitcount/shared';
+import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
@@ -14,26 +9,51 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { balanceTone } from '@/features/transactions/balance-display';
+import type { UseBalancesResult } from '@/features/transactions/use-balances';
 import { useTheme } from '@/hooks/use-theme';
 
-import { useReimbursements } from './use-reimbursements';
+/** One suggested payment, resolved to the people it names. */
+export interface Suggestion {
+  from: { id: string; name: string; picture: string | null };
+  to: { id: string; name: string; picture: string | null };
+  amountCents: number;
+}
 
 export interface ReimbursementsScreenProps {
-  groupId: string;
-  /** Drives the sub-groups toggle: a group with none has nothing to include. */
-  hasSubgroups: boolean;
+  /**
+   * The group's balances, loaded once by the group screen: the plan is
+   * derived from them here, so the two can never disagree about what is
+   * owed (`docs/specs/reimbursements.md`).
+   */
+  balances: UseBalancesResult;
   /** Who can still be a party to a transfer here — a former member cannot. */
   members: readonly GroupMember[];
   viewerId: string | null;
   /** Itself or an ancestor archived: the plan is readable, nothing is recordable. */
   readOnly: boolean;
   /** Record the suggested payment — opens the transfer form, pre-filled. */
-  onRecord: (suggestion: SuggestedReimbursement) => void;
+  onRecord: (suggestion: Suggestion) => void;
   onClose: () => void;
 }
 
+/** A balance's party, named from the group's members where it still can be. */
+function partyOf(
+  userId: string,
+  byId: ReadonlyMap<string, GroupMember>,
+): Suggestion['from'] {
+  const member = byId.get(userId);
+  // Someone who left the group can still hold an unsettled balance, exactly
+  // as in the per-member list, which has no membership left to read a name
+  // from either.
+  return {
+    id: userId,
+    name: member?.name ?? 'Former member',
+    picture: member?.picture ?? null,
+  };
+}
+
 /** "X pays Y", from the viewer's point of view rather than in bare ids. */
-function sentence(suggestion: SuggestedReimbursement, viewerId: string | null): string {
+function sentence(suggestion: Suggestion, viewerId: string | null): string {
   if (suggestion.from.id === viewerId) {
     return `You pay ${suggestion.to.name}`;
   }
@@ -48,7 +68,7 @@ function sentence(suggestion: SuggestedReimbursement, viewerId: string | null): 
  * with no explanation would read as a bug; this is the line shown instead.
  */
 function blockedReason(
-  suggestion: SuggestedReimbursement,
+  suggestion: Suggestion,
   readOnly: boolean,
   memberIds: ReadonlySet<string>,
 ): string | null {
@@ -62,19 +82,28 @@ function blockedReason(
   return null;
 }
 
+/** Owed first, owing next, settled last — and stable between reads. */
+function forDisplay(balances: readonly Balance[]): Balance[] {
+  return [...balances].sort(
+    (a, b) =>
+      Number(a.amountCents === 0) - Number(b.amountCents === 0) ||
+      b.amountCents - a.amountCents ||
+      (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0),
+  );
+}
+
 /**
- * Who should pay whom to clear the group, and where everyone stands
- * (`docs/specs/reimbursements.md`) — the answer first, its justification
- * below it, collapsed.
+ * Who should pay whom to clear **this group**, and where everyone stands
+ * (`docs/specs/reimbursements.md`) — the answer first, the balances it comes
+ * from below it.
  *
- * The plan is built from net positions, so a chain of debts becomes one
+ * The plan is built from net balances, so a chain of debts becomes one
  * payment instead of one per pair; tapping a payment records it as an
  * ordinary transfer, which is the only thing that actually settles anything
  * in this product.
  */
 export function ReimbursementsScreen({
-  groupId,
-  hasSubgroups,
+  balances,
   members,
   viewerId,
   readOnly,
@@ -82,44 +111,29 @@ export function ReimbursementsScreen({
   onClose,
 }: ReimbursementsScreenProps) {
   const theme = useTheme();
-  // Sub-groups are included by default: it is the scope that actually
-  // minimises payments, and it matches the rolled-up balance the group
-  // screen already shows.
-  const [scope, setScope] = useState<ReimbursementScope>(hasSubgroups ? 'subtree' : 'group');
-  const { status, positions, reimbursements, refresh } = useReimbursements(groupId, scope);
-  const memberIds = new Set(members.map((member) => member.id));
+  const { status, balances: loaded, refresh } = balances;
+  const byId = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
+  const memberIds = useMemo(() => new Set(members.map((member) => member.id)), [members]);
 
-  // The viewer's own payments first — what *they* have to do is the reason
-  // they opened this. Otherwise the server's canonical order is kept, so
-  // everyone reads the same plan.
-  const ordered = [...reimbursements].sort(
-    (a, b) => Number(involves(b, viewerId)) - Number(involves(a, viewerId)),
+  const suggestions = useMemo(
+    () =>
+      planReimbursements(loaded)
+        .map((payment) => ({
+          from: partyOf(payment.fromUserId, byId),
+          to: partyOf(payment.toUserId, byId),
+          amountCents: payment.amountCents,
+        }))
+        // The viewer's own payments first — what *they* have to do is the
+        // reason they opened this. The rest keep the planner's own
+        // canonical order, so everyone reads the same plan.
+        .sort((a, b) => Number(involves(b, viewerId)) - Number(involves(a, viewerId))),
+    [loaded, byId, viewerId],
   );
-  const settled = positions.every((position) => position.amountCents === 0);
+  const settled = loaded.every((balance) => balance.amountCents === 0);
 
   return (
     <ThemedView style={styles.sheet}>
       <ThemedText type="subtitle">Reimbursements</ThemedText>
-
-      {hasSubgroups ? (
-        <View style={styles.toggleRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: scope === 'subtree' }}
-            onPress={() => setScope((current) => (current === 'subtree' ? 'group' : 'subtree'))}
-            style={[
-              styles.toggle,
-              { borderColor: theme.text },
-              scope === 'subtree' && { backgroundColor: theme.text },
-            ]}>
-            <ThemedText
-              type="small"
-              style={scope === 'subtree' ? { color: theme.background } : undefined}>
-              Include sub-groups
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
@@ -145,7 +159,7 @@ export function ReimbursementsScreen({
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.section}>
             <ThemedText type="smallBold">Suggested reimbursements</ThemedText>
-            {ordered.map((suggestion) => (
+            {suggestions.map((suggestion) => (
               <SuggestionRow
                 key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
                 suggestion={suggestion}
@@ -155,19 +169,20 @@ export function ReimbursementsScreen({
               />
             ))}
             <ThemedText type="small" themeColor="textSecondary">
-              {ordered.length === 1
+              {suggestions.length === 1
                 ? 'One payment clears everything.'
-                : `${ordered.length} payments clear everything.`}
+                : `${suggestions.length} payments clear everything.`}
             </ThemedText>
           </View>
 
           <View style={styles.section}>
             <ThemedText type="smallBold">Where everyone stands</ThemedText>
-            {positions.map((position) => (
-              <PositionRow
-                key={position.user.id}
-                position={position}
-                isViewer={position.user.id === viewerId}
+            {forDisplay(loaded).map((balance) => (
+              <BalanceRow
+                key={balance.userId}
+                party={partyOf(balance.userId, byId)}
+                amountCents={balance.amountCents}
+                isViewer={balance.userId === viewerId}
               />
             ))}
           </View>
@@ -181,7 +196,7 @@ export function ReimbursementsScreen({
   );
 }
 
-function involves(suggestion: SuggestedReimbursement, viewerId: string | null): boolean {
+function involves(suggestion: Suggestion, viewerId: string | null): boolean {
   return suggestion.from.id === viewerId || suggestion.to.id === viewerId;
 }
 
@@ -191,7 +206,7 @@ function SuggestionRow({
   blocked,
   onPress,
 }: {
-  suggestion: SuggestedReimbursement;
+  suggestion: Suggestion;
   viewerId: string | null;
   /** Why it cannot be recorded, or `null` when tapping records it. */
   blocked: string | null;
@@ -224,56 +239,30 @@ function SuggestionRow({
   );
 }
 
-/**
- * One person's net position, expandable to the groups it comes from. The
- * breakdown starts collapsed: the plan above is the answer, this is only the
- * justification, and showing every group at once would bury the first.
- */
-function PositionRow({ position, isViewer }: { position: NetPosition; isViewer: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const name = isViewer ? 'You' : position.user.name;
+/** One person's balance in the group, worded as the balance list words it. */
+function BalanceRow({
+  party,
+  amountCents,
+  isViewer,
+}: {
+  party: Suggestion['from'];
+  amountCents: number;
+  isViewer: boolean;
+}) {
   const amount =
-    position.amountCents === 0
+    amountCents === 0
       ? 'settled up'
-      : `${position.amountCents > 0 ? '+' : '−'}${centsToText(Math.abs(position.amountCents))}`;
-  // A single source says nothing the position itself does not.
-  const explainable = position.sources.length > 1;
+      : `${amountCents > 0 ? '+' : '−'}${centsToText(Math.abs(amountCents))}`;
 
   return (
-    <View>
-      <Pressable
-        accessibilityRole={explainable ? 'button' : 'text'}
-        accessibilityLabel={`${name}, ${amount}`}
-        accessibilityState={explainable ? { expanded } : undefined}
-        disabled={!explainable}
-        onPress={() => setExpanded((shown) => !shown)}
-        style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-        <Avatar name={position.user.name} picture={position.user.picture} size={32} />
-        <ThemedText style={styles.name} numberOfLines={1}>
-          {name}
-        </ThemedText>
-        {explainable ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {expanded ? 'Hide' : 'Details'}
-          </ThemedText>
-        ) : null}
-        <ThemedText type="smallBold" themeColor={balanceTone(position.amountCents)}>
-          {amount}
-        </ThemedText>
-      </Pressable>
-
-      {expanded
-        ? position.sources.map((source) => (
-            <View key={source.groupId} style={styles.sourceRow}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.name} numberOfLines={1}>
-                {source.groupName}
-              </ThemedText>
-              <ThemedText type="small" themeColor={balanceTone(source.amountCents)}>
-                {`${source.amountCents > 0 ? '+' : '−'}${centsToText(Math.abs(source.amountCents))}`}
-              </ThemedText>
-            </View>
-          ))
-        : null}
+    <View style={styles.row}>
+      <Avatar name={party.name} picture={party.picture} size={32} />
+      <ThemedText style={styles.name} numberOfLines={1}>
+        {isViewer ? 'You' : party.name}
+      </ThemedText>
+      <ThemedText type="smallBold" themeColor={balanceTone(amountCents)}>
+        {amount}
+      </ThemedText>
     </View>
   );
 }
@@ -286,17 +275,6 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.three,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  toggle: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.four,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   body: {
     gap: Spacing.four,
@@ -334,13 +312,6 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-  },
-  sourceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingLeft: Spacing.three + 32,
-    paddingVertical: Spacing.one,
   },
   pressed: {
     opacity: 0.6,

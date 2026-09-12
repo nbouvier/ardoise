@@ -1,6 +1,8 @@
-import type { ReimbursementPlanResponse, ReimbursementScope } from '@splitcount/shared';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { Balance } from '@splitcount/shared';
+import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+
+import type { UseBalancesResult } from '@/features/transactions/use-balances';
 
 import { ReimbursementsScreen } from './reimbursements-screen';
 
@@ -13,60 +15,22 @@ const members = [
   { ...alan, role: 'member' as const },
 ];
 
-const mockFetchReimbursements = jest.fn<
-  (groupId: string, scope: ReimbursementScope) => Promise<ReimbursementPlanResponse>
->();
-// Stable across renders, like the real memoised auth context: a fresh object
-// per call would re-run the hook's effect forever.
-const mockAuthContext = { authorizedFetch: jest.fn() };
+const balances = (entries: Record<string, number>): Balance[] =>
+  Object.entries(entries).map(([userId, amountCents]) => ({ userId, amountCents }));
 
-jest.mock('@/features/auth/use-auth', () => ({
-  useAuth: () => mockAuthContext,
-}));
+/** Ada owes Alan 10.00, Grace came out even — the netted-chain case. */
+const chain = balances({ alan: 1000, grace: 0, ada: -1000 });
 
-jest.mock('@/lib/api/transactions', () => ({
-  fetchReimbursements: (_fetcher: unknown, groupId: string, scope: ReimbursementScope) =>
-    mockFetchReimbursements(groupId, scope),
-}));
-
-/** Ada owes Alan 10.00, Grace came out even — the netted-chain plan. */
-const chainPlan: ReimbursementPlanResponse = {
-  scope: 'group',
-  positions: [
-    { user: alan, amountCents: 1000, sources: [] },
-    { user: grace, amountCents: 0, sources: [] },
-    { user: ada, amountCents: -1000, sources: [] },
-  ],
-  reimbursements: [{ from: ada, to: alan, amountCents: 1000 }],
-};
-
-const settledPlan: ReimbursementPlanResponse = {
-  scope: 'group',
-  positions: members.map((member) => ({
-    user: { id: member.id, name: member.name, picture: null },
-    amountCents: 0,
-    sources: [],
-  })),
-  reimbursements: [],
-};
-
-beforeEach(() => {
-  mockFetchReimbursements.mockReset();
-});
+function result(overrides: Partial<UseBalancesResult> = {}): UseBalancesResult {
+  return { status: 'ready', balances: chain, refresh: jest.fn(), ...overrides };
+}
 
 async function renderScreen(
-  plan: ReimbursementPlanResponse | Error,
   overrides: Partial<Parameters<typeof ReimbursementsScreen>[0]> = {},
 ) {
-  if (plan instanceof Error) {
-    mockFetchReimbursements.mockRejectedValue(plan);
-  } else {
-    mockFetchReimbursements.mockResolvedValue(plan);
-  }
   return render(
     <ReimbursementsScreen
-      groupId="group-1"
-      hasSubgroups={false}
+      balances={result()}
       members={members}
       viewerId={ada.id}
       readOnly={false}
@@ -78,147 +42,113 @@ async function renderScreen(
 }
 
 describe('ReimbursementsScreen', () => {
-  it('states each payment from the viewer’s point of view', async () => {
-    await renderScreen(chainPlan);
+  it('nets a chain of debts into one payment, worded for the viewer', async () => {
+    await renderScreen();
 
-    expect(await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
+    // Grace is at zero overall, so she is not asked to pay or be paid.
+    expect(screen.getByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
     expect(screen.getByText('One payment clears everything.')).toBeTruthy();
+    expect(screen.queryByLabelText(/Grace Hopper pays/)).toBeNull();
   });
 
   it('words a payment between two other people by name', async () => {
-    await renderScreen(chainPlan, { viewerId: grace.id });
+    await renderScreen({ viewerId: grace.id });
 
     expect(
-      await screen.findByRole('button', { name: 'Ada Lovelace pays Alan Turing 10.00' }),
+      screen.getByRole('button', { name: 'Ada Lovelace pays Alan Turing 10.00' }),
     ).toBeTruthy();
   });
 
   it('puts the viewer’s own payments first', async () => {
-    await renderScreen(
-      {
-        scope: 'group',
-        positions: chainPlan.positions,
-        reimbursements: [
-          { from: grace, to: alan, amountCents: 5000 },
-          { from: ada, to: alan, amountCents: 1000 },
-        ],
-      },
-      { viewerId: ada.id },
-    );
+    await renderScreen({
+      balances: result({ balances: balances({ alan: 6000, ada: -1000, grace: -5000 }) }),
+    });
 
-    const buttons = await screen.findAllByRole('button');
-    const labels = buttons.map((button) => button.props.accessibilityLabel);
-    expect(labels.filter((label: unknown) => typeof label === 'string' && label.includes('pay'))).toEqual([
-      'You pay Alan Turing 10.00',
-      'Grace Hopper pays Alan Turing 50.00',
-    ]);
+    const labels = screen
+      .getAllByRole('button')
+      .map((button) => button.props.accessibilityLabel)
+      .filter(
+        (label: unknown): label is string =>
+          typeof label === 'string' && label.includes('pay'),
+      );
+    expect(labels).toEqual(['You pay Alan Turing 10.00', 'Grace Hopper pays Alan Turing 50.00']);
   });
 
   it('records a suggested payment when it is tapped', async () => {
     const onRecord = jest.fn();
-    await renderScreen(chainPlan, { onRecord });
+    await renderScreen({ onRecord });
 
-    await fireEvent.press(await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'You pay Alan Turing 10.00' }));
 
     expect(onRecord).toHaveBeenCalledWith({ from: ada, to: alan, amountCents: 1000 });
   });
 
   it('explains, rather than silently ignoring, a payment it cannot record', async () => {
     const onRecord = jest.fn();
-    await renderScreen(chainPlan, { readOnly: true, onRecord });
+    await renderScreen({ readOnly: true, onRecord });
 
-    const row = await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' });
-    await fireEvent.press(row);
+    await fireEvent.press(screen.getByRole('button', { name: 'You pay Alan Turing 10.00' }));
 
     expect(onRecord).not.toHaveBeenCalled();
     expect(screen.getByText('Reopen the group to record it.')).toBeTruthy();
   });
 
-  it('says a former member’s payment cannot be recorded here', async () => {
-    await renderScreen(chainPlan, { members: [members[0]!, members[1]!] });
+  it('names a departed party as the balance list does, and refuses to record them', async () => {
+    await renderScreen({ members: [members[0]!, members[1]!] });
 
     expect(
-      await screen.findByText('Alan Turing has left this group, so this can’t be recorded here.'),
+      screen.getByText('Former member has left this group, so this can’t be recorded here.'),
     ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'You pay Former member 10.00' }).props
+        .accessibilityState,
+    ).toMatchObject({ disabled: true });
   });
 
   it('reads as settled when nobody owes anybody', async () => {
-    await renderScreen(settledPlan);
+    await renderScreen({
+      balances: result({ balances: balances({ ada: 0, grace: 0, alan: 0 }) }),
+    });
 
-    expect(await screen.findByText('You’re all settled up')).toBeTruthy();
+    expect(screen.getByText('You’re all settled up')).toBeTruthy();
     expect(screen.queryByText('Suggested reimbursements')).toBeNull();
   });
 
   it('shows where everyone stands, the viewer as “You”', async () => {
-    await renderScreen(chainPlan);
+    await renderScreen();
 
-    expect(await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
     expect(screen.getByText('−10.00')).toBeTruthy();
     expect(screen.getByText('+10.00')).toBeTruthy();
     expect(screen.getByText('settled up')).toBeTruthy();
   });
 
-  it('keeps a position’s per-group breakdown collapsed until it is asked for', async () => {
-    await renderScreen({
-      scope: 'subtree',
-      positions: [
-        { user: grace, amountCents: 1000, sources: [] },
-        {
-          user: ada,
-          amountCents: -1000,
-          sources: [
-            { groupId: 'corsica', groupName: 'Corsica', amountCents: -1500 },
-            { groupId: 'group-1', groupName: 'Trip', amountCents: 500 },
-          ],
-        },
-      ],
-      reimbursements: [{ from: ada, to: grace, amountCents: 1000 }],
-    });
+  it('covers this group only, with no sub-group scope to choose', async () => {
+    await renderScreen();
 
-    const details = await screen.findByRole('button', { name: 'You, −10.00' });
-    expect(screen.queryByText('Corsica')).toBeNull();
-
-    await fireEvent.press(details);
-
-    expect(screen.getByText('Corsica')).toBeTruthy();
-    expect(screen.getByText('−15.00')).toBeTruthy();
-    expect(screen.getByText('Trip')).toBeTruthy();
-    expect(screen.getByText('+5.00')).toBeTruthy();
-  });
-
-  it('includes sub-groups by default, and can be narrowed to the group alone', async () => {
-    await renderScreen(chainPlan, { hasSubgroups: true });
-
-    expect(await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
-    expect(mockFetchReimbursements).toHaveBeenLastCalledWith('group-1', 'subtree');
-
-    await fireEvent.press(screen.getByRole('button', { name: 'Include sub-groups' }));
-
-    expect(mockFetchReimbursements).toHaveBeenLastCalledWith('group-1', 'group');
-  });
-
-  it('shows no sub-groups toggle for a group without any', async () => {
-    await renderScreen(chainPlan);
-
-    await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' });
     expect(screen.queryByRole('button', { name: 'Include sub-groups' })).toBeNull();
-    expect(mockFetchReimbursements).toHaveBeenCalledWith('group-1', 'group');
+  });
+
+  it('waits on the balances it derives from rather than guessing', async () => {
+    await renderScreen({ balances: result({ status: 'loading', balances: [] }) });
+
+    expect(screen.getByTestId('reimbursements-loading')).toBeTruthy();
+    expect(screen.queryByText('You’re all settled up')).toBeNull();
   });
 
   it('offers a retry on failure, and never reads as settled', async () => {
-    await renderScreen(new Error('offline'));
+    const refresh = jest.fn();
+    await renderScreen({ balances: result({ status: 'error', balances: [], refresh }) });
 
     expect(
-      await screen.findByText(
+      screen.getByText(
         'We couldn’t work out who owes what. Check your connection and try again.',
       ),
     ).toBeTruthy();
     expect(screen.queryByText('You’re all settled up')).toBeNull();
 
-    mockFetchReimbursements.mockResolvedValue(chainPlan);
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(await screen.findByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
+    expect(refresh).toHaveBeenCalled();
   });
 });

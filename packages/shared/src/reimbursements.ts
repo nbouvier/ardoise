@@ -1,80 +1,115 @@
-import { z } from 'zod';
+import type { Balance } from './transactions.js';
 
-import { friendSummarySchema } from './friends.js';
+/** One suggested payment: `fromUserId` pays `toUserId` that amount. */
+export interface SuggestedReimbursement {
+  fromUserId: string;
+  toUserId: string;
+  amountCents: number;
+}
+
+/** A debtor's or a creditor's side of the plan, as it is drawn down. */
+interface Party {
+  userId: string;
+  remainingCents: number;
+}
 
 /**
- * `GET /groups/:groupId/transactions/reimbursements?scope=`. `group` (the
- * default) is the group's own transactions only. `subtree` adds every
- * descendant at any depth — **including ones the caller has not joined**,
- * unlike every other sub-tree scope in this product. A plan that ignored
- * those debts would not be minimal over the trip and would contradict what
- * the sub-group's own members see; the disclosure that buys this is
- * deliberate and bounded (`docs/specs/reimbursements.md`).
+ * Largest remaining first, the user id breaking ties — so a plan never
+ * depends on the order the balances happened to arrive in.
  */
-export const reimbursementScopeSchema = z.enum(['group', 'subtree']);
-export type ReimbursementScope = z.infer<typeof reimbursementScopeSchema>;
+function byAmountThenId(parties: readonly Party[]): Party[] {
+  return [...parties].sort(
+    (a, b) =>
+      b.remainingCents - a.remainingCents ||
+      (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0),
+  );
+}
 
 /**
- * Where one person's net position comes from: their balance in one group of
- * the scope. The sources of a position always sum back to it, which is what
- * makes the plan explainable — see `NetPosition`.
- */
-export const reimbursementSourceSchema = z.object({
-  groupId: z.uuid(),
-  groupName: z.string().min(1),
-  /** Positive: that group owes them. Negative: they owe it. Never zero. */
-  amountCents: z.number().int(),
-});
-export type ReimbursementSource = z.infer<typeof reimbursementSourceSchema>;
-
-/**
- * One person's balance over the whole scope — the plain sum of their balance
- * in each group of it, by the same rule a group balance uses
- * (`docs/specs/balances.md`). Positive: they are owed. Negative: they owe.
+ * The payments that clear a group — "who pays whom" — derived from its
+ * balances and nothing else (`docs/specs/reimbursements.md`).
  *
- * Every current member of the group appears, including at zero, plus anyone
- * who left with something still owed — exactly like a group's balance list.
- * The positions always sum to zero, since every group's balances do.
- */
-export const netPositionSchema = z.object({
-  user: friendSummarySchema,
-  amountCents: z.number().int(),
-  /** Largest magnitude first; a group contributing nothing is absent. */
-  sources: z.array(reimbursementSourceSchema),
-});
-export type NetPosition = z.infer<typeof netPositionSchema>;
-
-/**
- * One suggested payment: `from` pays `to` that amount. Derived from the net
- * positions and nothing else — which is why a chain of debts collapses into
- * a single payment instead of one payment per pair.
+ * Netting is the whole point: if Alice owes Bob 10 and Bob owes Carole 10,
+ * this is one payment (Alice pays Carole 10), where reimbursing each recorded
+ * debt pairwise would be two. Anyone at exactly zero is left out.
  *
- * A suggestion carries **no source group**: a payment produced by netting
- * does not belong to one, and claiming one would be a made-up fact. Only
- * positions decompose exactly.
+ * Built in two passes: a debtor whose debt *equals* a creditor's credit is
+ * paired off first — one payment settling both sides at once, which no
+ * further netting could improve on — then, repeatedly, the largest remaining
+ * debtor pays the largest remaining creditor the smaller of the two amounts.
+ * That leaves **at most one payment fewer than the number of people with a
+ * non-zero balance**, and usually fewer.
+ *
+ * It is *not* a proven minimum: finding the provably smallest set of payments
+ * is NP-hard, and the product promises a short, stable, explainable plan
+ * rather than an optimal one.
+ *
+ * A group's balances always sum to zero, so the plan always clears them
+ * exactly. Should they somehow not, it stops when either side runs out
+ * rather than inventing a payment; nothing here can produce a payment of
+ * zero or a negative one.
+ *
+ * Pure arithmetic over figures the client already has, like `splitByShares`:
+ * the plan is derived wherever the balances are read, and there is no second
+ * server-side notion of it that could disagree.
+ *
+ * The result is in canonical order (largest payment first, ties on the
+ * parties' ids), so two members reading the same group see the same plan.
  */
-export const suggestedReimbursementSchema = z.object({
-  from: friendSummarySchema,
-  to: friendSummarySchema,
-  amountCents: z.number().int().positive(),
-});
-export type SuggestedReimbursement = z.infer<typeof suggestedReimbursementSchema>;
+export function planReimbursements(balances: readonly Balance[]): SuggestedReimbursement[] {
+  const debtors: Party[] = [];
+  const creditors: Party[] = [];
+  for (const { userId, amountCents } of balances) {
+    if (amountCents < 0) {
+      debtors.push({ userId, remainingCents: -amountCents });
+    } else if (amountCents > 0) {
+      creditors.push({ userId, remainingCents: amountCents });
+    }
+  }
 
-/**
- * The plan and the positions it came from travel together: the plan is
- * unreadable without them, and two calls would let the two disagree.
- * Nothing here is stored — both are derived on every read.
- */
-export const reimbursementPlanResponseSchema = z.object({
-  /** Echoed back, so a client can tell which scope it is looking at. */
-  scope: reimbursementScopeSchema,
-  /** Largest amount first, then deterministic. Sums to zero. */
-  positions: z.array(netPositionSchema),
-  /**
-   * Canonical order: largest payment first, ties broken on the parties' ids
-   * so every viewer sees the same plan. At most one payment fewer than the
-   * number of people with a non-zero position.
-   */
-  reimbursements: z.array(suggestedReimbursementSchema),
-});
-export type ReimbursementPlanResponse = z.infer<typeof reimbursementPlanResponseSchema>;
+  const plan: SuggestedReimbursement[] = [];
+  const pay = (debtor: Party, creditor: Party) => {
+    const amountCents = Math.min(debtor.remainingCents, creditor.remainingCents);
+    debtor.remainingCents -= amountCents;
+    creditor.remainingCents -= amountCents;
+    plan.push({ fromUserId: debtor.userId, toUserId: creditor.userId, amountCents });
+  };
+
+  // Exact matches first. A creditor drawn down to zero can never equal a
+  // debtor's remaining debt, which is always positive here, so no separate
+  // "already used" bookkeeping is needed.
+  for (const debtor of byAmountThenId(debtors)) {
+    if (debtor.remainingCents === 0) {
+      continue;
+    }
+    const match = byAmountThenId(creditors).find(
+      (creditor) => creditor.remainingCents === debtor.remainingCents,
+    );
+    if (match) {
+      pay(debtor, match);
+    }
+  }
+
+  // Then largest against largest. Re-sorting each round is what keeps that
+  // true: paying part of a debt changes who the largest debtor is. The
+  // parties are one group's members, so this stays small.
+  for (;;) {
+    const [debtor] = byAmountThenId(debtors);
+    const [creditor] = byAmountThenId(creditors);
+    if (!debtor || !creditor || debtor.remainingCents === 0 || creditor.remainingCents === 0) {
+      break;
+    }
+    pay(debtor, creditor);
+  }
+
+  return plan.sort(
+    (a, b) =>
+      b.amountCents - a.amountCents ||
+      compareIds(a.fromUserId, b.fromUserId) ||
+      compareIds(a.toUserId, b.toUserId),
+  );
+}
+
+function compareIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}

@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { planReimbursements, type PlannedReimbursement } from './reimbursements.js';
+import type { Balance } from './transactions.js';
 
-/** The positions a plan leaves behind — all zero, for a correct plan. */
+import { planReimbursements, type SuggestedReimbursement } from './reimbursements.js';
+
+const balances = (entries: Record<string, number>): Balance[] =>
+  Object.entries(entries).map(([userId, amountCents]) => ({ userId, amountCents }));
+
+/** The balances a plan leaves behind — all zero, for a correct plan. */
 function applied(
-  positions: ReadonlyMap<string, number>,
-  plan: readonly PlannedReimbursement[],
+  input: readonly Balance[],
+  plan: readonly SuggestedReimbursement[],
 ): Map<string, number> {
-  const remaining = new Map(positions);
+  const remaining = new Map(input.map(({ userId, amountCents }) => [userId, amountCents]));
   const add = (userId: string, deltaCents: number) => {
     remaining.set(userId, (remaining.get(userId) ?? 0) + deltaCents);
   };
@@ -19,12 +24,12 @@ function applied(
   return remaining;
 }
 
-function expectClears(positions: ReadonlyMap<string, number>): PlannedReimbursement[] {
-  const plan = planReimbursements(positions);
-  for (const [userId, amountCents] of applied(positions, plan)) {
+function expectClears(input: readonly Balance[]): SuggestedReimbursement[] {
+  const plan = planReimbursements(input);
+  for (const [userId, amountCents] of applied(input, plan)) {
     expect(amountCents, `${userId} is not settled by the plan`).toBe(0);
   }
-  const unsettled = [...positions.values()].filter((amount) => amount !== 0).length;
+  const unsettled = input.filter((balance) => balance.amountCents !== 0).length;
   expect(plan.length).toBeLessThanOrEqual(Math.max(unsettled - 1, 0));
   for (const payment of plan) {
     expect(payment.amountCents).toBeGreaterThan(0);
@@ -35,7 +40,7 @@ function expectClears(positions: ReadonlyMap<string, number>): PlannedReimbursem
 
 /**
  * A deterministic pseudo-random generator: the properties below are checked
- * over many generated position sets, and a failure has to be reproducible.
+ * over many generated balance sets, and a failure has to be reproducible.
  */
 function generator(seed: number): () => number {
   let state = seed;
@@ -45,26 +50,26 @@ function generator(seed: number): () => number {
   };
 }
 
-/** Positions summing to zero, the way a set of group balances always does. */
-function generatePositions(random: () => number, people: number): Map<string, number> {
-  const positions = new Map<string, number>();
+/** Balances summing to zero, the way a group's always do. */
+function generateBalances(random: () => number, people: number): Balance[] {
+  const generated: Balance[] = [];
   let total = 0;
   for (let index = 0; index < people - 1; index += 1) {
-    const amount = Math.round((random() - 0.5) * 20_000);
-    positions.set(`user-${index}`, amount);
-    total += amount;
+    const amountCents = Math.round((random() - 0.5) * 20_000);
+    generated.push({ userId: `user-${index}`, amountCents });
+    total += amountCents;
   }
-  positions.set(`user-${people - 1}`, -total);
-  return positions;
+  generated.push({ userId: `user-${people - 1}`, amountCents: -total });
+  return generated;
 }
 
 describe('planReimbursements', () => {
   it('has nothing to suggest when everyone is settled', () => {
-    expect(planReimbursements(new Map([['alice', 0], ['bob', 0]]))).toEqual([]);
+    expect(planReimbursements(balances({ alice: 0, bob: 0 }))).toEqual([]);
   });
 
   it('suggests the single payment that clears a pair', () => {
-    const plan = expectClears(new Map([['alice', -2500], ['bob', 2500]]));
+    const plan = expectClears(balances({ alice: -2500, bob: 2500 }));
 
     expect(plan).toEqual([{ fromUserId: 'alice', toUserId: 'bob', amountCents: 2500 }]);
   });
@@ -72,10 +77,8 @@ describe('planReimbursements', () => {
   it('nets a chain of debts into one payment', () => {
     // Alice owes Bob 10, Bob owes Carole 10: Bob is at zero overall, so he
     // is not in the plan at all — this is the reason the plan is built from
-    // net positions instead of from who owes whom.
-    const plan = expectClears(
-      new Map([['alice', -1000], ['bob', 0], ['carole', 1000]]),
-    );
+    // net balances instead of from who owes whom.
+    const plan = expectClears(balances({ alice: -1000, bob: 0, carole: 1000 }));
 
     expect(plan).toEqual([{ fromUserId: 'alice', toUserId: 'carole', amountCents: 1000 }]);
   });
@@ -84,12 +87,7 @@ describe('planReimbursements', () => {
     // Greedy largest-against-largest alone would send Bob's 3000 to Carole
     // and leave two more payments behind; the exact match settles it in one.
     const plan = expectClears(
-      new Map([
-        ['alice', -3000],
-        ['bob', -1000],
-        ['carole', 3000],
-        ['dan', 1000],
-      ]),
+      balances({ alice: -3000, bob: -1000, carole: 3000, dan: 1000 }),
     );
 
     expect(plan).toEqual([
@@ -99,9 +97,7 @@ describe('planReimbursements', () => {
   });
 
   it('splits one debtor across several creditors when nothing matches', () => {
-    const plan = expectClears(
-      new Map([['alice', -5000], ['bob', 3000], ['carole', 2000]]),
-    );
+    const plan = expectClears(balances({ alice: -5000, bob: 3000, carole: 2000 }));
 
     expect(plan).toEqual([
       { fromUserId: 'alice', toUserId: 'bob', amountCents: 3000 },
@@ -110,32 +106,24 @@ describe('planReimbursements', () => {
   });
 
   it('leaves out everyone already at zero', () => {
-    const plan = expectClears(
-      new Map([['alice', -400], ['bob', 400], ['carole', 0], ['dan', 0]]),
-    );
+    const plan = expectClears(balances({ alice: -400, bob: 400, carole: 0, dan: 0 }));
 
     expect(plan.flatMap((payment) => [payment.fromUserId, payment.toUserId])).not.toContain(
       'carole',
     );
   });
 
-  it('does not depend on the order the positions arrive in', () => {
-    const entries: [string, number][] = [
-      ['alice', -1500],
-      ['bob', 2500],
-      ['carole', -3000],
-      ['dan', 2000],
-    ];
-    const reversed = [...entries].reverse();
+  it('does not depend on the order the balances arrive in', () => {
+    const input = balances({ alice: -1500, bob: 2500, carole: -3000, dan: 2000 });
 
-    expect(planReimbursements(new Map(reversed))).toEqual(planReimbursements(new Map(entries)));
+    expect(planReimbursements([...input].reverse())).toEqual(planReimbursements(input));
   });
 
-  it('clears any set of positions that sums to zero, within the payment bound', () => {
+  it('clears any set of balances that sums to zero, within the payment bound', () => {
     const random = generator(20_260_912);
     for (let round = 0; round < 200; round += 1) {
       const people = 2 + (round % 9);
-      expectClears(generatePositions(random, people));
+      expectClears(generateBalances(random, people));
     }
   });
 });

@@ -2,7 +2,6 @@ import type {
   Balance,
   FriendSummary,
   GroupDetail,
-  ReimbursementPlanResponse,
   SubgroupSummary,
   Transaction,
   TransactionsListResponse,
@@ -90,20 +89,9 @@ const balances: Balance[] = [
   { userId: grace.id, amountCents: -2125 },
 ];
 
-/** Grace owes Ada the whole of the group's one expense. */
-const plan: ReimbursementPlanResponse = {
-  scope: 'group',
-  positions: [
-    { user: ada, amountCents: 2125, sources: [] },
-    { user: grace, amountCents: -2125, sources: [] },
-  ],
-  reimbursements: [{ from: grace, to: ada, amountCents: 2125 }],
-};
-
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
-const mockFetchReimbursements = jest.fn<() => Promise<ReimbursementPlanResponse>>();
 const mockCreateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockPush = jest.fn();
@@ -133,7 +121,6 @@ jest.mock('@/lib/api/groups', () => ({
 jest.mock('@/lib/api/transactions', () => ({
   fetchTransactions: () => mockFetchTransactions(),
   fetchBalances: () => mockFetchBalances(),
-  fetchReimbursements: () => mockFetchReimbursements(),
   createTransaction: (...args: unknown[]) => mockCreateTransaction(...args),
   updateTransaction: jest.fn(),
   deleteTransaction: jest.fn(),
@@ -155,9 +142,6 @@ beforeEach(() => {
     excludedSubgroupCount: 0,
   });
   mockFetchBalances.mockReset().mockResolvedValue([]);
-  mockFetchReimbursements
-    .mockReset()
-    .mockResolvedValue({ scope: 'group', positions: [], reimbursements: [] });
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
   mockJoinGroup.mockReset().mockResolvedValue(trip);
   mockPush.mockReset();
@@ -220,7 +204,7 @@ describe('GroupScreen', () => {
   });
 
   it('opens the reimbursement plan from the header', async () => {
-    mockFetchReimbursements.mockResolvedValue(plan);
+    mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -233,7 +217,7 @@ describe('GroupScreen', () => {
   });
 
   it('pre-fills a transfer from a suggested reimbursement', async () => {
-    mockFetchReimbursements.mockResolvedValue(plan);
+    mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -269,7 +253,7 @@ describe('GroupScreen', () => {
   });
 
   it('returns to the plan once the reimbursement is recorded', async () => {
-    mockFetchReimbursements.mockResolvedValue(plan);
+    mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -278,15 +262,12 @@ describe('GroupScreen', () => {
       await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
     );
 
-    // Nothing is owed any more, so the plan it returns to reads as settled.
-    mockFetchReimbursements.mockResolvedValue({
-      scope: 'group',
-      positions: [
-        { user: ada, amountCents: 0, sources: [] },
-        { user: grace, amountCents: 0, sources: [] },
-      ],
-      reimbursements: [],
-    });
+    // Saving refreshes the balances the plan is derived from; nothing is
+    // owed any more, so the plan it returns to reads as settled.
+    mockFetchBalances.mockResolvedValue([
+      { userId: ada.id, amountCents: 0 },
+      { userId: grace.id, amountCents: 0 },
+    ]);
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     // The plan's own settled state, not the group screen's balance line —
@@ -379,8 +360,7 @@ describe('GroupScreen', () => {
 
   it('answers "where do I stand" on the screen itself, without opening the details', async () => {
     // Ada is owed 21.25 — said in words, not left to a leading "+". Sourced
-    // from the group's own viewerBalanceCents (already rolled up over any
-    // sub-groups), not the per-member balances list.
+    // from the group's own viewerBalanceCents, not the per-member list.
     mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: 2125 });
     mockFetchBalances.mockResolvedValue(balances);
 
@@ -474,7 +454,7 @@ describe('GroupScreen', () => {
       expect(mockJoinGroup).not.toHaveBeenCalled();
     });
 
-    it('shows a joined sub-group’s own rolled-up balance', async () => {
+    it('shows a joined sub-group’s own balance', async () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);

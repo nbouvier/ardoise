@@ -3,7 +3,6 @@ import type {
   GroupDetail,
   GroupMember,
   SubgroupSummary,
-  SuggestedReimbursement,
   Transaction,
 } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
@@ -26,7 +25,10 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { friendsChanged } from '@/features/friends/friends-changed';
-import { ReimbursementsScreen } from '@/features/reimbursements/reimbursements-screen';
+import {
+  ReimbursementsScreen,
+  type Suggestion,
+} from '@/features/reimbursements/reimbursements-screen';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
 import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
@@ -277,7 +279,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
    * (`docs/specs/reimbursements.md`). Saving or cancelling returns to the
    * plan, which is then re-read.
    */
-  function recordReimbursement(suggestion: SuggestedReimbursement) {
+  function recordReimbursement(suggestion: Suggestion) {
     setEditingTransaction(null);
     setPrefill({
       kind: 'transfer',
@@ -417,8 +419,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
             {sheet === 'reimbursements' ? (
               <ReimbursementsScreen
-                groupId={groupId}
-                hasSubgroups={hasSubgroups}
+                balances={balancesResult}
                 members={group.members}
                 viewerId={viewerId}
                 readOnly={readOnly}
