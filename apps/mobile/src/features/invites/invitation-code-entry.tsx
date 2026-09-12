@@ -17,12 +17,18 @@ import { pendingInvite } from './pending-invite';
  * Shared between the Friends and Groups tabs so both entry points render
  * identically.
  */
-export function InvitationCodeEntry() {
+export interface InvitationCodeEntryProps {
+  /** Called after a code is handed off — lets a host sheet close itself. */
+  onSubmitted?: () => void;
+}
+
+export function InvitationCodeEntry({ onSubmitted }: InvitationCodeEntryProps = {}) {
   const [code, setCode] = useState('');
 
   function handleUseCode() {
     pendingInvite.set(code);
     setCode('');
+    onSubmitted?.();
   }
 
   return (

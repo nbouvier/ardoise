@@ -144,11 +144,12 @@ describe('GroupsScreen', () => {
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
   });
 
-  it('opens the creation sheet', async () => {
+  it('opens the creation sheet from the add menu', async () => {
     await render(<GroupsScreen />);
     await screen.findByText('No groups yet');
 
-    await fireEvent.press(screen.getByRole('button', { name: /create a group/i }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a group' }));
+    await fireEvent.press(screen.getByText('Create a group'));
 
     expect(await screen.findByText('New group')).toBeTruthy();
   });
@@ -156,6 +157,9 @@ describe('GroupsScreen', () => {
   it('offers the same "got a code?" entry as the Friends tab, for a group code', async () => {
     await render(<GroupsScreen />);
     await screen.findByText('No groups yet');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a group' }));
+    await fireEvent.press(screen.getByText('Join a group'));
 
     await fireEvent.changeText(
       screen.getByLabelText('Invitation code'),
