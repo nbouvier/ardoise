@@ -30,6 +30,16 @@ describe('TRANSACTION_CATEGORIES', () => {
       expect(category.label.length).toBeGreaterThan(0);
     }
   });
+
+  it('gives every category its own hex colour', () => {
+    const colors = TRANSACTION_CATEGORIES.map((category) => category.color);
+
+    for (const color of colors) {
+      expect(color).toMatch(/^#[0-9A-F]{6}$/);
+    }
+    // A shared colour would make two slices of the same chart indistinguishable.
+    expect(new Set(colors).size).toBe(colors.length);
+  });
 });
 
 describe('categoryDefinition', () => {
@@ -38,6 +48,7 @@ describe('categoryDefinition', () => {
       key: 'groceries',
       emoji: '🛒',
       label: 'Groceries',
+      color: '#3FA96B',
     });
   });
 
