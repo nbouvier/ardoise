@@ -25,7 +25,8 @@ apps/
       constants/   Design tokens (colours, spacing, fonts) in theme.ts.
       features/    One folder per product feature (auth: state, screens, Google, storage;
                    friends: list, invitations, deep-link capture; groups: list,
-                   creation, detail, membership).
+                   creation, detail, membership; home: the landing screen, which
+                   composes other features' rows rather than owning any of its own).
       lib/         Cross-feature building blocks: logger, API client (lib/api).
     assets/        Images and fonts.
     metro.config.js  Monorepo-aware Metro config (watches the repo root).

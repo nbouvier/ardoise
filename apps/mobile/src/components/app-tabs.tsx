@@ -16,6 +16,11 @@ export default function AppTabs() {
       tintColor={colors.primary}
       labelStyle={{ selected: { color: colors.primary } }}>
       <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="house" md="home" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="groups">
         <NativeTabs.Trigger.Label>Groups</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person.3" md="groups" />
       </NativeTabs.Trigger>

@@ -85,14 +85,22 @@ interaction is a device concern.
   (`docs/specs/favorites.md`): toggling, idempotence, personal-to-the-caller, unaffected
   by archived state, refused for a non-member, dropped when the membership is removed,
   and favorite-first ordering within both the group list's active/archived sections and a
-  parent's joined sub-groups;
+  parent's joined sub-groups, plus `GET /groups/favorites` (`docs/specs/home.md`):
+  gathering all three kinds at once, active-then-alphabetical ordering with a pair group
+  sorted under the other member's name, a sub-group's ancestors and own balance, empty
+  for a caller who has starred nothing, and never another member's;
   transactions unit + integration tests (`src/features/transactions/`) covering the
   balance calculation (sign convention, sum-to-zero) in isolation, and end-to-end: every
   split shape, the pair-group regression (transactions must **not** be refused by the
   same guard that blocks every other pair-group mutation), archived-group read-only
   behaviour, cross-group transaction access, cascade deletion, and the category field
   (round-trips, defaults to Other, an unknown value is refused, resets to Other when none
-  is given). Group balances are covered in `features/groups/plugin.test.ts`, including
+  is given), and `GET /me/transactions` (`docs/specs/home.md`): the involvement filter
+  from both sides (paid by the caller, concerning the caller, and — the one that must
+  **not** appear — a transaction between two other members of the caller's own group),
+  the membership boundary (a group the caller has left serves nothing, even where they
+  are still a participant), and the cap with same-day ties in recording order. Group
+  balances are covered in `features/groups/plugin.test.ts`, including
   **containment**: a sub-group's own figure stays in the sub-group, a parent's is its own,
   every level of a nested tree carries its own, and an unjoined sub-group shows `0` — the
   regression guarding the removed sub-tree roll-up.
@@ -130,7 +138,14 @@ interaction is a device concern.
   own toggle relies on, and — on both the group list and the friend list — that favoriting
   a row does not move it in the same tap: the refetch that toggle itself triggers keeps
   the row put, and only a *later*, unrelated refresh (another change elsewhere notifying
-  the same `groupsChanged` signal) brings the pinned order into view — and the transactions feature
+  the same `groupsChanged` signal) brings the pinned order into view — the home feature
+  (`src/features/home/`): the identity block, both sections' empty states, favorites of
+  every kind listed with a sub-group's breadcrumb, a star taking its row *out* of that
+  section (rather than moving it, as everywhere else), the latest list naming the group
+  each transaction happened in and opening that group rather than the transaction, both
+  sections re-reading when something changes elsewhere (`transactionsChanged` /
+  `groupsChanged`), and one section failing and retrying without taking the other or the
+  identity down — and the transactions feature
   (`src/features/transactions/`): the split editor (selection, weight stepper, live
   preview, mode switching, the allocation indicator), the add/edit form (defaults — Other
   by default — request shape for each kind, full-replace edit, transfer validation, the

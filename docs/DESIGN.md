@@ -181,9 +181,35 @@ on user cancellation). On web the button is disabled with a "coming soon" captio
 One brand-toned identity card — avatar, name, email — and a secondary "Sign out" at the
 bottom. The screen has exactly one piece of content, so it gets exactly one card.
 
-### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/index.tsx`)
+### Home (`src/features/home/home-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
-The landing screen, **root groups only** — a sub-group is reached by opening its parent.
+The first screen of the app (`docs/specs/home.md`), a scroll of three stacked blocks —
+no `ScreenHeader`, since the first block *is* the identity, at full size.
+
+**The identity** takes about a quarter of the screen height (`useWindowDimensions`), runs
+edge to edge with its bottom corners rounded off, and carries the `BrandMark`, the
+wordmark in `title`, and the tagline "Settle up, stay friends." in secondary
+`sectionTitle`. Behind it, `HomeHero`'s wash: three overlapping ellipses on
+`primarySoft`, each a **radial gradient fading to transparent** — brand, accent, and a
+third hue borrowed from the medallion family so it reads as the app's palette rather than
+as two brand colours meeting. Drawn, not blurred: a real blur is a native module on one
+platform and a CSS filter on another, and gradients fading to nothing give the same
+out-of-focus read from the tokens themselves, identically everywhere. The safe-area inset
+is padding *inside* the block, so the wash runs under the status bar. Nothing in it is
+tappable and it never carries a figure.
+
+**Two sections** follow, each an `overline` heading over its own content, and each with
+its own loading spinner, error card ("Try again") and empty line — one section failing
+never takes the other, or the identity, down with it. `Favorites` reuses **`GroupRow`**
+unchanged, so a group looks the same here as in the group list, breadcrumb included (this
+is the list that mixes depths); tapping a star here *removes* the row rather than moving
+it, since the section is the favorites. `Latest` reuses **`TransactionRow`**, passing
+`group` so each row leads with "Corsica 2026 › Beach day" above the title; tapping one
+opens the group, not the transaction. Pull to refresh reloads both.
+
+### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/groups.tsx`)
+
+**Root groups only** — a sub-group is reached by opening its parent.
 `ScreenHeader` with the active-group count as caption. Each group is a **`GroupRow`
 card**: a medallion carrying the group's initials, the name, the member count, and the
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
@@ -396,12 +422,14 @@ link, and a retryable connection error.
 ## Navigation
 
 `app/_layout.tsx` is a `Stack` wrapping the `(tabs)` group, so a group detail pushes above
-the tab bar with a back button; the tabs live in `app/(tabs)/_layout.tsx`. The tab bar is
+the tab bar with a back button; the tabs live in `app/(tabs)/_layout.tsx`. Four tabs, in
+order: **Home**, **Groups**, **Friends**, **Account**. The tab bar is
 a **surface**, not the canvas, and the active tab carries the brand hue — the one place
 navigation says which app this is. On web the tab list is a floating pill bar with the
 "SplitCount" wordmark in brand violet.
 
-The groups list is the index of that group, so its URL is `/`.
+The home is the index of that group, so its URL is `/`; the groups list sits at
+`/groups`, which coexists with the `/groups/[id]` detail route outside the tabs.
 
 Typed routes are generated into `.expo/types/router.d.ts` when the dev server runs. If
 `router.push` or an `href` is rejected for a route that plainly exists, the generated file

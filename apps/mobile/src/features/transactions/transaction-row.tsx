@@ -1,6 +1,7 @@
-import { categoryDefinition, type Transaction } from '@splitcount/shared';
+import { categoryDefinition, type RecentTransaction, type Transaction } from '@splitcount/shared';
 import { StyleSheet, View } from 'react-native';
 
+import { Breadcrumb } from '@/components/breadcrumb';
 import { Card } from '@/components/card';
 import { MedallionBadge } from '@/components/medallion-badge';
 import { ThemedText } from '@/components/themed-text';
@@ -15,6 +16,12 @@ export interface TransactionRowProps {
   viewerId: string;
   /** Omitted (e.g. on an archived, read-only group) renders a plain, unpressable row. */
   onPress?: (transaction: Transaction) => void;
+  /**
+   * Where it happened, for a list that spans several groups — the home
+   * screen's own (`docs/specs/home.md`). Omitted inside a group, where every
+   * row is from the same one and saying so would be noise.
+   */
+  group?: RecentTransaction['group'];
 }
 
 const kindLabels: Record<Transaction['kind'], string> = {
@@ -49,11 +56,17 @@ function myShareCents(transaction: Transaction, viewerId: string): number {
 }
 
 /**
- * One card of a group's transaction list. The category badge carries the
+ * One card of a group's transaction list — or of the home's, which passes
+ * `group` so each row says where it happened. The category badge carries the
  * category's own colour, so a list reads as a spread of spending before a
  * single word of it is read.
  */
-export function TransactionRow({ transaction, viewerId, onPress }: TransactionRowProps) {
+export function TransactionRow({
+  transaction,
+  viewerId,
+  onPress,
+  group,
+}: TransactionRowProps) {
   const myShare = myShareCents(transaction, viewerId);
   const category = categoryDefinition(transaction.category);
 
@@ -66,6 +79,9 @@ export function TransactionRow({ transaction, viewerId, onPress }: TransactionRo
         size={40}
       />
       <View style={styles.text}>
+        {/* The group, with its own ancestors before it: one trail reading
+            "Corsica 2026 › Beach day", not a name with no place. */}
+        {group ? <Breadcrumb ancestors={[...group.ancestors, { id: group.id, name: group.name }]} /> : null}
         <ThemedText numberOfLines={1}>{transaction.title}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {formatOccurredOn(transaction.occurredOn)} · {kindLabels[transaction.kind]} ·{' '}

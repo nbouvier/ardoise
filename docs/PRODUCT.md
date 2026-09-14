@@ -66,6 +66,12 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   Scoped to the one group, like its balances — a sub-group has its own plan — and derived
   from those balances, so the two can never disagree. See
   `docs/specs/reimbursements.md`.
+- **Home** — the screen the app opens on: the product's own identity over a decorative
+  wash, then the groups the user has starred (every kind at once — a group, a sub-group,
+  or the implicit group behind a favorited friend), then the ten most recent transactions
+  that involve them, drawn from every group and sub-group they belong to. Everything on it
+  is a shortcut into the screen that owns the thing; nothing is recorded from it. The
+  group list moves to a tab of its own, unchanged. See `docs/specs/home.md`.
 - **Favorite groups** — a member can star a group or a joined sub-group, from its own page
   or its row in a list, to pin it above non-favorited ones wherever it is listed. A
   friend's row on the friend list carries the same star, favoriting the implicit pair
@@ -74,7 +80,7 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
 `/health`, auth, friends, invitations, groups, group transactions, per-category
-statistics, reimbursement plans and favorites, tooling and documentation.
+statistics, reimbursement plans, favorites and a home screen, tooling and documentation.
 
 ## Planned direction
 

@@ -1,5 +1,5 @@
-import { GroupsScreen } from '@/features/groups/groups-screen';
+import { HomeScreen } from '@/features/home/home-screen';
 
-export default function GroupsRoute() {
-  return <GroupsScreen />;
+export default function HomeRoute() {
+  return <HomeScreen />;
 }

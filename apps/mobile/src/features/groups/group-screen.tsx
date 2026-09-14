@@ -41,6 +41,7 @@ import {
   type TransactionPrefill,
 } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
+import { transactionsChanged } from '@/features/transactions/transactions-changed';
 import { useBalances, type UseBalancesResult } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
@@ -133,6 +134,16 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   function leaveScreen() {
     groupsChanged.notify();
     router.back();
+  }
+
+  /**
+   * A transaction changed here, which the home screen shows from somewhere
+   * else entirely: its latest list (`transactionsChanged`) and the group's
+   * own balance on its favorited row (`groupsChanged`).
+   */
+  function announceTransactionChange() {
+    transactionsChanged.notify();
+    groupsChanged.notify();
   }
 
   if (status === 'loading') {
@@ -511,6 +522,10 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                   // A friend's per-friend total on the Friends tab may depend
                   // on this transaction too; it has no other way to know.
                   friendsChanged.notify();
+                  // And so do the home's two sections: the group's own
+                  // balance on its favorited row, and the transaction itself
+                  // in the latest list (`docs/specs/home.md`).
+                  announceTransactionChange();
                   // Back to the plan it came from, remounted and re-read, so
                   // the payment just recorded is gone from it.
                   setSheet(prefill ? 'reimbursements' : null);
@@ -521,6 +536,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
                   }
                   balancesResult.refresh();
                   friendsChanged.notify();
+                  announceTransactionChange();
                   setSheet(null);
                 }}
                 onCancel={() => setSheet(prefill ? 'reimbursements' : null)}
