@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BrandMark } from '@/components/brand-mark';
-import { HeroWash } from '@/components/hero-wash';
+import { PageHero } from '@/components/page-hero';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 
@@ -14,7 +14,11 @@ export interface ScreenHeaderProps {
   caption?: string;
   /** An action that belongs to the screen as a whole, aligned with the header. */
   action?: ReactNode;
-  /** Draws the home screen's decorative wash behind the header (`docs/specs/home.md`). */
+  /**
+   * Wraps the header in `PageHero`'s decorative wash (`docs/specs/home.md`).
+   * The header must then be the screen's own first element, outside any
+   * padded wrapper — `PageHero` owns its own padding and safe-area inset.
+   */
   wash?: boolean;
 }
 
@@ -25,9 +29,8 @@ export interface ScreenHeaderProps {
  * being sized to just the wordmark. See "App header" in docs/DESIGN.md.
  */
 export function ScreenHeader({ title, caption, action, wash = false }: ScreenHeaderProps) {
-  return (
-    <View style={[styles.header, wash && styles.headerWash]}>
-      {wash ? <HeroWash /> : null}
+  const header = (
+    <View style={styles.header}>
       <BrandMark size={BRAND_MARK_SIZE} />
       <View style={styles.text}>
         <ThemedText type="sectionTitle">SplitCount</ThemedText>
@@ -38,6 +41,8 @@ export function ScreenHeader({ title, caption, action, wash = false }: ScreenHea
       {action}
     </View>
   );
+
+  return wash ? <PageHero>{header}</PageHero> : header;
 }
 
 const styles = StyleSheet.create({
@@ -45,14 +50,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-  },
-  headerWash: {
-    // Bleeds to the edges of whatever padded container it sits in, like the
-    // home screen's own hero, rather than sitting inset within it.
-    marginHorizontal: -Spacing.four,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
-    overflow: 'hidden',
   },
   text: {
     flex: 1,

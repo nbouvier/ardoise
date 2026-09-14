@@ -123,9 +123,9 @@ export function GroupsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader title="Groups" caption={activeCount} />
+      <ScreenHeader title="Groups" caption={activeCount} wash />
 
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
         <View style={styles.body}>{body()}</View>
 
         <AddMenuButton
@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.three,
     gap: Spacing.three,
   },

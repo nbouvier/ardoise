@@ -120,9 +120,9 @@ export function FriendsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader title="Friends" caption={friendCount} wash />
+      <ScreenHeader title="Friends" caption={friendCount} wash />
 
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
         <View style={styles.body}>
           {status === 'loading' ? (
             <View style={styles.centered}>
@@ -216,7 +216,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
     paddingBottom: BottomTabInset + Spacing.three,
     gap: Spacing.three,
   },

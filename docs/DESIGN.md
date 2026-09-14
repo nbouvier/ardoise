@@ -133,13 +133,20 @@ or box**; a screen that styles its own is a bug in this document.
   wordmark and, directly under it, the current page named in smaller, secondary-coloured
   type, with an optional trailing caption and room for one screen-level action. Every tab
   opens the same way, and reads as SplitCount before it reads as "Groups" or "Friends".
-  `wash` draws `HeroWash` behind it, bleeding to the edges of the screen's own padding —
-  used on Friends and Account, not on the (unfavorited) Groups list.
-- **`HeroWash`** — the app's decorative colour wash, extracted from the home screen's own
-  hero: three overlapping radial gradients (brand, accent, a third medallion hue) fading
-  to transparent over a `primarySoft` ground, filling whatever it is placed behind. Drawn,
-  not blurred — see Home below. Used on the home hero, and behind the header of Group
-  detail, Friends and Account (`docs/specs/home.md`).
+  `wash` wraps the header in `PageHero` — used on the Groups list, Friends and Account.
+  Group detail keeps a plain header: it sits under its own Stack header already, and the
+  wash is a top-of-app identity cue for the tab screens, not something every nested page
+  repeats.
+- **`PageHero`** — the one place the app's decorative wash is bled to a screen's edges and
+  given its own top safe-area inset, so every header that carries it behaves identically
+  instead of each screen re-deriving its own margins. Takes whatever header content a
+  screen wants as `children`. Must be a screen's own first element, before any padded
+  content wrapper — nesting it inside one reintroduces the padding it exists to bleed
+  past. Used by `ScreenHeader`'s `wash`.
+- **`HeroWash`** — the app's decorative colour wash, drawn once for `PageHero` and for the
+  home screen's own hero: three overlapping radial gradients (brand, accent, a third
+  medallion hue) fading to transparent over a `primarySoft` ground, filling whatever it is
+  placed behind. Drawn, not blurred — see Home below.
 - **`AddMenuButton`** — a list screen's single, full-width footer `Button` (e.g. "New
   group"). Tapping it opens a bottom sheet of icon + label rows for the couple of related
   choices behind it (create or join) — the sheet replaces the button in place rather than
@@ -204,9 +211,10 @@ app's palette rather than as two brand colours meeting. Drawn, not blurred: a re
 a native module on one platform and a CSS filter on another, and gradients fading to
 nothing give the same out-of-focus read from the tokens themselves, identically
 everywhere. The safe-area inset is padding *inside* the block, so the wash runs under the
-status bar. Nothing in it is tappable and it never carries a figure. The same `HeroWash`
-sits behind the header of Group detail, Friends and Account, so the same "out of focus"
-read shows up at the top of every screen with an identity to lead with.
+status bar. Nothing in it is tappable and it never carries a figure. The same wash, via
+`PageHero`, sits behind the `ScreenHeader` of Groups, Friends and Account, so the same
+"out of focus" read shows up at the top of every tab with an identity to lead with. Group
+detail — pushed above the tabs, under its own Stack header — keeps a plain header instead.
 
 **Two sections** follow, each an `overline` heading over its own content, and each with
 its own loading spinner, error card ("Try again") and empty line — one section failing
@@ -220,7 +228,7 @@ opens the group, not the transaction. Pull to refresh reloads both.
 ### Groups list (`src/features/groups/groups-screen.tsx`, tab `app/(tabs)/groups.tsx`)
 
 **Root groups only** — a sub-group is reached by opening its parent.
-`ScreenHeader` with the active-group count as caption. Each group is a **`GroupRow`
+`ScreenHeader` with `wash` and the active-group count as caption. Each group is a **`GroupRow`
 card**: a medallion carrying the group's initials, the name, the member count, and the
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
 `docs/specs/balances.md`), with a **`FavoriteStar`** at the far right of the row, aligned
@@ -249,8 +257,9 @@ shows the toggle, not the empty state.
 
 Pushed above the tabs, so it has a back button. **Transactions are the primary content.**
 
-The header sits on the home screen's `HeroWash`, bled to the edges of the screen. It is: a
-**breadcrumb** of ancestors (brand-coloured, tappable, only on a
+The header is plain — no wash: the screen already sits under its own native Stack header,
+and the decorative identity cue belongs to the tabs it was pushed from, not to a page
+nested under one of them. It is: a **breadcrumb** of ancestors (brand-coloured, tappable, only on a
 sub-group), the group's name with a **`FavoriteStar`** at the right of the same line
 (`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
 group's own page is one of the two places its star shows, the other being its row on the

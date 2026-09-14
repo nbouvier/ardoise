@@ -35,9 +35,9 @@ export function AccountScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader title="Account" wash />
+      <ScreenHeader title="Account" wash />
 
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
         <View style={styles.profile}>
           {/* The identity card: the one piece of content this screen has. */}
           <Card tone="brand" style={styles.card}>
@@ -71,7 +71,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.six,
     justifyContent: 'space-between',
   },
   profile: {
