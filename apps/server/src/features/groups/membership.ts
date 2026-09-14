@@ -33,12 +33,15 @@ export class GroupAccessError extends Error {
 /**
  * A pair group is immutable by construction: it belongs to a friendship, always
  * has exactly those two people, and lives and dies with it. Renaming,
- * archiving, deleting, inviting into it or changing who is in it can never
- * apply. Its sub-groups are ordinary standard groups — they can be renamed,
- * archived, deleted, left — but the same `pair_immutable` reason also covers
- * trying to bring a third person into any of them (`pairCeiling` in the
- * groups service), since that could only ever happen by propagating a new
- * membership up into this same immutable group.
+ * archiving, inviting into it or changing who is in it can never apply. Its
+ * sub-groups are ordinary standard groups — they can be renamed, archived,
+ * deleted, left — but the same `pair_immutable` reason also covers trying to
+ * bring a third person into any of them (`pairCeiling` in the groups
+ * service), since that could only ever happen by propagating a new
+ * membership up into this same immutable group. Deleting the pair group
+ * itself is the one exception: `GroupsService.remove` handles that case
+ * before this guard would ever run, since there it means "remove this
+ * friend" rather than a group management action (`docs/specs/groups.md`).
  */
 export function assertNotPairGroup(group: GroupRow): void {
   if (group.kind === 'pair') {

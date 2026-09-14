@@ -20,12 +20,13 @@ export interface GroupWithCount {
 
 /**
  * A group as the listing queries below report it: its own direct sub-group
- * count, and the caller's own `favorited_at` off their membership row
- * (`docs/specs/favorites.md`).
+ * count, the caller's own `favorited_at` off their membership row
+ * (`docs/specs/favorites.md`), and that same row's `role`.
  */
 export interface ListedGroupSummary extends GroupWithCount {
   subgroupCount: number;
   favoritedAt: Date | null;
+  role: GroupRole;
 }
 
 export interface MemberWithUser {
@@ -77,6 +78,14 @@ export interface GroupsRepository {
   ): Promise<GroupRow | undefined>;
   deleteGroup(groupId: string): Promise<void>;
   /**
+   * Deletes the friendship a pair group is keyed by, taking the group itself
+   * — and everything nested under it — down with it through the same
+   * cascade that "remove friend" already relies on (`groups_friendship_id_fkey`,
+   * `docs/specs/groups.md`). The caller already knows `friendshipId` off the
+   * pair `GroupRow` it just loaded, so this needs no further lookup.
+   */
+  deleteFriendship(friendshipId: string): Promise<void>;
+  /**
    * Insert the memberships that are missing, and report which ones were
    * actually created — the database decides, so a repeated or concurrent join
    * is reported as "already there" rather than guessed.
@@ -110,6 +119,14 @@ export interface GroupsRepository {
    * joined.
    */
   filterMemberGroupIds(userId: string, groupIds: readonly string[]): Promise<string[]>;
+  /**
+   * `userId`'s own role in each of `groupIds` they actually belong to — a
+   * sub-group's own row needs this to gate its "⋮" actions menu the same way
+   * a root group's does, without a second per-row read
+   * (`docs/specs/groups.md`). A group `userId` is not a member of is simply
+   * absent from the map, same shape as {@link filterMemberGroupIds}.
+   */
+  listMemberRoles(userId: string, groupIds: readonly string[]): Promise<Map<string, GroupRole>>;
   /**
    * Of `groupIds`, those `userId` currently has favorited — used to pin a
    * favorited sub-group above its non-favorited siblings in a parent's own
@@ -202,7 +219,12 @@ async function fetchDescendantIds(db: Database, groupId: string): Promise<string
  */
 async function withSubgroupCounts(
   db: Database,
-  rows: readonly { group: GroupRow; memberCount: number; favoritedAt: Date | null }[],
+  rows: readonly {
+    group: GroupRow;
+    memberCount: number;
+    favoritedAt: Date | null;
+    role: GroupRole;
+  }[],
 ): Promise<ListedGroupSummary[]> {
   if (rows.length === 0) {
     return [];
@@ -226,6 +248,7 @@ async function withSubgroupCounts(
     memberCount: toCount(row.memberCount),
     subgroupCount: countByParent.get(row.group.id) ?? 0,
     favoritedAt: row.favoritedAt,
+    role: row.role,
   }));
 }
 
@@ -254,6 +277,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           group: groups,
           memberCount: sql<number>`count(${everyone.id})`,
           favoritedAt: groupMembers.favoritedAt,
+          role: groupMembers.role,
         })
         .from(groupMembers)
         .innerJoin(groups, eq(groups.id, groupMembers.groupId))
@@ -267,7 +291,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
             isNull(groups.parentId),
           ),
         )
-        .groupBy(groups.id, groupMembers.favoritedAt)
+        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role)
         // Active groups first, then archived ones; favorited groups first
         // within each of those (`docs/specs/favorites.md`); alphabetical
         // within what's left.
@@ -277,7 +301,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           asc(groups.name),
         );
 
-      return withSubgroupCounts(db, own);
+      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
     },
 
     async listFavoriteGroupsForUser(userId) {
@@ -288,6 +312,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           group: groups,
           memberCount: sql<number>`count(${everyone.id})`,
           favoritedAt: groupMembers.favoritedAt,
+          role: groupMembers.role,
         })
         .from(groupMembers)
         .innerJoin(groups, eq(groups.id, groupMembers.groupId))
@@ -297,9 +322,9 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(
           and(eq(groupMembers.userId, userId), sql`${groupMembers.favoritedAt} is not null`),
         )
-        .groupBy(groups.id, groupMembers.favoritedAt);
+        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role);
 
-      return withSubgroupCounts(db, own);
+      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
     },
 
     async listMembers(groupId) {
@@ -376,6 +401,10 @@ export function createGroupsRepository(db: Database): GroupsRepository {
 
     async deleteGroup(groupId) {
       await db.delete(groups).where(eq(groups.id, groupId));
+    },
+
+    async deleteFriendship(friendshipId) {
+      await db.delete(friendships).where(eq(friendships.id, friendshipId));
     },
 
     async addMembers(groupId, userIds) {
@@ -510,6 +539,19 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, [...groupIds])),
         );
       return rows.map((row) => row.groupId);
+    },
+
+    async listMemberRoles(userId, groupIds) {
+      if (groupIds.length === 0) {
+        return new Map();
+      }
+      const rows = await db
+        .select({ groupId: groupMembers.groupId, role: groupMembers.role })
+        .from(groupMembers)
+        .where(
+          and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, [...groupIds])),
+        );
+      return new Map(rows.map((row) => [row.groupId, row.role as GroupRole]));
     },
 
     async listFavoriteGroupIds(userId, groupIds) {

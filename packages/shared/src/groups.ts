@@ -49,7 +49,9 @@ export const MAX_GROUP_DEPTH = 4;
  * (`docs/specs/balances.md`). A sub-group is never folded into its parent's
  * figure: each space answers "where do I stand here", and each carries its
  * own. `favorite` is the viewer's own marker, personal to them
- * (`docs/specs/favorites.md`) — never another member's state.
+ * (`docs/specs/favorites.md`) — never another member's state. `viewerRole`
+ * drives which of the row's own management actions the client offers
+ * (`docs/specs/groups.md`).
  */
 export const groupSummarySchema = z.object({
   id: z.uuid(),
@@ -64,6 +66,7 @@ export const groupSummarySchema = z.object({
   favorite: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
+  viewerRole: groupRoleSchema,
 });
 export type GroupSummary = z.infer<typeof groupSummarySchema>;
 
@@ -71,7 +74,12 @@ export type GroupSummary = z.infer<typeof groupSummarySchema>;
  * One of a group's direct sub-groups, as shown in its parent's own detail —
  * enough to decide whether to open (if already a member) or join it, never a
  * member list. `viewerIsMember` is what the client uses to show "Open" versus
- * a join affordance.
+ * a join affordance. `viewerRole` and `archivedAt` are only meaningful for a
+ * joined sub-group — a non-member has no membership row to hold a role on,
+ * and never manages a group it hasn't joined — so both are `null` when
+ * `viewerIsMember` is `false`. A sub-group is always a `standard` group
+ * (`groups_pair_no_parent`), never `pair`, so its own row-level actions never
+ * need to special-case that kind (`docs/specs/groups.md`).
  */
 export const subgroupSummarySchema = z.object({
   id: z.uuid(),
@@ -86,24 +94,27 @@ export const subgroupSummarySchema = z.object({
    * membership row to hold it on.
    */
   favorite: z.boolean(),
+  viewerRole: groupRoleSchema.nullable(),
+  archivedAt: z.iso.datetime().nullable(),
 });
 export type SubgroupSummary = z.infer<typeof subgroupSummarySchema>;
 
 /**
- * A group opened by one of its members. `viewerRole` drives which actions
- * show. `subgroups` are the group's *direct* sub-groups (`docs/specs/groups.md`);
- * its own `ancestors` come from the summary above. `readOnly` is `true` when the group
- * itself is archived *or any ancestor of it is* — a root group's `readOnly`
- * always equals its own `archivedAt !== null`, since it has no ancestors.
- * `pairRooted` is `true` when this group — or one of its ancestors — is the
- * implicit space shared by two friends: it, and every sub-group nested inside
- * it at any depth, can only ever contain those two people, so the client
- * hides "add friends" and "share an invitation link" there and relies on the
- * ordinary unjoined-sub-group toggle for the other person to join instead.
+ * A group opened by one of its members. `subgroups` are the group's *direct*
+ * sub-groups (`docs/specs/groups.md`); its own `ancestors` come from the
+ * summary above. `readOnly` is `true` when the group itself is archived *or
+ * any ancestor of it is* — a root group's `readOnly` always equals its own
+ * `archivedAt !== null`, since it has no ancestors. `pairRooted` is `true`
+ * when this group — or one of its ancestors — is the implicit space shared
+ * by two friends: it, and every sub-group nested inside it at any depth, can
+ * only ever contain those two people, so the client hides "add friends" and
+ * "share an invitation link" there and relies on the ordinary unjoined-
+ * sub-group toggle for the other person to join instead. `viewerRole`, which
+ * drives most of the rest of what the client offers, is inherited from
+ * `groupSummarySchema`.
  */
 export const groupDetailSchema = groupSummarySchema.extend({
   members: z.array(groupMemberSchema),
-  viewerRole: groupRoleSchema,
   subgroups: z.array(subgroupSummarySchema),
   readOnly: z.boolean(),
   pairRooted: z.boolean(),

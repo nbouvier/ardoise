@@ -72,6 +72,13 @@ know where I stand on the trip as a whole**.
   that states how many there are. Revealed, they are shown **below** the active groups and
   are visually muted.
 - Empty state: an explanation and a "Create a group" action.
+- Each row carries its own **"⋮" actions menu**, next to its favorite star: Manage (opens
+  the group with its Details sheet already showing), Archive/Reopen, Leave and Delete —
+  exactly the actions available from inside the group itself (see "Inside a group" below),
+  gated the same way, so acting on a group never requires opening it first. The same menu
+  sits on a group's own row wherever else it is shown as a row with a favorite star — a
+  joined sub-group in its parent's own sub-groups section, and a favorited group (pair
+  groups included) on the home screen (`docs/specs/home.md`).
 
 ### Inside a group
 
@@ -207,7 +214,7 @@ ever contain that friendship's own two people**, forever. Concretely:
   one row per friend, the same one that opens it (`docs/specs/friends-and-invitations.md`).
 - **Nobody can be added to it**: no member management, no invitation link. It stays
   exactly two people.
-- It **cannot be renamed, archived, deleted, or nested under something else**. It is named
+- It **cannot be renamed, archived, or nested under something else**. It is named
   after the other person.
 - **It can have sub-groups**, exactly like a standard group — but every sub-group in that
   tree, at any depth, is itself capped at the same two people forever (no third person, no
@@ -216,6 +223,17 @@ ever contain that friendship's own two people**, forever. Concretely:
 - It **disappears with the friendship**: removing a friend deletes the pair group and
   everything in it, on both sides. This is the same loss as deleting a group, and the
   friend-removal confirmation says so.
+- Its row's own "⋮" menu (wherever it is shown as a row with a favorite star — a favorited
+  pair group on the home screen, `docs/specs/home.md`) only ever offers **Manage** and
+  **Delete**: Archive and Leave don't apply to it — see "Inside a group" and "Archiving and
+  deleting" above for why — so showing them here would be a dead end.
+- **Deleting it directly does the same thing.** Unlike a standard group, it has no owner
+  gating who may take this action — either of the two friends can — and doing so does not
+  merely empty the shared space, it ends the friendship itself, exactly as if either side
+  had removed the other as a friend. The client's confirmation for this action reads as a
+  friend removal ("Remove so-and-so from your friends?"), not as a group deletion, since
+  that is the loss it actually causes. This is the one operation on a pair group that is
+  *not* refused as `pair_group_immutable` — see "Edge cases" above.
 
 ## Out of scope
 
@@ -279,10 +297,12 @@ ever contain that friendship's own two people**, forever. Concretely:
   nested in it (necessarily now empty too, by the membership invariant), is deleted with
   its contents.
 - **Any membership change on a pair group itself** (add, remove, invite, rename, archive,
-  delete, nest it under something else): refused; the pair group is immutable by
+  nest it under something else): refused; the pair group is immutable by
   construction. **Creating a sub-group under it is allowed** — but bringing a third
   person into that sub-group, or any of its descendants, is refused the same way (see
-  "Sub-groups of a pair group" above).
+  "Sub-groups of a pair group" above). **Deleting it is the one exception**: it works
+  exactly like removing the friend (see "The implicit pair group" below), so either
+  side may do it, owner or not — there is no owner on it in the first place.
 - **Two people becoming friends at the same time as each other trying to** (racing invite
   acceptances): the friendship is created once (`docs/specs/friends-and-invitations.md`)
   and so is its pair group — the unique constraint on `groups.friendship_id` is what
@@ -342,8 +362,10 @@ ever contain that friendship's own two people**, forever. Concretely:
 - [ ] That pair group never appears in the group list, and cannot itself be a sub-group.
 - [ ] The pair group exists from the moment the friendship does; two people becoming
       friends at the same time as each other trying to still ends with a single group.
-- [ ] Archiving, deleting, renaming, inviting into or adding someone to a pair group is
-      refused; creating a sub-group under it is not.
+- [ ] Archiving, renaming, inviting into or adding someone to a pair group is refused;
+      creating a sub-group under it is not.
+- [ ] Deleting a pair group directly works, for either friend, and ends the friendship —
+      the same end state as removing the friend.
 - [ ] A sub-group nested under a pair group, at any depth, starts with both friends as
       members already, and refuses a third person as a further initial member, as a later
       addition, and through an invitation link (which cannot even be generated for it) —
@@ -374,13 +396,16 @@ ever contain that friendship's own two people**, forever. Concretely:
   now (`docs/specs/friends-and-invitations.md`), not on first access.
 - **Idempotence and concurrency of joining a sub-group**, the same way, is a direct
   analogue.
-- The **pair-group immutability** guard still applies to the original six operations on the
-  pair group itself (add, remove, invite, rename, archive, delete) plus nesting it under
-  something else; cover them as a set rather than one by one. Creating a sub-group under a
-  pair group is now allowed — the same guard reappears one level down instead, refusing a
-  third person anywhere in that sub-group's own tree (add, invite, or an initial member at
-  creation) — cover that set separately, since it is a different operation triggering the
-  same reason.
+- The **pair-group immutability** guard still applies to add, remove, invite, rename and
+  archive on the pair group itself, plus nesting it under something else; cover them as a
+  set rather than one by one. **Delete is the deliberate exception** — worth its own test
+  proving it is *not* refused, succeeds for either member (not just whichever side sent the
+  original friend invitation), and ends with the same state as removing the friend
+  (friendship gone, group and every sub-group in it gone, for both sides). Creating a
+  sub-group under a pair group is also allowed — the same immutability guard reappears one
+  level down instead, refusing a third person anywhere in that sub-group's own tree (add,
+  invite, or an initial member at creation) — cover that set separately, since it is a
+  different operation triggering the same reason.
 - **Effective archive**: a transaction, membership change or invitation issued against a
   sub-group must be refused when *any* ancestor is archived, not only when the sub-group
   itself is; and restored the instant the archiving ancestor is un-archived, with no state

@@ -213,7 +213,12 @@ describe('groups routes', () => {
       expect(group.memberCount).toBe(2);
       const { groups: graceGroups } = (await listGroups(grace)).json();
       expect(graceGroups).toHaveLength(1);
-      expect(graceGroups[0]).toMatchObject({ id: group.id, name: 'Flatshare' });
+      // The row carries each side's own role: ada created it, grace only
+      // joined it — the "⋮" actions menu on either row reads this directly
+      // rather than assuming everyone listed is its owner.
+      expect(graceGroups[0]).toMatchObject({ id: group.id, name: 'Flatshare', viewerRole: 'member' });
+      const { groups: adaGroups } = (await listGroups(ada)).json();
+      expect(adaGroups[0]).toMatchObject({ id: group.id, viewerRole: 'owner' });
     });
 
     it('refuses to pull in someone who is not a friend of the caller', async () => {
@@ -832,6 +837,8 @@ describe('groups routes', () => {
           viewerIsMember: true,
           viewerBalanceCents: 0,
           favorite: false,
+          viewerRole: 'owner',
+          archivedAt: null,
         },
       ]);
     });
@@ -1015,6 +1022,10 @@ describe('groups routes', () => {
           viewerIsMember: false,
           viewerBalanceCents: 0,
           favorite: false,
+          // Grace hasn't joined this sub-group — no membership row to hold a
+          // role on (`docs/specs/groups.md`).
+          viewerRole: null,
+          archivedAt: null,
         },
       ]);
     });
@@ -1741,7 +1752,6 @@ describe('groups routes', () => {
       const attempts = [
         patchGroup(ada, group.id, { name: 'Renamed' }),
         patchGroup(ada, group.id, { archived: true }),
-        app.inject({ method: 'DELETE', url: `/groups/${group.id}`, headers: ada.headers }),
         app.inject({
           method: 'POST',
           url: `/groups/${group.id}/members`,
@@ -1780,6 +1790,27 @@ describe('groups routes', () => {
         headers: ada.headers,
       });
 
+      expect(await app.db.select().from(groups)).toHaveLength(0);
+      expect(await app.db.select().from(groupMembers)).toHaveLength(0);
+      expect((await getGroup(ada, group.id)).statusCode).toBe(404);
+      expect((await getGroup(grace, group.id)).statusCode).toBe(404);
+    });
+
+    it('can be deleted directly by either member — the same as removing the friend', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = (await pairGroup(ada, grace.userId)).json().group;
+
+      // Grace, not the friendship's inviter, deletes it — a pair group has no
+      // owner, so unlike a standard group's Delete, either side may do this.
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/groups/${group.id}`,
+        headers: grace.headers,
+      });
+
+      expect(response.statusCode).toBe(204);
       expect(await app.db.select().from(groups)).toHaveLength(0);
       expect(await app.db.select().from(groupMembers)).toHaveLength(0);
       expect((await getGroup(ada, group.id)).statusCode).toBe(404);

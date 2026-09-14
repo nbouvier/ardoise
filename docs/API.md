@@ -251,7 +251,7 @@ Shared error codes:
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, ancestors, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, ancestors, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt, viewerRole }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
 is the number of *direct* sub-groups only. `ancestors` is every group above it, root
 first, each `{ id, name }` — empty for a root group, and named the way the group itself
@@ -260,8 +260,11 @@ is (a pair group among them carries the *other* member's name, per caller).
 position **in that group alone** — positive means they are owed, negative means they owe
 (`docs/specs/balances.md`). It is the caller's own entry of
 `GET /groups/:groupId/transactions/balances`, and a sub-group is never folded into it.
+`viewerRole` is the caller's own role on this group, `owner` or `member` — what a client's
+own row-level actions menu (Manage / Archive / Leave / Delete) gates on, without a second
+read per row.
 `GroupDetail` adds `members` (a
-`FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
+`FriendSummary` plus `role`), `subgroups` (the group's direct sub-groups — see
 below), `readOnly` — `true` when the group itself is
 archived *or any ancestor of it is*; for a root group this always equals
 `archivedAt !== null`, since it has no ancestors — and `pairRooted`. A **pair group stores
@@ -276,16 +279,18 @@ refuse a third person there with `pair_group_immutable`, and
 a link with no one left to legitimately send it to. The other friend still reaches it
 through `POST /groups/:groupId/join` instead, same as any other unjoined sub-group.
 
-A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents, favorite }` —
+A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents, favorite, viewerRole, archivedAt }` —
 enough to decide whether to open it (already a member) or join it and show where the
 viewer stands, never a member list. `viewerBalanceCents` is the viewer's own balance in
 *that* sub-group, on the same terms as the top-level figure (see above), and is always `0`
 when `viewerIsMember` is `false`, since a non-member is on none of its transactions.
-`favorite` is likewise always `false` when `viewerIsMember` is `false` — there is no
-membership row to hold it on (`docs/specs/favorites.md`); the list is otherwise ordered
-with favorited sub-groups first among those the viewer has joined, alphabetical within
-that. It carries no `ancestors`, `archivedAt`, `depth` or `subgroups` of its own — those
-are read from the sub-group's own `GET /groups/:groupId` when opened.
+`favorite` and `viewerRole` are likewise `false` / `null` when `viewerIsMember` is `false` —
+there is no membership row to hold either on (`docs/specs/favorites.md`); the list is
+otherwise ordered with favorited sub-groups first among those the viewer has joined,
+alphabetical within that. `archivedAt` is the sub-group's own flag — a sub-group is always
+`standard`, never `pair`, so its own row-level actions never need `viewerRole` to be
+anything but the two ordinary roles. It carries no `ancestors`, `depth` or `subgroups` of
+its own — those are read from the sub-group's own `GET /groups/:groupId` when opened.
 
 ### `GET /groups`
 
@@ -342,6 +347,11 @@ loses nothing.
 ### `DELETE /groups/:groupId`
 
 Delete the group and everything in it. **Owner only**, irreversible. Response `204`.
+
+For the **implicit pair group**, this is the one exception to its usual immutability
+(`docs/specs/groups.md`): either of the two friends may delete it, since it has no owner,
+and doing so deletes the friendship itself — the same end state `DELETE /friends/:userId`
+reaches, just from the group's own side rather than the friend's.
 
 ### `POST /groups/:groupId/members`
 

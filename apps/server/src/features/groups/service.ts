@@ -262,6 +262,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     viewerBalanceCents: number,
     favorite: boolean,
     ancestors: readonly GroupAncestor[],
+    role: GroupRole,
   ): GroupSummary {
     return {
       id: group.id,
@@ -276,6 +277,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       favorite,
       archivedAt: group.archivedAt?.toISOString() ?? null,
       createdAt: group.createdAt.toISOString(),
+      viewerRole: role,
     };
   }
 
@@ -293,12 +295,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     // The rows themselves still answer "is any of them archived / is this
     // tree pair-rooted" below; the breadcrumb needs them named.
     const ancestors = await nameAncestors(ancestorRows, viewerId);
-    const joinedChildIds = new Set(
-      await repository.filterMemberGroupIds(
-        viewerId,
-        children.map((child) => child.group.id),
-      ),
+    // Every joined child's own role, for its row-level actions menu — a
+    // child absent from this map is simply one the viewer hasn't joined
+    // (`docs/specs/groups.md`).
+    const childRoles = await repository.listMemberRoles(
+      viewerId,
+      children.map((child) => child.group.id),
     );
+    const joinedChildIds = new Set(childRoles.keys());
     // Only a joined sub-group can possibly be favorited — there is no
     // membership row to hold it on otherwise (`docs/specs/favorites.md`).
     const favoriteChildIds = new Set(
@@ -327,12 +331,12 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         balances.get(group.id) ?? 0,
         favoritedAt !== null,
         ancestors,
+        role,
       ),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
         role: member.role,
       })),
-      viewerRole: role,
       subgroups: orderedChildren.map((child) => ({
         id: child.group.id,
         // A sub-group is always a standard group (`groups_pair_no_parent`),
@@ -342,6 +346,8 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         viewerIsMember: joinedChildIds.has(child.group.id),
         viewerBalanceCents: balances.get(child.group.id) ?? 0,
         favorite: favoriteChildIds.has(child.group.id),
+        viewerRole: childRoles.get(child.group.id) ?? null,
+        archivedAt: child.group.archivedAt?.toISOString() ?? null,
       })),
       // A root group's `readOnly` is exactly its own archived flag, since it
       // has no ancestors — this only differs from `archivedAt !== null` for a
@@ -412,7 +418,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         rows.map(({ group }) => group.id),
       );
 
-      return rows.map(({ group, memberCount, subgroupCount, favoritedAt }) =>
+      return rows.map(({ group, memberCount, subgroupCount, favoritedAt, role }) =>
         summaryOf(
           group,
           group.name ?? 'Untitled group',
@@ -423,6 +429,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           // Every group here is a root one, by `listGroupsForUser`'s own
           // filter — there is nothing above it to name.
           [],
+          role,
         ),
       );
     },
@@ -442,7 +449,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // has starred, which is a handful by construction: the point of a
       // favorite is to be one of few.
       const summaries = await Promise.all(
-        rows.map(async ({ group, memberCount, subgroupCount }) => {
+        rows.map(async ({ group, memberCount, subgroupCount, role }) => {
           const { name, ancestors } = await labelOf(group, userId);
           return summaryOf(
             group,
@@ -452,6 +459,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
             balances.get(group.id) ?? 0,
             true,
             ancestors,
+            role,
           );
         }),
       );
@@ -541,7 +549,16 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     },
 
     async remove(userId, groupId) {
-      const { group, role } = await requireManageable(userId, groupId);
+      const { group, role } = await requireMembership(userId, groupId);
+      if (group.kind === 'pair') {
+        // Unlike every other change to a pair group, deleting it is not
+        // refused: it reads as "remove this friend" from here, so either
+        // side may do it, owner or not — the same friendship deletion "Remove
+        // friend" already triggers, taking the group down with it through
+        // `groups_friendship_id_fkey` (`docs/specs/groups.md`).
+        await repository.deleteFriendship(group.friendshipId!);
+        return;
+      }
       assertOwner(role);
       await repository.deleteGroup(group.id);
     },
@@ -733,6 +750,10 @@ export function createGroupInviteHandler(
           favorite: Boolean(membership?.favoritedAt),
           archivedAt: null,
           createdAt: group.createdAt.toISOString(),
+          // Always `member`: joining by invitation link never makes anyone
+          // an owner (`docs/specs/groups.md`), so there is no row to read
+          // this off in the first place.
+          viewerRole: 'member',
         },
         alreadyMember: inserted.length === 0,
       };
