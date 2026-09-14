@@ -43,6 +43,21 @@ export async function updateGroup(
   return (await parsedJson(response, groupResponseSchema)).group;
 }
 
+/**
+ * Set or clear the caller's own favorite marker on the group
+ * (`docs/specs/favorites.md`). Personal to the caller, idempotent either way.
+ */
+export async function setGroupFavorite(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+  favorite: boolean,
+): Promise<GroupDetail> {
+  const response = await fetcher(`${groupPath(groupId)}/favorite`, {
+    method: favorite ? 'PUT' : 'DELETE',
+  });
+  return (await parsedJson(response, groupResponseSchema)).group;
+}
+
 /** Delete the group and everything in it. Owner only, irreversible. */
 export async function deleteGroup(
   fetcher: AuthorizedFetch,
@@ -104,19 +119,5 @@ export async function joinGroup(
   groupId: string,
 ): Promise<GroupDetail> {
   const response = await fetcher(`${groupPath(groupId)}/join`, { method: 'POST' });
-  return (await parsedJson(response, groupResponseSchema)).group;
-}
-
-/**
- * The group shared with a friend. Get-or-create: as far as the user is
- * concerned it has always existed, so the first access materialises it.
- */
-export async function fetchPairGroup(
-  fetcher: AuthorizedFetch,
-  friendId: string,
-): Promise<GroupDetail> {
-  const response = await fetcher(`/groups/pair/${encodeURIComponent(friendId)}`, {
-    method: 'POST',
-  });
   return (await parsedJson(response, groupResponseSchema)).group;
 }

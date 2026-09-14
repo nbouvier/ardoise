@@ -1,7 +1,8 @@
 import type { GroupSummary } from '@splitcount/shared';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/card';
+import { FavoriteStar } from '@/components/favorite-star';
 import { MedallionBadge } from '@/components/medallion-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -10,8 +11,11 @@ import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-
 export interface GroupRowProps {
   group: GroupSummary;
   onPress: (group: GroupSummary) => void;
+  onToggleFavorite: (group: GroupSummary) => void;
   /** Muted rendering for an archived group. */
   muted?: boolean;
+  /** Disables the star while its own toggle request is in flight. */
+  favoriteBusy?: boolean;
 }
 
 /** The group's initials, so two cards in a list never look the same. */
@@ -31,24 +35,42 @@ function initials(name: string): string {
  * stands in that group — its own transactions, not its sub-groups'
  * (`docs/specs/balances.md`).
  */
-export function GroupRow({ group, onPress, muted = false }: GroupRowProps) {
+export function GroupRow({
+  group,
+  onPress,
+  onToggleFavorite,
+  muted = false,
+  favoriteBusy = false,
+}: GroupRowProps) {
   const members = group.memberCount === 1 ? '1 member' : `${group.memberCount} members`;
 
   return (
-    <Card accessibilityLabel={group.name} onPress={() => onPress(group)} muted={muted}>
+    <Card muted={muted}>
       <View style={styles.row}>
-        <MedallionBadge seed={group.id} content={initials(group.name)} />
-        <View style={styles.text}>
-          <ThemedText type="sectionTitle" numberOfLines={1}>
-            {group.name}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {muted ? `${members} · archived` : members}
-          </ThemedText>
-          <ThemedText type="smallBold" themeColor={balanceTone(group.viewerBalanceCents)}>
-            {groupBalanceLabel(group.viewerBalanceCents)}
-          </ThemedText>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={group.name}
+          onPress={() => onPress(group)}
+          style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
+          <MedallionBadge seed={group.id} content={initials(group.name)} />
+          <View style={styles.text}>
+            <ThemedText type="sectionTitle" numberOfLines={1}>
+              {group.name}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {muted ? `${members} · archived` : members}
+            </ThemedText>
+            <ThemedText type="smallBold" themeColor={balanceTone(group.viewerBalanceCents)}>
+              {groupBalanceLabel(group.viewerBalanceCents)}
+            </ThemedText>
+          </View>
+        </Pressable>
+        <FavoriteStar
+          favorite={group.favorite}
+          label={group.name}
+          disabled={favoriteBusy}
+          onToggle={() => onToggleFavorite(group)}
+        />
       </View>
     </Card>
   );
@@ -57,11 +79,22 @@ export function GroupRow({ group, onPress, muted = false }: GroupRowProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    // The star aligns with the name line specifically, not the row's full
+    // height — the row also carries a member count and balance beneath it.
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
   },
   text: {
     flex: 1,
     gap: Spacing.half,
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

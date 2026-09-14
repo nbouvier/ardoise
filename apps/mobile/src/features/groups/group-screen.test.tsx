@@ -37,6 +37,7 @@ const trip: GroupDetail = {
   depth: 0,
   subgroupCount: 0,
   viewerBalanceCents: 0,
+  favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
   members: [
@@ -94,6 +95,7 @@ const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>()
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
+const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 
@@ -114,6 +116,7 @@ jest.mock('@/lib/api/groups', () => ({
   addGroupMembers: jest.fn(),
   removeGroupMember: jest.fn(),
   joinGroup: () => mockJoinGroup(),
+  setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
   fetchGroupInvite: jest.fn(),
   rotateGroupInvite: jest.fn(),
 }));
@@ -144,6 +147,7 @@ beforeEach(() => {
   mockFetchBalances.mockReset().mockResolvedValue([]);
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
   mockJoinGroup.mockReset().mockResolvedValue(trip);
+  mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
   mockPush.mockReset();
   mockBack.mockReset();
 });
@@ -164,6 +168,39 @@ describe('GroupScreen', () => {
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
     // The category emoji renders next to the title.
     expect(await screen.findByText('Groceries')).toBeTruthy();
+  });
+
+  it('toggles the group’s own favorite from the header', async () => {
+    // The mutation's own response applies immediately; a follow-up refetch
+    // (triggered by `groupsChanged.notify()`) must agree with it rather than
+    // clobber it back — set up both calls to reflect that.
+    mockFetchGroup.mockResolvedValueOnce(trip).mockResolvedValue({ ...trip, favorite: true });
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Corsica 2026 to favorites' }));
+
+    expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), trip.id, true);
+    expect(
+      await screen.findByRole('button', { name: 'Remove Corsica 2026 from favorites' }),
+    ).toBeTruthy();
+  });
+
+  it('lets a pair group be favorited too, from its own page', async () => {
+    mockFetchGroup.mockResolvedValueOnce(pair).mockResolvedValue({ ...pair, favorite: true });
+
+    await render(<GroupScreen groupId={pair.id} />);
+    await screen.findByText('Grace Hopper');
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
+    );
+
+    expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), pair.id, true);
+    expect(
+      await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' }),
+    ).toBeTruthy();
   });
 
   it('shows an empty state and an "Add a transaction" action', async () => {
@@ -431,6 +468,7 @@ describe('GroupScreen', () => {
       memberCount: 2,
       viewerIsMember: true,
       viewerBalanceCents: -1250,
+      favorite: false,
     };
 
     const unjoinedSub: SubgroupSummary = {
@@ -439,6 +477,7 @@ describe('GroupScreen', () => {
       memberCount: 1,
       viewerIsMember: false,
       viewerBalanceCents: 0,
+      favorite: false,
     };
 
     it('shows a joined sub-group and opens it directly', async () => {
@@ -452,6 +491,32 @@ describe('GroupScreen', () => {
         params: { id: joinedSub.id },
       });
       expect(mockJoinGroup).not.toHaveBeenCalled();
+    });
+
+    it('toggles a joined sub-group’s own favorite, independent of this group’s', async () => {
+      // A sub-group's own toggle has no response to apply directly (it
+      // targets a different group than the one this screen shows) — it
+      // relies entirely on the `groupsChanged`-triggered refetch, so the
+      // second call must reflect the change.
+      mockFetchGroup
+        .mockResolvedValueOnce({ ...trip, subgroups: [joinedSub], subgroupCount: 1 })
+        .mockResolvedValue({
+          ...trip,
+          subgroups: [{ ...joinedSub, favorite: true }],
+          subgroupCount: 1,
+        });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Ajaccio weekend');
+
+      await fireEvent.press(
+        screen.getByRole('button', { name: 'Add Ajaccio weekend to favorites' }),
+      );
+
+      expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), joinedSub.id, true);
+      expect(
+        await screen.findByRole('button', { name: 'Remove Ajaccio weekend from favorites' }),
+      ).toBeTruthy();
     });
 
     it('shows a joined sub-group’s own balance', async () => {

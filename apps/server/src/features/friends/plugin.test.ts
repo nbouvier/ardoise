@@ -173,17 +173,37 @@ describe('friends routes', () => {
       });
 
       // A brand-new friendship shares no transaction yet, so both sides read
-      // as settled rather than as a missing figure.
+      // as settled rather than as a missing figure. The implicit pair group
+      // already exists at this point (`docs/specs/friends-and-invitations.md`),
+      // so both list a `groupId`, never favorited yet.
       expect((await listFriends(ada.headers)).json()).toEqual({
         friends: [
-          { id: grace.userId, name: 'Grace Hopper', picture: null, balanceCents: 0 },
+          {
+            id: grace.userId,
+            name: 'Grace Hopper',
+            picture: null,
+            balanceCents: 0,
+            groupId: expect.any(String),
+            favorite: false,
+          },
         ],
       });
       expect((await listFriends(grace.headers)).json()).toEqual({
         friends: [
-          { id: ada.userId, name: 'Ada Lovelace', picture: null, balanceCents: 0 },
+          {
+            id: ada.userId,
+            name: 'Ada Lovelace',
+            picture: null,
+            balanceCents: 0,
+            groupId: expect.any(String),
+            favorite: false,
+          },
         ],
       });
+      // The same group, from both sides.
+      const forAda = (await listFriends(ada.headers)).json().friends[0];
+      const forGrace = (await listFriends(grace.headers)).json().friends[0];
+      expect(forAda.groupId).toBe(forGrace.groupId);
     });
 
     it('is idempotent and creates a single relationship', async () => {
@@ -276,6 +296,76 @@ describe('friends routes', () => {
 
     it('requires authentication', async () => {
       expect((await app.inject({ method: 'GET', url: '/friends' })).statusCode).toBe(401);
+    });
+  });
+
+  describe('favoriting a friend', () => {
+    const favorite = (headers: Record<string, string>, groupId: string) =>
+      app.inject({ method: 'PUT', url: `/groups/${groupId}/favorite`, headers });
+
+    const unfavorite = (headers: Record<string, string>, groupId: string) =>
+      app.inject({ method: 'DELETE', url: `/groups/${groupId}/favorite`, headers });
+
+    /** The `groupId` the friend list itself reports for `friendId`. */
+    async function groupIdFor(headers: Record<string, string>, friendId: string) {
+      const { friends } = (await listFriends(headers)).json();
+      return friends.find((friend: { id: string }) => friend.id === friendId).groupId as string;
+    }
+
+    it('toggles through the same favorite endpoint every group uses', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const { invite } = (await createInvite(ada.headers)).json();
+      await accept(invite.code, grace.headers);
+      const groupId = await groupIdFor(ada.headers, grace.userId);
+
+      expect((await favorite(ada.headers, groupId)).statusCode).toBe(200);
+      expect((await listFriends(ada.headers)).json().friends[0]).toMatchObject({
+        favorite: true,
+      });
+
+      expect((await unfavorite(ada.headers, groupId)).statusCode).toBe(200);
+      expect((await listFriends(ada.headers)).json().friends[0]).toMatchObject({
+        favorite: false,
+      });
+    });
+
+    it('is personal: favoriting on one side leaves the other untouched', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const { invite } = (await createInvite(ada.headers)).json();
+      await accept(invite.code, grace.headers);
+      const groupId = await groupIdFor(ada.headers, grace.userId);
+
+      await favorite(ada.headers, groupId);
+
+      expect((await listFriends(ada.headers)).json().friends[0]).toMatchObject({
+        favorite: true,
+      });
+      expect((await listFriends(grace.headers)).json().friends[0]).toMatchObject({
+        favorite: false,
+      });
+    });
+
+    it('lists a favorited friend first, alphabetical otherwise', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      const { invite } = (await createInvite(ada.headers)).json();
+      await accept(invite.code, grace.headers);
+      await accept(invite.code, alan.headers);
+
+      // Alphabetical to start: Alan before Grace.
+      expect(
+        (await listFriends(ada.headers)).json().friends.map((f: { name: string }) => f.name),
+      ).toEqual(['Alan Turing', 'Grace Hopper']);
+
+      const groupId = await groupIdFor(ada.headers, grace.userId);
+      await favorite(ada.headers, groupId);
+
+      expect(
+        (await listFriends(ada.headers)).json().friends.map((f: { name: string }) => f.name),
+      ).toEqual(['Grace Hopper', 'Alan Turing']);
     });
   });
 

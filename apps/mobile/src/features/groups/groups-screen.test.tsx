@@ -1,9 +1,10 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
 
+import { groupsChanged } from './groups-changed';
 import { GroupsScreen } from './groups-screen';
 
 const trip: GroupSummary = {
@@ -15,6 +16,7 @@ const trip: GroupSummary = {
   depth: 0,
   subgroupCount: 0,
   viewerBalanceCents: 0,
+  favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };
@@ -28,6 +30,7 @@ const lastYear: GroupSummary = {
 };
 
 const mockFetchGroups = jest.fn<() => Promise<GroupSummary[]>>();
+const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupSummary>>();
 const mockPush = jest.fn();
 
 // Stable across renders, like the real memoised auth context.
@@ -40,6 +43,7 @@ jest.mock('@/features/auth/use-auth', () => ({
 jest.mock('@/lib/api/groups', () => ({
   fetchGroups: () => mockFetchGroups(),
   createGroup: jest.fn(),
+  setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
 }));
 
 jest.mock('@/lib/api/friends', () => ({
@@ -51,6 +55,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 beforeEach(() => {
   mockFetchGroups.mockReset().mockResolvedValue([]);
+  mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
   mockPush.mockReset();
   pendingInvite.clear();
 });
@@ -128,6 +133,76 @@ describe('GroupsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/groups/[id]',
       params: { id: trip.id },
+    });
+  });
+
+  it('toggles a group’s favorite from its row', async () => {
+    // The mutation's own response applies immediately; the follow-up
+    // `groupsChanged`-triggered refetch must agree with it, not clobber it.
+    mockFetchGroups.mockResolvedValueOnce([trip]).mockResolvedValue([{ ...trip, favorite: true }]);
+
+    await render(<GroupsScreen />);
+    await screen.findByText('Corsica 2026');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Corsica 2026 to favorites' }));
+
+    expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), trip.id, true);
+    expect(
+      await screen.findByRole('button', { name: 'Remove Corsica 2026 from favorites' }),
+    ).toBeTruthy();
+  });
+
+  it('does not reorder the list the instant a group is favorited from its row', async () => {
+    const alpha = { ...trip, id: 'a', name: 'Alpha' };
+    const zulu = { ...trip, id: 'z', name: 'Zulu' };
+    // Both the mutation's own optimistic update and the follow-up
+    // `groupsChanged`-triggered refetch must agree on the row order staying
+    // put — a real server that had already reordered would be indistinguishable
+    // here from one that had not, so this response keeps the same order,
+    // isolating the one thing this test checks.
+    mockFetchGroups
+      .mockResolvedValueOnce([alpha, zulu])
+      .mockResolvedValue([alpha, { ...zulu, favorite: true }]);
+
+    await render(<GroupsScreen />);
+    await screen.findByText('Alpha');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Zulu to favorites' }));
+
+    // The star flips...
+    await screen.findByRole('button', { name: 'Remove Zulu from favorites' });
+    // ...but Zulu's row stays put rather than jumping to the top under the
+    // viewer's finger — the pinned order only ever takes effect on the
+    // list's next natural refetch, never synchronously with the tap
+    // (`docs/specs/favorites.md`).
+    const names = screen.getAllByText(/^(Alpha|Zulu)$/).map((node) => node.props.children);
+    expect(names).toEqual(['Alpha', 'Zulu']);
+  });
+
+  it('reorders once something else refreshes the list, after a favorite was set', async () => {
+    const alpha = { ...trip, id: 'a', name: 'Alpha' };
+    const zulu = { ...trip, id: 'z', name: 'Zulu' };
+    mockFetchGroups
+      .mockResolvedValueOnce([alpha, zulu]) // initial load
+      .mockResolvedValueOnce([alpha, { ...zulu, favorite: true }]) // the toggle's own refetch: order kept
+      // A later, unrelated refresh (say, a group created on another screen) —
+      // a real server always answers with favorites first
+      // (`docs/specs/favorites.md`), and this is where that finally shows.
+      .mockResolvedValue([{ ...zulu, favorite: true }, alpha]);
+
+    await render(<GroupsScreen />);
+    await screen.findByText('Alpha');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Zulu to favorites' }));
+    await screen.findByRole('button', { name: 'Remove Zulu from favorites' });
+
+    await act(async () => {
+      groupsChanged.notify();
+    });
+
+    await waitFor(() => {
+      const names = screen.getAllByText(/^(Alpha|Zulu)$/).map((node) => node.props.children);
+      expect(names).toEqual(['Zulu', 'Alpha']);
     });
   });
 

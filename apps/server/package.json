@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "migrate": "drizzle-kit migrate",
     "migrate:generate": "drizzle-kit generate",
+    "backfill:pair-groups": "tsx --env-file-if-exists=.env src/scripts/backfill-pair-groups.ts",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

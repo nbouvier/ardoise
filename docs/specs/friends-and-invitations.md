@@ -61,6 +61,10 @@ Once in the app:
    is no "pending request" state and no separate approval on the inviter's side, because
    the inviter already consented by sending the link.
 
+The **implicit pair group** the two now share (`docs/specs/groups.md`) is created in this
+same step, not the first time either of them opens it — by the time a friend shows up in
+either Friends list, the group behind their row already exists.
+
 ### Managing
 
 - A user can **remove a friend**, after a confirmation. Removal is symmetric: the
@@ -69,7 +73,11 @@ Once in the app:
   with everything in it. The confirmation says so (`docs/specs/groups.md`).
 - A removed friend may be re-added later with a new (or the same still-valid) link — but
   the shared group starts empty again.
-- Tapping a friend opens the group shared with them (`docs/specs/groups.md`).
+- Tapping a friend opens the group shared with them directly, by its already-known id
+  (`docs/specs/groups.md`) — no request needed first to find or create it.
+- A friend's row carries the same **favorite star** any group does, right of the name
+  (`docs/specs/favorites.md`): it toggles that friend's own pair group, and favorited
+  friends are pinned above the rest, alphabetical within that.
 
 ## Out of scope
 
@@ -132,6 +140,10 @@ Once in the app:
       can be entered manually in the app to reach the same confirmation screen.
 - [ ] Removing a friend removes the relationship for both users.
 - [ ] The public invitation preview never exposes the inviter's email address.
+- [ ] The implicit pair group exists as soon as the friendship does, on both sides, without
+      either of them opening it first.
+- [ ] A friend's row carries a favorite star, toggling their pair group the same way any
+      other group's star does; favorited friends are listed above the rest.
 
 ## Testing considerations
 
@@ -152,8 +164,14 @@ Endpoints (see `docs/API.md` for the authoritative surface):
 - `POST /friends/invite` — get-or-create the caller's active invite → `{ invite }`.
 - `POST /friends/invite/rotate` — revoke the active invite and issue a new one.
 - `DELETE /friends/invite` — revoke the active invite. Idempotent.
-- `GET /friends` — the caller's friends.
+- `GET /friends` — the caller's friends, favorited ones first
+  (`docs/specs/favorites.md`), each carrying the implicit pair group's own `groupId` and
+  `favorite` marker. That group is created inside `POST /invites/:code/accept` below, not
+  lazily — see `docs/specs/groups.md`.
 - `DELETE /friends/:friendId` — remove a friend. Idempotent.
+- No dedicated route opens or creates the pair group: `groupId` from the list above is
+  used directly against `GET /groups/:groupId`, and favoriting it goes through the
+  ordinary `PUT`/`DELETE /groups/:groupId/favorite`.
 
 Since groups arrived, the routes that *consume* a code are shared with them — one code
 space, one landing page, one confirmation screen (`docs/specs/groups.md`):
@@ -169,6 +187,10 @@ Persisted data (see `docs/DATABASE.md`):
 - **Invite**: inviter, opaque code, expiry, creation and revocation timestamps.
 - **Friendship**: one row per pair, stored in a canonical order so the same relationship
   cannot be recorded twice.
+
+A friendship created before pair-group creation became eager (2026-09-14) may predate its
+group; `npm run backfill:pair-groups --workspace @splitcount/server` creates the missing
+ones once, idempotently (`docs/DATABASE.md`).
 
 The invitation **code is stored in clear**, unlike refresh tokens. It must be redisplayable
 ("copy my link again"), and it only grants a narrow, expiring, revocable capability: to

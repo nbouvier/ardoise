@@ -1,7 +1,8 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import { groupsChanged } from '@/features/groups/groups-changed';
 import { pendingInvite } from '@/features/invites/pending-invite';
 
 import { FriendsScreen } from './friends-screen';
@@ -11,12 +12,14 @@ const ada: FriendEntry = {
   name: 'Ada Lovelace',
   picture: null,
   balanceCents: 0,
+  groupId: '99999999-9999-4999-8999-999999999999',
+  favorite: false,
 };
 
 const mockFetchFriends = jest.fn<() => Promise<FriendEntry[]>>();
 const mockRemoveFriend = jest.fn<() => Promise<void>>();
 const mockFetchInvite = jest.fn<() => Promise<unknown>>();
-const mockFetchPairGroup = jest.fn<() => Promise<{ id: string }>>();
+const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockPush = jest.fn();
 
 // Stable across renders, like the real memoised auth context.
@@ -34,7 +37,7 @@ jest.mock('@/lib/api/friends', () => ({
 }));
 
 jest.mock('@/lib/api/groups', () => ({
-  fetchPairGroup: () => mockFetchPairGroup(),
+  setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
 }));
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
@@ -47,7 +50,7 @@ beforeEach(() => {
     url: 'https://api.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
     expiresAt: '2026-09-17T12:00:00.000Z',
   });
-  mockFetchPairGroup.mockReset().mockResolvedValue({ id: 'group-1' });
+  mockSetGroupFavorite.mockReset().mockResolvedValue({});
   mockPush.mockReset();
   pendingInvite.clear();
 });
@@ -140,10 +143,79 @@ describe('FriendsScreen', () => {
       screen.getByRole('button', { name: /open your shared group with Ada Lovelace/i }),
     );
 
-    expect(mockFetchPairGroup).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/groups/[id]',
-      params: { id: 'group-1' },
+      params: { id: ada.groupId },
+    });
+  });
+
+  it('toggles a friend’s favorite from their row', async () => {
+    // The mutation's own response applies immediately; the follow-up
+    // `groupsChanged`-triggered refetch must agree with it, not clobber it.
+    mockFetchFriends.mockResolvedValueOnce([ada]).mockResolvedValue([{ ...ada, favorite: true }]);
+
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Add Ada Lovelace to favorites' }),
+    );
+
+    expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), ada.groupId, true);
+    expect(
+      await screen.findByRole('button', { name: 'Remove Ada Lovelace from favorites' }),
+    ).toBeTruthy();
+  });
+
+  it('does not reorder the list the instant a friend is favorited from their row', async () => {
+    const alan = { ...ada, id: 'alan-id', name: 'Alan Turing', groupId: 'alan-group' };
+    const grace = { ...ada, id: 'grace-id', name: 'Grace Hopper', groupId: 'grace-group' };
+    mockFetchFriends
+      .mockResolvedValueOnce([alan, grace])
+      .mockResolvedValue([alan, { ...grace, favorite: true }]);
+
+    await render(<FriendsScreen />);
+    await screen.findByText('Alan Turing');
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
+    );
+
+    await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' });
+    const names = screen
+      .getAllByText(/^(Alan Turing|Grace Hopper)$/)
+      .map((node) => node.props.children);
+    expect(names).toEqual(['Alan Turing', 'Grace Hopper']);
+  });
+
+  it('reorders once something else refreshes the list, after a friend is favorited', async () => {
+    const alan = { ...ada, id: 'alan-id', name: 'Alan Turing', groupId: 'alan-group' };
+    const grace = { ...ada, id: 'grace-id', name: 'Grace Hopper', groupId: 'grace-group' };
+    mockFetchFriends
+      .mockResolvedValueOnce([alan, grace]) // initial load
+      .mockResolvedValueOnce([alan, { ...grace, favorite: true }]) // the toggle's own refetch: order kept
+      // A later, unrelated refresh (say, a favorite set from the group's own
+      // page) — a real server always answers with favorites first
+      // (`docs/specs/favorites.md`), and this is where that finally shows.
+      .mockResolvedValue([{ ...grace, favorite: true }, alan]);
+
+    await render(<FriendsScreen />);
+    await screen.findByText('Alan Turing');
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
+    );
+    await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' });
+
+    await act(async () => {
+      groupsChanged.notify();
+    });
+
+    await waitFor(() => {
+      const names = screen
+        .getAllByText(/^(Alan Turing|Grace Hopper)$/)
+        .map((node) => node.props.children);
+      expect(names).toEqual(['Grace Hopper', 'Alan Turing']);
     });
   });
 });

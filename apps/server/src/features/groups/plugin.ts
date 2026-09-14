@@ -30,7 +30,6 @@ export interface GroupsPluginOptions {
 
 const groupParamsSchema = z.object({ groupId: z.uuid() });
 const memberParamsSchema = groupParamsSchema.extend({ userId: z.uuid() });
-const friendParamsSchema = z.object({ friendId: z.uuid() });
 
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
@@ -205,6 +204,29 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       }),
     );
 
+    // Personal to the caller, independent of the group's own archived state
+    // (`docs/specs/favorites.md`). Idempotent: setting an already-favorited
+    // group favorite again, or clearing one that isn't, changes nothing.
+    app.put(
+      '/groups/:groupId/favorite',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply }) => {
+        const group = await groups.setFavorite(userId, params.groupId, true);
+        app.log.info({ userId, groupId: group.id, favorite: true }, 'groups.favorite.changed');
+        return reply.send({ group });
+      }),
+    );
+
+    app.delete(
+      '/groups/:groupId/favorite',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply }) => {
+        const group = await groups.setFavorite(userId, params.groupId, false);
+        app.log.info({ userId, groupId: group.id, favorite: false }, 'groups.favorite.changed');
+        return reply.send({ group });
+      }),
+    );
+
     // A sub-group visible in a group the caller already belongs to; lighter
     // than an invitation link (no friendship check, docs/specs/groups.md).
     app.post(
@@ -243,17 +265,6 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
         app.log.info({ userId, groupId: params.groupId }, 'groups.invite.revoked');
         return reply.code(204).send();
       }),
-    );
-
-    // Get-or-create, like `POST /friends/invite`: as far as the user is
-    // concerned the group they share with a friend has always existed, so the
-    // first access materialises it.
-    app.post(
-      '/groups/pair/:friendId',
-      authenticated,
-      route(friendParamsSchema, async ({ params, userId, reply }) =>
-        reply.send({ group: await groups.getPairGroup(userId, params.friendId) }),
-      ),
     );
   },
   { name: 'groups', dependencies: ['db', 'auth', 'invites'] },

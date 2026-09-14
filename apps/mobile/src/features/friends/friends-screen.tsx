@@ -8,16 +8,15 @@ import { AddMenuButton } from '@/components/add-menu-button';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { FavoriteStar } from '@/components/favorite-star';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useAuth } from '@/features/auth/use-auth';
 import { groupsChanged } from '@/features/groups/groups-changed';
 import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchPairGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
 import { InviteScreen } from './invite-screen';
@@ -25,14 +24,17 @@ import { useFriends } from './use-friends';
 
 function FriendRow({
   friend,
-  busy,
+  favoriteBusy,
   onOpen,
   onRemove,
+  onToggleFavorite,
 }: {
   friend: FriendEntry;
-  busy: boolean;
+  /** Disables the star while its own toggle request is in flight. */
+  favoriteBusy: boolean;
   onOpen: (friend: FriendEntry) => void;
   onRemove: (friend: FriendEntry) => void;
+  onToggleFavorite: (friend: FriendEntry) => void;
 }) {
   return (
     <Card>
@@ -41,7 +43,6 @@ function FriendRow({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open your shared group with ${friend.name}`}
-          disabled={busy}
           onPress={() => onOpen(friend)}
           style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
           <Avatar name={friend.name} picture={friend.picture} size={44} seed={friend.id} />
@@ -53,6 +54,13 @@ function FriendRow({
             </ThemedText>
           </View>
         </Pressable>
+
+        <FavoriteStar
+          favorite={friend.favorite}
+          label={friend.name}
+          disabled={favoriteBusy}
+          onToggle={() => onToggleFavorite(friend)}
+        />
 
         <Pressable
           accessibilityRole="button"
@@ -69,27 +77,15 @@ function FriendRow({
 }
 
 export function FriendsScreen() {
-  const { status, friends, refresh, remove } = useFriends();
-  const { authorizedFetch } = useAuth();
+  const { status, friends, refresh, remove, toggleFavorite, favoriteBusyId } = useFriends();
   const router = useRouter();
   const theme = useTheme();
   const [inviting, setInviting] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [opening, setOpening] = useState(false);
 
-  /**
-   * Open the group shared with a friend. It is created on first access, so
-   * from here it has simply always existed.
-   */
+  /** Open the group shared with a friend — it always exists by now. */
   function handleOpen(friend: FriendEntry) {
-    setOpening(true);
-    fetchPairGroup(authorizedFetch, friend.id)
-      .then((group) => router.push({ pathname: '/groups/[id]', params: { id: group.id } }))
-      .catch((error: unknown) => {
-        logger.warn('groups.pair.open.failed', errorFields(error));
-        Alert.alert('Can’t open', 'Check your connection and try again.');
-      })
-      .finally(() => setOpening(false));
+    router.push({ pathname: '/groups/[id]', params: { id: friend.groupId } });
   }
 
   function handleRemove(friend: FriendEntry) {
@@ -155,7 +151,13 @@ export function FriendsScreen() {
               keyExtractor={(friend) => friend.id}
               contentContainerStyle={styles.list}
               renderItem={({ item }) => (
-                <FriendRow friend={item} busy={opening} onOpen={handleOpen} onRemove={handleRemove} />
+                <FriendRow
+                  friend={item}
+                  favoriteBusy={favoriteBusyId === item.id}
+                  onOpen={handleOpen}
+                  onRemove={handleRemove}
+                  onToggleFavorite={toggleFavorite}
+                />
               )}
             />
           )}
@@ -245,8 +247,11 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
+    // The star aligns with the name line specifically, not the row's full
+    // height (`docs/specs/favorites.md`) — the row also carries a balance
+    // beneath the name.
+    alignItems: 'flex-start',
+    gap: Spacing.two,
   },
   rowMain: {
     flex: 1,

@@ -200,9 +200,11 @@ ever contain that friendship's own two people**, forever. Concretely:
 
 ### The implicit pair group
 
-- Every pair of friends shares a group that **already exists** as far as the user is
-  concerned: opening a friend from the friend list opens it.
-- It is **not listed** among the user's groups.
+- Every pair of friends shares a group, created the moment the friendship is
+  (`docs/specs/friends-and-invitations.md`) — by the time either side sees the other in
+  their Friends list, the group already exists.
+- It is **not listed** among the user's groups — it surfaces on the Friends list instead,
+  one row per friend, the same one that opens it (`docs/specs/friends-and-invitations.md`).
 - **Nobody can be added to it**: no member management, no invitation link. It stays
   exactly two people.
 - It **cannot be renamed, archived, deleted, or nested under something else**. It is named
@@ -281,9 +283,10 @@ ever contain that friendship's own two people**, forever. Concretely:
   construction. **Creating a sub-group under it is allowed** — but bringing a third
   person into that sub-group, or any of its descendants, is refused the same way (see
   "Sub-groups of a pair group" above).
-- **Opening the pair group of a friend for the first time**: it is created on the spot and
-  is indistinguishable from one that already existed, including when both devices do it
-  simultaneously.
+- **Two people becoming friends at the same time as each other trying to** (racing invite
+  acceptances): the friendship is created once (`docs/specs/friends-and-invitations.md`)
+  and so is its pair group — the unique constraint on `groups.friendship_id` is what
+  guarantees that, the same way `friendships`' own constraint does for the relationship.
 - **Opening the pair group of someone who is no longer a friend**: refused, like any other
   group the user does not belong to.
 - **Creating a sub-group at the depth limit**: refused with an explanation; the five-level
@@ -337,8 +340,8 @@ ever contain that friendship's own two people**, forever. Concretely:
       their name, both members, no membership or invitation actions, and an ordinary
       sub-groups section.
 - [ ] That pair group never appears in the group list, and cannot itself be a sub-group.
-- [ ] Opening the same friend twice reaches the same group, and two simultaneous openings
-      do not create two groups.
+- [ ] The pair group exists from the moment the friendship does; two people becoming
+      friends at the same time as each other trying to still ends with a single group.
 - [ ] Archiving, deleting, renaming, inviting into or adding someone to a pair group is
       refused; creating a sub-group under it is not.
 - [ ] A sub-group nested under a pair group, at any depth, starts with both friends as
@@ -366,8 +369,9 @@ ever contain that friendship's own two people**, forever. Concretely:
   examples.
 - **Downward removal**: leaving or being removed from a group must remove the same person
   from every descendant, and never touch an unrelated branch of the tree or the ancestors.
-- **Idempotence of the pair group under concurrency** is worth a test that issues both
-  requests without awaiting the first, unchanged from before sub-groups existed.
+- **Idempotence of the pair group under concurrency** is worth a test that races two
+  friendship-acceptance requests without awaiting the first — the group is created there
+  now (`docs/specs/friends-and-invitations.md`), not on first access.
 - **Idempotence and concurrency of joining a sub-group**, the same way, is a direct
   analogue.
 - The **pair-group immutability** guard still applies to the original six operations on the

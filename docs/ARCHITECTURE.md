@@ -133,7 +133,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | `friends` and `groups` register an `InviteHandler` rather than `invites` knowing them | Keeps the two features independent of each other while sharing the code lifecycle |
 | 2026-09-11 | A `users` read module shared by `friends`, `groups` and `invites` | The open item below came due: a third feature needed `users` |
 | 2026-09-11 | The pair group is keyed by the friendship (`groups.friendship_id`, unique) | "One group per pair, gone with the friendship" becomes a database guarantee, not application logic |
-| 2026-09-11 | Pair groups are created lazily, on first access | No backfill for existing friendships, and `friends` needs no write dependency on `groups` |
+| 2026-09-11 | ~~Pair groups are created lazily, on first access~~ — **superseded** 2026-09-14: created eagerly, the moment the friendship is (see below) | No backfill for existing friendships, and `friends` needs no write dependency on `groups` |
+| 2026-09-14 | Pair groups are created eagerly, the moment a friendship is — `friends` calls `groupsRepository.createPairGroup` directly (instantiated in `friendsPlugin`, the same "borrow a repository" pattern `ledger` already uses), not through the `groups` service | The Friends list is sourced from the pair group itself (id, favorite marker) rather than a parallel query, so the group must already exist by the time a friendship is listed — a get-or-create on every read was the alternative, and a write on a `GET` is worse than a one-time backfill (`npm run backfill:pair-groups`) for friendships that predate this |
 | 2026-09-11 | A non-member gets `404` for a group, never `403` | A `403` would confirm the group exists |
 | 2026-09-11 | One migrated PGlite per *test file*, truncated between tests | A database per test cost seconds each; same isolation, suite down from 92s to 17s |
 | 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@splitcount/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
@@ -198,7 +199,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   (`balancesWith`), behind a narrow `CounterpartyBalances` interface declared on its
   service — read-only, and not through the transactions *service*, since the aggregate is
   already scoped to transactions the caller is party to and needs no group membership
-  check. `transactions` stays the owner of those tables and of the rule.
+  check. `transactions` stays the owner of those tables and of the rule. Since 2026-09-14
+  `friends` also holds a narrow *write* dependency on `groups`: `friendsPlugin`
+  instantiates `createGroupsRepository(app.db)` directly (not through the `groups`
+  service) and calls its `createPairGroup` to materialise the implicit pair group the
+  moment a friendship is created — `groups` itself has no dependency back on `friends`,
+  so this stays one-directional.
 - Invitation lifetime (7 days) is a first guess; tune with real usage.
 - Group ownership cannot be transferred, so an inactive owner strands a group nobody can
   delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).

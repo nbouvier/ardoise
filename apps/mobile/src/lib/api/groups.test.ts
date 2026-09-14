@@ -16,7 +16,6 @@ import {
   fetchGroup,
   fetchGroupInvite,
   fetchGroups,
-  fetchPairGroup,
   joinGroup,
   removeGroupMember,
   updateGroup,
@@ -172,20 +171,5 @@ describe('fetchGroupInvite', () => {
     expect(fetcher).toHaveBeenCalledWith(`/groups/${groupDetail.id}/invite`, {
       method: 'POST',
     });
-  });
-});
-
-describe('fetchPairGroup', () => {
-  it('gets or creates the group shared with a friend', async () => {
-    const pair = {
-      ...groupDetail,
-      kind: 'pair' as const,
-      name: 'Grace',
-      viewerRole: 'member' as const,
-    };
-    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: pair } }));
-
-    await expect(fetchPairGroup(fetcher, grace.id)).resolves.toEqual(pair);
-    expect(fetcher).toHaveBeenCalledWith(`/groups/pair/${grace.id}`, { method: 'POST' });
   });
 });

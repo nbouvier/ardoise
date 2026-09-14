@@ -180,7 +180,8 @@ authentication. Response `204`.
 
 ### `GET /friends`
 
-The caller's friends, sorted by name, each with where the two of them stand. Requires
+The caller's friends, favorited ones first and alphabetical within that
+(`docs/specs/favorites.md`), each with where the two of them stand. Requires
 authentication.
 
 `balanceCents` is positive when that friend owes the caller, negative when the caller owes
@@ -190,12 +191,27 @@ of them still belongs to counts too. It is built solely from transactions the ca
 party to, so it can never surface a group or an amount they cannot already read. Computed
 on the fly, not stored — see `docs/specs/balances.md` and `docs/ARCHITECTURE.md`.
 
+`groupId` is the implicit pair group the two share — created the moment they became
+friends (`docs/specs/friends-and-invitations.md`), so it is always present. `favorite` is
+that group's own favorite marker, personal to the caller; toggle it through the same
+`PUT`/`DELETE /groups/:groupId/favorite` every other group uses, no dedicated route. Note
+this is *not* the pair group's own balance (`viewerBalanceCents` on `GET
+/groups/:groupId`), which is scoped to that group's own transactions only —
+`balanceCents` here nets every group the two share.
+
 Response `200`:
 
 ```json
 {
   "friends": [
-    { "id": "<uuid>", "name": "Ada", "picture": null, "balanceCents": 1250 }
+    {
+      "id": "<uuid>",
+      "name": "Ada",
+      "picture": null,
+      "balanceCents": 1250,
+      "groupId": "<uuid>",
+      "favorite": false
+    }
   ]
 }
 ```
@@ -235,7 +251,7 @@ Shared error codes:
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `parentId` is
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
 is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
 position **in that group alone** — positive means they are owed, negative means they owe
@@ -258,19 +274,24 @@ refuse a third person there with `pair_group_immutable`, and
 a link with no one left to legitimately send it to. The other friend still reaches it
 through `POST /groups/:groupId/join` instead, same as any other unjoined sub-group.
 
-A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents }` —
+A `subgroups` entry is `{ id, name, memberCount, viewerIsMember, viewerBalanceCents, favorite }` —
 enough to decide whether to open it (already a member) or join it and show where the
 viewer stands, never a member list. `viewerBalanceCents` is the viewer's own balance in
 *that* sub-group, on the same terms as the top-level figure (see above), and is always `0`
-when `viewerIsMember` is `false`, since a non-member is on none of its transactions. An
-`ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its own
-`subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when opened.
+when `viewerIsMember` is `false`, since a non-member is on none of its transactions.
+`favorite` is likewise always `false` when `viewerIsMember` is `false` — there is no
+membership row to hold it on (`docs/specs/favorites.md`); the list is otherwise ordered
+with favorited sub-groups first among those the viewer has joined, alphabetical within
+that. An `ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its
+own `subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when
+opened.
 
 ### `GET /groups`
 
 The caller's **root** groups only — a group that is itself a sub-group is reached by
 opening its parent, never listed here. **Pair groups are never listed** — they are reached
-from the friend list. Active groups first, then archived ones; alphabetical within each.
+from the friend list. Active groups first, then archived ones; within each, favorited
+groups first (`docs/specs/favorites.md`), then alphabetical.
 
 Response `200`: `{ "groups": [ "<GroupSummary>" ] }`
 
@@ -346,6 +367,15 @@ Response `200 { "group": "<GroupDetail>" }`. `404 group_not_found` for a root gr
 a sub-group whose immediate parent the caller does not belong to. `409 group_archived` when
 the sub-group or an ancestor of it is archived.
 
+### `PUT /groups/:groupId/favorite`, `DELETE /groups/:groupId/favorite`
+
+Set or clear the caller's own favorite marker on the group (`docs/specs/favorites.md`).
+Personal to the caller, and unaffected by the group's own archived state; both are
+idempotent — setting an already-favorited group favorite again, or clearing one that
+isn't, changes nothing and still answers `200`.
+
+Response `200 { "group": "<GroupDetail>" }`.
+
 ### `POST /groups/:groupId/invite`, `/rotate`, `DELETE /groups/:groupId/invite`
 
 The group's invitation link — **one per group**, not per member: any member sees, shares
@@ -355,12 +385,10 @@ group, and to every one of its ancestors (`docs/specs/groups.md`); it does **not
 a friendship. The get-or-create and rotate routes refuse (`409 pair_group_immutable`) for
 a `pairRooted` group — there is no one an invitation to one could legitimately be for.
 
-### `POST /groups/pair/:friendId`
-
-The group the caller shares with a friend, **created on first access**. Idempotent, and
-safe under concurrency: the unique constraint on the friendship guarantees one group per
-pair. Response `200 { "group": "<GroupDetail>" }`; `404` when the two are not friends. This
-group can be used as `parentId` on `POST /groups` — a friendship can have sub-groups.
+The implicit pair group itself has no route of its own: it is created the moment two
+people become friends (`docs/specs/friends-and-invitations.md`) and reached through
+`GET /friends`'s `groupId`, then the ordinary `GET /groups/:groupId`. It can be used as
+`parentId` on `POST /groups` — a friendship can have sub-groups.
 
 ## Transactions
 

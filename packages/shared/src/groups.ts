@@ -39,7 +39,8 @@ export const MAX_GROUP_DEPTH = 4;
  * group alone** — positive means they are owed, negative means they owe
  * (`docs/specs/balances.md`). A sub-group is never folded into its parent's
  * figure: each space answers "where do I stand here", and each carries its
- * own.
+ * own. `favorite` is the viewer's own marker, personal to them
+ * (`docs/specs/favorites.md`) — never another member's state.
  */
 export const groupSummarySchema = z.object({
   id: z.uuid(),
@@ -50,6 +51,7 @@ export const groupSummarySchema = z.object({
   depth: z.number().int().min(0).max(MAX_GROUP_DEPTH),
   subgroupCount: z.number().int().nonnegative(),
   viewerBalanceCents: z.number().int(),
+  favorite: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
 });
@@ -68,6 +70,12 @@ export const subgroupSummarySchema = z.object({
   viewerIsMember: z.boolean(),
   /** The viewer's own balance in this sub-group, `0` when not a member. */
   viewerBalanceCents: z.number().int(),
+  /**
+   * The viewer's own favorite marker on this sub-group (`docs/specs/favorites.md`).
+   * Always `false` when `viewerIsMember` is `false` — a non-member has no
+   * membership row to hold it on.
+   */
+  favorite: z.boolean(),
 });
 export type SubgroupSummary = z.infer<typeof subgroupSummarySchema>;
 

@@ -8,7 +8,6 @@ import type {
 } from '@splitcount/shared';
 
 import type { GroupRow } from '../../db/schema.js';
-import { orderPair } from '../friends/friendships.js';
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
 import { toUserSummary } from '../users/repository.js';
@@ -26,10 +25,15 @@ import {
 } from './membership.js';
 import type { GroupsRepository, MemberWithUser } from './repository.js';
 
-/** A group the caller is allowed to see, with the role that lets them see it. */
+/**
+ * A group the caller is allowed to see, with the role that lets them see it
+ * and their own favorite marker off that same membership row
+ * (`docs/specs/favorites.md`).
+ */
 interface GroupContext {
   group: GroupRow;
   role: GroupRole;
+  favoritedAt: Date | null;
 }
 
 export interface RemovedMember {
@@ -59,11 +63,15 @@ export interface GroupsService {
    * (`docs/specs/groups.md`).
    */
   join(userId: string, groupId: string): Promise<GroupDetail>;
+  /**
+   * Set or clear the caller's own favorite marker on `groupId`
+   * (`docs/specs/favorites.md`). Personal to them, and independent of the
+   * group's own archived state — idempotent either way.
+   */
+  setFavorite(userId: string, groupId: string, favorite: boolean): Promise<GroupDetail>;
   getOrCreateInvite(userId: string, groupId: string): Promise<Invite>;
   rotateInvite(userId: string, groupId: string): Promise<Invite>;
   revokeInvite(userId: string, groupId: string): Promise<void>;
-  /** The group the caller shares with a friend, created on first access. */
-  getPairGroup(userId: string, friendId: string): Promise<GroupDetail>;
   /**
    * What the statistics "including sub-groups" scope needs
    * (`docs/specs/group-statistics.md`): of `groupId`'s descendants, at any
@@ -185,6 +193,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     memberCount: number,
     subgroupCount: number,
     viewerBalanceCents: number,
+    favorite: boolean,
   ): GroupSummary {
     return {
       id: group.id,
@@ -195,12 +204,18 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       depth: group.depth,
       subgroupCount,
       viewerBalanceCents,
+      favorite,
       archivedAt: group.archivedAt?.toISOString() ?? null,
       createdAt: group.createdAt.toISOString(),
     };
   }
 
-  async function detailOf(group: GroupRow, viewerId: string, role: GroupRole) {
+  async function detailOf(
+    group: GroupRow,
+    viewerId: string,
+    role: GroupRole,
+    favoritedAt: Date | null,
+  ) {
     const [members, children, ancestors] = await Promise.all([
       repository.listMembers(group.id),
       repository.listChildren(group.id),
@@ -212,10 +227,24 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         children.map((child) => child.group.id),
       ),
     );
+    // Only a joined sub-group can possibly be favorited — there is no
+    // membership row to hold it on otherwise (`docs/specs/favorites.md`).
+    const favoriteChildIds = new Set(
+      await repository.listFavoriteGroupIds(viewerId, [...joinedChildIds]),
+    );
     // One ledger read for this group and each sub-group shown with a figure
     // of its own. An unjoined sub-group is not asked for at all: the viewer
     // is on none of its transactions, so it is `0` without a query.
     const balances = await ledger.balancesByGroup(viewerId, [group.id, ...joinedChildIds]);
+
+    // Favorited sub-groups float to the top of the joined ones, alphabetical
+    // order preserved within each half (`docs/specs/favorites.md`); a stable
+    // sort keeps `listChildren`'s own alphabetical order as the tiebreaker.
+    const orderedChildren = [...children].sort((a, b) => {
+      const favoriteA = favoriteChildIds.has(a.group.id) ? 0 : 1;
+      const favoriteB = favoriteChildIds.has(b.group.id) ? 0 : 1;
+      return favoriteA - favoriteB;
+    });
 
     return {
       ...summaryOf(
@@ -224,13 +253,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         members.length,
         children.length,
         balances.get(group.id) ?? 0,
+        favoritedAt !== null,
       ),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
         role: member.role,
       })),
       viewerRole: role,
-      subgroups: children.map((child) => ({
+      subgroups: orderedChildren.map((child) => ({
         id: child.group.id,
         // A sub-group is always a standard group (`groups_pair_no_parent`),
         // so it always carries its own name — no `nameFor` fallback needed.
@@ -238,6 +268,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         memberCount: child.memberCount,
         viewerIsMember: joinedChildIds.has(child.group.id),
         viewerBalanceCents: balances.get(child.group.id) ?? 0,
+        favorite: favoriteChildIds.has(child.group.id),
       })),
       ancestors: ancestors.map((ancestor) => ({
         id: ancestor.id,
@@ -272,7 +303,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     }
     const membership = await repository.findMembership(groupId, userId);
     if (membership) {
-      return { group, role: membership.role as GroupRole };
+      return { group, role: membership.role as GroupRole, favoritedAt: membership.favoritedAt };
     }
     if (group.parentId && (await repository.findMembership(group.parentId, userId))) {
       throw new GroupAccessError('join_required');
@@ -285,22 +316,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     const context = await requireMembership(userId, groupId);
     assertNotPairGroup(context.group);
     return context;
-  }
-
-  /**
-   * The friendship two users share. Reported as a missing group when there is
-   * none: without the friendship there is no shared group to reach, and the
-   * answer must not double as a "are these two people friends?" oracle.
-   */
-  async function requireFriendship(userId: string, friendId: string): Promise<string> {
-    if (userId === friendId) {
-      throw new GroupAccessError('not_found');
-    }
-    const friendship = await repository.findFriendship(orderPair(userId, friendId));
-    if (!friendship) {
-      throw new GroupAccessError('not_found');
-    }
-    return friendship.id;
   }
 
   /** Only the caller's own friends can be pulled into a group directly. */
@@ -328,20 +343,21 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         rows.map(({ group }) => group.id),
       );
 
-      return rows.map(({ group, memberCount, subgroupCount }) =>
+      return rows.map(({ group, memberCount, subgroupCount, favoritedAt }) =>
         summaryOf(
           group,
           group.name ?? 'Untitled group',
           memberCount,
           subgroupCount,
           balances.get(group.id) ?? 0,
+          favoritedAt !== null,
         ),
       );
     },
 
     async get(userId, groupId) {
-      const { group, role } = await requireMembership(userId, groupId);
-      return detailOf(group, userId, role);
+      const { group, role, favoritedAt } = await requireMembership(userId, groupId);
+      return detailOf(group, userId, role, favoritedAt);
     },
 
     async create(userId, input) {
@@ -379,11 +395,12 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         parentId,
         depth,
       });
-      return detailOf(group, userId, 'owner');
+      // Newly created: nothing has favorited it yet.
+      return detailOf(group, userId, 'owner', null);
     },
 
     async update(userId, groupId, input) {
-      const { group, role } = await requireManageable(userId, groupId);
+      const { group, role, favoritedAt } = await requireManageable(userId, groupId);
 
       const values: { name?: string; archivedAt?: Date | null } = {};
       if (input.name !== undefined) {
@@ -394,7 +411,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       }
 
       const updated = await repository.updateGroup(groupId, values, now());
-      return detailOf(updated ?? group, userId, role);
+      return detailOf(updated ?? group, userId, role, favoritedAt);
     },
 
     async remove(userId, groupId) {
@@ -404,13 +421,13 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     },
 
     async addMembers(userId, groupId, memberIds) {
-      const { group, role } = await requireManageable(userId, groupId);
+      const { group, role, favoritedAt } = await requireManageable(userId, groupId);
       await assertGroupEffectivelyActive(group);
 
       const friendIds = await requireFriends(userId, memberIds);
       assertWithinPairCeiling(await pairCeiling(repository, group), friendIds);
       await repository.addMembers(groupId, friendIds);
-      return detailOf(group, userId, role);
+      return detailOf(group, userId, role, favoritedAt);
     },
 
     async removeMember(userId, groupId, targetId) {
@@ -467,7 +484,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // caller already a member — as an owner, say — must not be downgraded
       // in the response.
       const membership = await repository.findMembership(group.id, userId);
-      return detailOf(group, userId, membership!.role as GroupRole);
+      return detailOf(group, userId, membership!.role as GroupRole, membership!.favoritedAt);
+    },
+
+    async setFavorite(userId, groupId, favorite) {
+      const { group, role } = await requireMembership(userId, groupId);
+      const favoritedAt = favorite ? now() : null;
+      await repository.setFavorite(groupId, userId, favoritedAt);
+      return detailOf(group, userId, role, favoritedAt);
     },
 
     async getOrCreateInvite(userId, groupId) {
@@ -487,16 +511,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     async revokeInvite(userId, groupId) {
       await requireManageable(userId, groupId);
       await invites.revoke(targetFor(groupId));
-    },
-
-    async getPairGroup(userId, friendId) {
-      const friendshipId = await requireFriendship(userId, friendId);
-      const existing = await repository.findGroupByFriendship(friendshipId);
-      const group =
-        existing ??
-        (await repository.createPairGroup(friendshipId, orderPair(userId, friendId)));
-
-      return detailOf(group, userId, 'member');
     },
 
     async subtreeScope(userId, groupId) {
@@ -557,9 +571,13 @@ export function createGroupInviteHandler(
       // something reflected in the summary below, which describes `group`
       // itself only.
       const inserted = await repository.addMembers(group.id, [userId]);
-      const [children, viewerBalanceCents] = await Promise.all([
+      const [children, viewerBalanceCents, membership] = await Promise.all([
         repository.listChildren(group.id),
         ownBalance(ledger, userId, group.id),
+        // Re-read rather than assume unfavorited: accepting one's own link is
+        // a no-op (`alreadyMember: true`), and the existing membership row
+        // could already carry a favorite from before.
+        repository.findMembership(group.id, userId),
       ]);
 
       return {
@@ -573,6 +591,7 @@ export function createGroupInviteHandler(
           depth: group.depth,
           subgroupCount: children.length,
           viewerBalanceCents,
+          favorite: Boolean(membership?.favoritedAt),
           archivedAt: null,
           createdAt: group.createdAt.toISOString(),
         },

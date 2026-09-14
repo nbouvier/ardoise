@@ -30,8 +30,10 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 - **Groups** — named spaces that people belong to, and where transactions live. A user
   creates a group, adds friends to it, or shares an invitation link for anyone else.
   Groups can be archived (reversible, hidden behind a toggle in the list) or deleted
-  (permanent). Every pair of friends also shares an **implicit group**, opened by tapping
-  that friend: unlisted, two people forever, otherwise a normal group.
+  (permanent). Every pair of friends also shares an **implicit group**, created the moment
+  they become friends and opened by tapping that friend: unlisted among the user's own
+  groups (it surfaces on the friend list instead), two people forever, otherwise a normal
+  group.
   A standard group can also have **sub-groups**, nested up to five levels deep, for a
   side trip or a recurring sub-budget that still belongs to the group it lives under.
   Belonging to a group always implies belonging to every one of its ancestors; a member
@@ -64,10 +66,15 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   Scoped to the one group, like its balances — a sub-group has its own plan — and derived
   from those balances, so the two can never disagree. See
   `docs/specs/reimbursements.md`.
+- **Favorite groups** — a member can star a group or a joined sub-group, from its own page
+  or its row in a list, to pin it above non-favorited ones wherever it is listed. A
+  friend's row on the friend list carries the same star, favoriting the implicit pair
+  group behind it. Personal to the viewer, and independent of a group's archived state.
+  See `docs/specs/favorites.md`.
 
 Otherwise the project is still at an early stage: monorepo, mobile client, an API with
 `/health`, auth, friends, invitations, groups, group transactions, per-category
-statistics and reimbursement plans, tooling and documentation.
+statistics, reimbursement plans and favorites, tooling and documentation.
 
 ## Planned direction
 

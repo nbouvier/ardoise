@@ -83,8 +83,10 @@ export const friendships = pgTable(
  *
  * `kind = 'standard'` is a group someone created and named. `kind = 'pair'` is
  * the implicit group two friends share: it carries no name (the API returns the
- * other member's name), it is never listed, and it is keyed by the friendship
- * itself — so the database guarantees exactly one per pair and takes it away
+ * other member's name), it is never listed among standard groups (it surfaces
+ * on the Friends list instead, `docs/specs/friends-and-invitations.md`), and
+ * it is keyed by the friendship itself — so the database guarantees exactly
+ * one per pair, creates it the moment the friendship is, and takes it away
  * with the friendship.
  *
  * A standard group can have sub-groups, nested through `parent_id`, up to five
@@ -143,6 +145,12 @@ export const groups = pgTable(
  * Who belongs to a group, and with which rights. A membership row is the *only*
  * thing that grants access to a group: every route resolves it before anything
  * else. The creator is the `owner`; only an owner may delete the group.
+ *
+ * `favoritedAt` is the viewer's own favorite marker on this group
+ * (`docs/specs/favorites.md`): non-null means favorited. It lives on the
+ * membership row itself, not a separate table, so it is personal to the member
+ * and disappears for free when the membership does (leaving, removal, or the
+ * group being deleted).
  */
 export const groupMembers = pgTable(
   'group_members',
@@ -158,6 +166,7 @@ export const groupMembers = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull().default('member'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    favoritedAt: timestamp('favorited_at', { withTimezone: true }),
   },
   (table) => [
     unique('group_members_unique').on(table.groupId, table.userId),

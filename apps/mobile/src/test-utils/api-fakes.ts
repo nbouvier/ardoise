@@ -33,11 +33,22 @@ export const grace = {
 };
 
 /**
- * A friend as `GET /friends` returns them: the summary plus where the two of
- * them stand. Positive means they owe the viewer.
+ * A friend as `GET /friends` returns them: the summary, the implicit pair
+ * group the two share, and where the two of them stand. Positive means they
+ * owe the viewer.
  */
-export const adaEntry = { ...ada, balanceCents: 1250 };
-export const graceEntry = { ...grace, balanceCents: 0 };
+export const adaEntry = {
+  ...ada,
+  balanceCents: 1250,
+  groupId: '55555555-5555-4555-8555-555555555555',
+  favorite: false,
+};
+export const graceEntry = {
+  ...grace,
+  balanceCents: 0,
+  groupId: '66666666-6666-4666-8666-666666666668',
+  favorite: false,
+};
 
 export const invite = {
   code: 'Zx3k9QpL2mN7vR1sT4uW8g',
@@ -54,6 +65,7 @@ export const groupSummary = {
   depth: 0,
   subgroupCount: 0,
   viewerBalanceCents: 0,
+  favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
 };

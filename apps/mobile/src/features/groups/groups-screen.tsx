@@ -19,7 +19,7 @@ import { GroupRow } from './group-row';
 import { useGroups } from './use-groups';
 
 export function GroupsScreen() {
-  const { status, active, archived, refresh } = useGroups();
+  const { status, active, archived, refresh, toggleFavorite, favoriteBusyId } = useGroups();
   const router = useRouter();
   const theme = useTheme();
   const [creating, setCreating] = useState(false);
@@ -52,7 +52,14 @@ export function GroupsScreen() {
         {showArchived ? (
           <View style={styles.archivedList}>
             {archived.map((group) => (
-              <GroupRow key={group.id} group={group} onPress={open} muted />
+              <GroupRow
+                key={group.id}
+                group={group}
+                onPress={open}
+                onToggleFavorite={toggleFavorite}
+                favoriteBusy={favoriteBusyId === group.id}
+                muted
+              />
             ))}
           </View>
         ) : null}
@@ -98,7 +105,14 @@ export function GroupsScreen() {
         data={active}
         keyExtractor={(group) => group.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <GroupRow group={item} onPress={open} />}
+        renderItem={({ item }) => (
+          <GroupRow
+            group={item}
+            onPress={open}
+            onToggleFavorite={toggleFavorite}
+            favoriteBusy={favoriteBusyId === item.id}
+          />
+        )}
         ListFooterComponent={archivedSection}
       />
     );

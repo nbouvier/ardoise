@@ -18,9 +18,14 @@ export interface GroupWithCount {
   memberCount: number;
 }
 
-/** A root group as `listGroupsForUser` reports it: its own direct sub-group count too. */
+/**
+ * A root group as `listGroupsForUser` reports it: its own direct sub-group
+ * count, and the caller's own `favorited_at` off their membership row
+ * (`docs/specs/favorites.md`).
+ */
 export interface RootGroupSummary extends GroupWithCount {
   subgroupCount: number;
+  favoritedAt: Date | null;
 }
 
 export interface MemberWithUser {
@@ -89,11 +94,6 @@ export interface GroupsRepository {
     groupId: string,
     userId: string,
   ): Promise<{ id: string; name: string | null }[]>;
-  /**
-   * The friendship joining two users, if they are friends. Read directly:
-   * `friendships` is shared domain data, like `users`.
-   */
-  findFriendship(pair: FriendshipPair): Promise<{ id: string } | undefined>;
   /** Of `candidateIds`, those who are friends of `userId`. */
   filterFriendIds(userId: string, candidateIds: readonly string[]): Promise<string[]>;
   /**
@@ -102,7 +102,16 @@ export interface GroupsRepository {
    * joined.
    */
   filterMemberGroupIds(userId: string, groupIds: readonly string[]): Promise<string[]>;
-  findGroupByFriendship(friendshipId: string): Promise<GroupRow | undefined>;
+  /**
+   * Of `groupIds`, those `userId` currently has favorited — used to pin a
+   * favorited sub-group above its non-favorited siblings in a parent's own
+   * `subgroups` list (`docs/specs/favorites.md`). Only ever meaningful for
+   * ids `userId` is a member of; a non-member has no membership row to have
+   * favorited on.
+   */
+  listFavoriteGroupIds(userId: string, groupIds: readonly string[]): Promise<string[]>;
+  /** Set or clear the caller's own favorite marker on their membership row. */
+  setFavorite(groupId: string, userId: string, favoritedAt: Date | null): Promise<void>;
   /**
    * Create the group two friends share. Returns the existing one when another
    * request won the race — the unique constraint on `friendship_id` is what
@@ -195,7 +204,11 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       const everyone = aliasedTable(groupMembers, 'everyone');
 
       const own = await db
-        .select({ group: groups, memberCount: sql<number>`count(${everyone.id})` })
+        .select({
+          group: groups,
+          memberCount: sql<number>`count(${everyone.id})`,
+          favoritedAt: groupMembers.favoritedAt,
+        })
         .from(groupMembers)
         .innerJoin(groups, eq(groups.id, groupMembers.groupId))
         .innerJoin(everyone, eq(everyone.groupId, groups.id))
@@ -208,9 +221,15 @@ export function createGroupsRepository(db: Database): GroupsRepository {
             isNull(groups.parentId),
           ),
         )
-        .groupBy(groups.id)
-        // Active groups first, then archived ones; alphabetical within each.
-        .orderBy(sql`${groups.archivedAt} is not null`, asc(groups.name));
+        .groupBy(groups.id, groupMembers.favoritedAt)
+        // Active groups first, then archived ones; favorited groups first
+        // within each of those (`docs/specs/favorites.md`); alphabetical
+        // within what's left.
+        .orderBy(
+          sql`${groups.archivedAt} is not null`,
+          sql`${groupMembers.favoritedAt} is null`,
+          asc(groups.name),
+        );
 
       if (own.length === 0) {
         return [];
@@ -240,6 +259,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         group: row.group,
         memberCount: toCount(row.memberCount),
         subgroupCount: countByParent.get(row.group.id) ?? 0,
+        favoritedAt: row.favoritedAt,
       }));
     },
 
@@ -420,19 +440,6 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(inArray(groups.id, descendantIds));
     },
 
-    async findFriendship(pair) {
-      const [row] = await db
-        .select({ id: friendships.id })
-        .from(friendships)
-        .where(
-          and(
-            eq(friendships.userAId, pair.userAId),
-            eq(friendships.userBId, pair.userBId),
-          ),
-        );
-      return row;
-    },
-
     async filterFriendIds(userId, candidateIds) {
       if (candidateIds.length === 0) {
         return [];
@@ -466,12 +473,28 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       return rows.map((row) => row.groupId);
     },
 
-    async findGroupByFriendship(friendshipId) {
-      const [row] = await db
-        .select()
-        .from(groups)
-        .where(eq(groups.friendshipId, friendshipId));
-      return row;
+    async listFavoriteGroupIds(userId, groupIds) {
+      if (groupIds.length === 0) {
+        return [];
+      }
+      const rows = await db
+        .select({ groupId: groupMembers.groupId })
+        .from(groupMembers)
+        .where(
+          and(
+            eq(groupMembers.userId, userId),
+            inArray(groupMembers.groupId, [...groupIds]),
+            sql`${groupMembers.favoritedAt} is not null`,
+          ),
+        );
+      return rows.map((row) => row.groupId);
+    },
+
+    async setFavorite(groupId, userId, favoritedAt) {
+      await db
+        .update(groupMembers)
+        .set({ favoritedAt })
+        .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
     },
 
     async createPairGroup(friendshipId, pair) {

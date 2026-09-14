@@ -19,12 +19,22 @@ export type FriendSummary = z.infer<typeof friendSummarySchema>;
  * negative when the caller owes the friend, zero when they are settled — netted
  * across every group the two share. See `docs/specs/balances.md`.
  *
+ * `groupId` is the implicit pair group the two share — created the moment
+ * they become friends (`docs/specs/friends-and-invitations.md`), so it always
+ * exists here. `favorite` is that same group's favorite marker, personal to
+ * the caller (`docs/specs/favorites.md`); favorited friends sort first.
+ * Neither is the group's *own* balance — that stays scoped to the pair
+ * group's own transactions, while `balanceCents` here nets every group the
+ * two share, the pair group included.
+ *
  * Deliberately its own shape rather than a field on `friendSummarySchema`,
  * which also describes a group member, a transaction's payer and an inviter —
  * none of which carry a balance.
  */
 export const friendEntrySchema = friendSummarySchema.extend({
   balanceCents: z.number().int(),
+  groupId: z.uuid(),
+  favorite: z.boolean(),
 });
 export type FriendEntry = z.infer<typeof friendEntrySchema>;
 

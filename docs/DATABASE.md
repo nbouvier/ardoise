@@ -118,10 +118,17 @@ Two shapes, kept exclusive by check constraints:
 
 The **pair group is keyed by the friendship**, which is what makes "every pair of friends
 has one" true in the database rather than in application code: the `UNIQUE` on
-`friendship_id` guarantees exactly one even when two devices create it at the same instant
-(the insert uses `ON CONFLICT DO NOTHING`), and the cascade takes it away with the
-friendship. It stores no name — the API returns the *other* member's name, so each side
-sees who they share with.
+`friendship_id` guarantees exactly one even when two requests race to create it (the
+insert uses `ON CONFLICT DO NOTHING`), and the cascade takes it away with the friendship.
+It stores no name — the API returns the *other* member's name, so each side sees who they
+share with.
+
+Since 2026-09-14 this row is created **eagerly**, inside `POST /invites/:code/accept`
+(`friendsPlugin` calls `groupsRepository.createPairGroup` directly — see
+`docs/ARCHITECTURE.md`), not lazily on first access. A friendship from before that change
+may still be missing its group; `npm run backfill:pair-groups --workspace @splitcount/server`
+finds every friendship with none and creates it, idempotently (safe to run more than
+once).
 
 **Nesting** (`docs/specs/groups.md`): a group can have sub-groups through `parent_id`, a
 self-referential FK that cascades — deleting a group deletes its entire sub-tree for free,
@@ -155,17 +162,23 @@ Index: `groups_parent_id_idx` on `parent_id`.
 Who belongs to a group, and with which rights. **A membership row is the only thing that
 grants access to a group**: every route resolves it before anything else.
 
-| Column      | Type        | Notes                              |
-| ----------- | ----------- | ---------------------------------- |
-| `id`        | uuid PK     | `gen_random_uuid()`                |
-| `group_id`  | uuid FK     | → `groups.id`, `ON DELETE CASCADE` |
-| `user_id`   | uuid FK     | → `users.id`, `ON DELETE CASCADE`  |
-| `role`      | text        | `owner` or `member` (default `member`) |
-| `joined_at` | timestamptz | `now()`                            |
+| Column         | Type             | Notes                              |
+| -------------- | ---------------- | ---------------------------------- |
+| `id`           | uuid PK          | `gen_random_uuid()`                |
+| `group_id`     | uuid FK          | → `groups.id`, `ON DELETE CASCADE` |
+| `user_id`      | uuid FK          | → `users.id`, `ON DELETE CASCADE`  |
+| `role`         | text             | `owner` or `member` (default `member`) |
+| `joined_at`    | timestamptz      | `now()`                            |
+| `favorited_at` | timestamptz null | Non-null → the viewer favorited this group (`docs/specs/favorites.md`) |
 
 Constraints: `group_members_unique` on (`group_id`, `user_id`) — which also makes a
 repeated or concurrent join a no-op rather than a duplicate — and
 `group_members_role_valid` on the role.
+
+**`favorited_at` lives on the membership row itself**, not a separate table: a favorite is
+nothing more than a personal marker on "this user belongs to this group", so it is
+automatically scoped to one viewer and automatically removed when the membership row is
+(leaving, removal, or the group's own deletion) — no separate cleanup path needed.
 
 Index: `group_members_user_id_idx` on `user_id` (the group side is covered by the unique
 constraint's index).
@@ -308,3 +321,10 @@ shared history.
   `groups.depth`, plus the three check constraints that keep the tree well-formed
   (nested groups, `docs/specs/groups.md`). Every existing row backfills to a root
   (`parent_id NULL`, `depth 0`) automatically, since the column defaults to `0`.
+- Migration `0008_*` — adds `group_members.favorited_at`, nullable, no backfill needed
+  (favorites, `docs/specs/favorites.md`).
+- 2026-09-14 — no schema change, but a behaviour one worth logging here: the pair group is
+  now created eagerly, at friendship creation, instead of lazily on first access (see
+  above). `npm run backfill:pair-groups --workspace @splitcount/server` is a one-time,
+  idempotent data backfill (not a drizzle-kit migration) for any friendship that predates
+  this.

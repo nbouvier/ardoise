@@ -4,7 +4,7 @@ import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
 import { toUserSummary } from '../users/repository.js';
 
-import { orderPair } from './friendships.js';
+import { orderPair, type FriendshipPair } from './friendships.js';
 import type { FriendsRepository } from './repository.js';
 
 export interface FriendsService {
@@ -55,8 +55,10 @@ export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
       ]);
 
       return rows.map((row) => ({
-        ...toUserSummary(row),
-        balanceCents: balances.get(row.id) ?? 0,
+        ...toUserSummary(row.user),
+        groupId: row.groupId,
+        favorite: row.favorite,
+        balanceCents: balances.get(row.user.id) ?? 0,
       }));
     },
 
@@ -71,10 +73,25 @@ export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
 }
 
 /**
- * What a `friend` invitation does: becoming the inviter's friend. Registered
- * with the invites feature, which owns the code and its lifecycle.
+ * Materialises the implicit group two friends share, the moment they become
+ * friends (`docs/specs/friends-and-invitations.md`) rather than lazily on
+ * first access — the narrow slice of `groups` this needs, the same pattern
+ * `CounterpartyBalances` above already uses.
  */
-export function createFriendInviteHandler(repository: FriendsRepository): InviteHandler {
+export interface PairGroups {
+  ensure(friendshipId: string, pair: FriendshipPair): Promise<void>;
+}
+
+/**
+ * What a `friend` invitation does: becoming the inviter's friend, and — since
+ * a friendship always has its pair group — materialising that group in the
+ * same step. Registered with the invites feature, which owns the code and
+ * its lifecycle.
+ */
+export function createFriendInviteHandler(
+  repository: FriendsRepository,
+  pairGroups: PairGroups,
+): InviteHandler {
   return {
     async preview({ inviter }) {
       return { kind: 'friend', inviter };
@@ -85,9 +102,9 @@ export function createFriendInviteHandler(repository: FriendsRepository): Invite
         throw new InviteError('self_invite');
       }
 
-      const { created } = await repository.upsertFriendship(
-        orderPair(invite.inviterId, userId),
-      );
+      const pair = orderPair(invite.inviterId, userId);
+      const { row, created } = await repository.upsertFriendship(pair);
+      await pairGroups.ensure(row.id, pair);
 
       return { kind: 'friend', friend: inviter, alreadyFriends: !created };
     },

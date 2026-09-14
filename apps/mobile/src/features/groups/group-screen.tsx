@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { FavoriteStar } from '@/components/favorite-star';
 import { MedallionBadge } from '@/components/medallion-badge';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
@@ -48,6 +49,7 @@ import {
   deleteGroup,
   joinGroup,
   removeGroupMember,
+  setGroupFavorite,
   updateGroup,
 } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
@@ -93,6 +95,10 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   // hand control back to the plan afterwards.
   const [prefill, setPrefill] = useState<TransactionPrefill | null>(null);
   const [busy, setBusy] = useState(false);
+  // A sub-group's own favorite star toggles a different group than the one
+  // this screen is showing, so it cannot ride the screen-wide `busy` flag —
+  // just the one row mid-request.
+  const [favoriteBusySubgroupId, setFavoriteBusySubgroupId] = useState<string | null>(null);
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the details sheet: the summary above the
   // transaction list and the per-member list in the sheet are the same figures.
@@ -193,6 +199,27 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   function confirmArchive() {
     void run('archive', () => updateGroup(authorizedFetch, groupId, { archived: !ownArchived }));
+  }
+
+  function toggleFavorite() {
+    void run('favorite', () => setGroupFavorite(authorizedFetch, groupId, !group!.favorite));
+  }
+
+  /**
+   * A sub-group shown in this group's own sub-groups section: the API call
+   * targets the sub-group, not this screen's group, so its response cannot
+   * feed `set()` directly — a `groupsChanged` notification is what brings
+   * this screen's own `subgroups` list (order included) back in sync.
+   */
+  function toggleSubgroupFavorite(subgroup: SubgroupSummary) {
+    setFavoriteBusySubgroupId(subgroup.id);
+    setGroupFavorite(authorizedFetch, subgroup.id, !subgroup.favorite)
+      .then(() => groupsChanged.notify())
+      .catch((error: unknown) => {
+        logger.warn('groups.favorite.failed', errorFields(error));
+        Alert.alert('That didn’t work', 'Check your connection and try again.');
+      })
+      .finally(() => setFavoriteBusySubgroupId(null));
   }
 
   function confirmLeave() {
@@ -305,6 +332,16 @@ export function GroupScreen({ groupId }: { groupId: string }) {
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
               {group.name}
             </ThemedText>
+            {/* A pair group can be favorited too, even though it is never
+                listed anywhere that reorders — its own page is the only
+                place the star (and its state) is ever seen
+                (`docs/specs/favorites.md`). */}
+            <FavoriteStar
+              favorite={group.favorite}
+              label={group.name}
+              disabled={busy}
+              onToggle={toggleFavorite}
+            />
           </View>
           <View style={styles.headerActions}>
             <HeaderChip
@@ -344,9 +381,11 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           subgroups={group.subgroups}
           readOnly={readOnly}
           busy={busy}
+          favoriteBusyId={favoriteBusySubgroupId}
           onOpen={openGroup}
           onJoin={confirmJoin}
           onCreate={() => setSheet('createSubgroup')}
+          onToggleFavorite={toggleSubgroupFavorite}
         />
 
         <TransactionList
@@ -566,16 +605,21 @@ function SubgroupsSection({
   subgroups,
   readOnly,
   busy,
+  favoriteBusyId,
   onOpen,
   onJoin,
   onCreate,
+  onToggleFavorite,
 }: {
   subgroups: readonly SubgroupSummary[];
   readOnly: boolean;
   busy: boolean;
+  /** The one sub-group whose favorite star is mid-request, if any. */
+  favoriteBusyId: string | null;
   onOpen: (groupId: string) => void;
   onJoin: (subgroup: SubgroupSummary) => void;
   onCreate: () => void;
+  onToggleFavorite: (subgroup: SubgroupSummary) => void;
 }) {
   const [showUnjoined, setShowUnjoined] = useState(false);
   const joined = subgroups.filter((subgroup) => subgroup.viewerIsMember);
@@ -601,7 +645,13 @@ function SubgroupsSection({
       </View>
 
       {joined.map((subgroup) => (
-        <SubgroupRow key={subgroup.id} subgroup={subgroup} onPress={() => onOpen(subgroup.id)} />
+        <SubgroupRow
+          key={subgroup.id}
+          subgroup={subgroup}
+          favoriteBusy={favoriteBusyId === subgroup.id}
+          onPress={() => onOpen(subgroup.id)}
+          onToggleFavorite={() => onToggleFavorite(subgroup)}
+        />
       ))}
 
       {unjoined.length > 0 ? (
@@ -641,31 +691,50 @@ function SubgroupsSection({
 function SubgroupRow({
   subgroup,
   muted = false,
+  favoriteBusy = false,
   onPress,
+  onToggleFavorite,
 }: {
   subgroup: SubgroupSummary;
   muted?: boolean;
+  favoriteBusy?: boolean;
   onPress: () => void;
+  /** Absent for a sub-group the viewer has not joined — nothing to favorite there. */
+  onToggleFavorite?: () => void;
 }) {
   const members = subgroup.memberCount === 1 ? '1 member' : `${subgroup.memberCount} members`;
 
   return (
-    <Card accessibilityLabel={subgroup.name} onPress={onPress} muted={muted}>
+    <Card muted={muted}>
       <View style={styles.subgroupRow}>
-        <MedallionBadge seed={subgroup.id} content="↳" size={36} />
-        <View style={styles.subgroupText}>
-          <ThemedText numberOfLines={1}>{subgroup.name}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {muted ? `${members} · not joined` : members}
-          </ThemedText>
-          {/* Not joined means none of the viewer's transactions can be in this
-              sub-tree, so the balance is always exactly 0 — not worth a line. */}
-          {muted ? null : (
-            <ThemedText type="smallBold" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
-              {groupBalanceLabel(subgroup.viewerBalanceCents)}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={subgroup.name}
+          onPress={onPress}
+          style={({ pressed }) => [styles.subgroupRowMain, pressed && styles.pressed]}>
+          <MedallionBadge seed={subgroup.id} content="↳" size={36} />
+          <View style={styles.subgroupText}>
+            <ThemedText numberOfLines={1}>{subgroup.name}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {muted ? `${members} · not joined` : members}
             </ThemedText>
-          )}
-        </View>
+            {/* Not joined means none of the viewer's transactions can be in this
+                sub-tree, so the balance is always exactly 0 — not worth a line. */}
+            {muted ? null : (
+              <ThemedText type="smallBold" themeColor={balanceTone(subgroup.viewerBalanceCents)}>
+                {groupBalanceLabel(subgroup.viewerBalanceCents)}
+              </ThemedText>
+            )}
+          </View>
+        </Pressable>
+        {onToggleFavorite ? (
+          <FavoriteStar
+            favorite={subgroup.favorite}
+            label={subgroup.name}
+            disabled={favoriteBusy}
+            onToggle={onToggleFavorite}
+          />
+        ) : null}
       </View>
     </Card>
   );
@@ -1023,6 +1092,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   subgroupRow: {
+    flexDirection: 'row',
+    // The star aligns with the name line specifically, not the row's full
+    // height — the row also carries a member count and balance beneath it.
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  subgroupRowMain: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,

@@ -60,13 +60,16 @@ describe('transactions routes', () => {
     return response.json().group as { id: string };
   }
 
+  /**
+   * The group `user` shares with `friendId` — created the moment the two
+   * became friends, so this is a lookup through the friend list, not a
+   * get-or-create call.
+   */
   async function pairGroupOf(user: TestUser, friendId: string) {
-    const response = await app.inject({
-      method: 'POST',
-      url: `/groups/pair/${friendId}`,
-      headers: user.headers,
-    });
-    return response.json().group as { id: string };
+    const response = await app.inject({ method: 'GET', url: '/friends', headers: user.headers });
+    const { friends } = response.json() as { friends: { id: string; groupId: string }[] };
+    const friend = friends.find((f) => f.id === friendId);
+    return { id: friend!.groupId };
   }
 
   async function createdSubgroup(

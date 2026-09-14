@@ -116,8 +116,13 @@ or box**; a screen that styles its own is a bug in this document.
   group's initials, a category's emoji, a sub-group's `↳`. Takes an explicit `color` when
   the subject owns one (a category), a seed otherwise.
 - **`BrandMark`** — the logo, drawn from the tokens.
-- **`Icon`** — the app's small glyph set (`plus`, `key`, `close`), drawn as strokes on a
-  24×24 grid rather than an icon font, coloured through `theme` like everything else.
+- **`Icon`** — the app's small glyph set (`plus`, `key`, `close`, `star`), drawn as strokes
+  on a 24×24 grid rather than an icon font, coloured through `theme` like everything else;
+  `filled` swaps the hollow outline for a solid fill of the same colour.
+- **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
+  `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
+  no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
+  never nested inside it, so tapping it never also navigates.
 - **`ScreenHeader`** — the top of a tab screen: **SplitCount's own identity first** — the
   `BrandMark`, sized to stand as tall as the two text lines beside it, next to the
   wordmark and, directly under it, the current page named in smaller, secondary-coloured
@@ -174,8 +179,14 @@ The landing screen, **root groups only** — a sub-group is reached by opening i
 `ScreenHeader` with the active-group count as caption. Each group is a **`GroupRow`
 card**: a medallion carrying the group's initials, the name, the member count, and the
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
-`docs/specs/balances.md`). Empty state: a brand card with a glyph, "No groups yet" and
-what a group is for.
+`docs/specs/balances.md`), with a **`FavoriteStar`** at the far right of the row, aligned
+with the name line specifically (`docs/specs/favorites.md`) — favorited groups are pinned
+above non-favorited ones, alphabetical within each. Tapping the star flips it in place
+without moving the row: the refetch that tap itself triggers (`groupsChanged`) keeps the
+row where it is, and only a *later*, unrelated refetch brings the pinned order into
+view — a visible list reordering under the viewer's own finger reads as disorienting,
+one caused by something else happening elsewhere does not. Empty state: a brand card with
+a glyph, "No groups yet" and what a group is for.
 
 A full-width **`AddMenuButton`** ("New group", pinned to the bottom of the screen) opens
 a bottom sheet with "Create a group" (`plus` icon) and "Join a group" (`key` icon).
@@ -193,7 +204,10 @@ shows the toggle, not the empty state.
 Pushed above the tabs, so it has a back button. **Transactions are the primary content.**
 
 The header is: a **breadcrumb** of ancestors (brand-coloured, tappable, only on a
-sub-group), the group's name, a row of three **header chips** — "Settle" (the
+sub-group), the group's name with a **`FavoriteStar`** at the right of the same line
+(`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
+group's own page is one of the two places its star shows, the other being its row on the
+Friends tab (`docs/specs/friends-and-invitations.md`) — a row of three **header chips** — "Settle" (the
 reimbursement plan), "Stats" (the per-category breakdown), "Details" — all soft brand,
 all present on every kind of group, archived or pair included, since the first two are
 read-only views and the plan's one action is refused with a reason rather than hidden. An
@@ -210,12 +224,15 @@ state: a brand card with a glyph and an explanation.
 **Sub-groups section** (shown on **both kinds of group** — a friendship can have
 sub-groups too): an `overline` "Sub-groups" heading with a brand "+ Create" link, then
 every sub-group the viewer has joined as a card (`↳` medallion, name, member count, and
-where they stand across *that* sub-group's own sub-tree). Ones they have **not** joined
-hide behind a "Show sub-groups I'm not in (n)" toggle, mirroring the archived pattern;
-revealed, they render `muted` with "n members · not joined" and no balance line (never
-being a member, it is always exactly zero), and tapping one opens a "Join this group?"
-`Alert` instead of navigating. The section renders nothing when there are no sub-groups
-and the group is read-only, so it never becomes a permanent empty box.
+where they stand across *that* sub-group's own sub-tree), with its own **`FavoriteStar`**
+at the right of the name line (`docs/specs/favorites.md`) — favorited joined sub-groups
+are pinned above non-favorited ones. Ones they have **not** joined hide behind a "Show
+sub-groups I'm not in (n)" toggle, mirroring the archived pattern; revealed, they render
+`muted` with "n members · not joined" and no balance line (never being a member, it is
+always exactly zero) and **no star** — there is no membership row to favorite on — and
+tapping one opens a "Join this group?" `Alert` instead of navigating. The section renders
+nothing when there are no sub-groups and the group is read-only, so it never becomes a
+permanent empty box.
 
 **Details sheet** — the member list (avatar + name, an accent "Owner" tag on the owner) in
 one card, **balances** (`GroupBalances`) in another, then the management actions. The
@@ -326,11 +343,16 @@ is added automatically.
 
 ### Friends (`src/features/friends/friends-screen.tsx`)
 
-`ScreenHeader` with the friend count. Each friend is a card: avatar, name, and **where the
+`ScreenHeader` with the friend count. Each friend is a card: avatar, name, **where the
 two of them stand** — "owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted
-across every group they share. No grand total above the list: members of shared groups who
-are not friends are absent from it, so a sum of the rows would not be the viewer's overall
-position. **Tapping a card opens the group shared with that friend**; "Remove" stays a
+across every group they share — and a **`FavoriteStar`** at the far right (`docs/specs/
+favorites.md`), favoriting the implicit pair group behind that row; favorited friends are
+pinned above the rest, alphabetical within that, the same rule and the same
+tap-does-not-jump behaviour the group list has. No grand total above the list: members of
+shared groups who are not friends are absent from it, so a sum of the rows would not be
+the viewer's overall position. **Tapping a card opens the group shared with that
+friend**, directly by its already-known id — no request first, the group exists from the
+moment the friendship does (`docs/specs/friends-and-invitations.md`); "Remove" stays a
 separate hit area at the end. Empty state: a brand card. A footer holds the same
 **`AddMenuButton`** pattern as Groups ("Add a friend"): "Invite a friend" (`plus` icon)
 opens the invite sheet, "Enter a code" (`key` icon) opens a sheet holding the

@@ -75,10 +75,17 @@ interaction is a device concern.
   (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`);
   invitation code and landing-page tests (`src/features/invites/`), including HTML
   escaping of both an inviter name and a group name; friends integration tests
-  (`src/features/friends/`) covering the invitation lifecycle and friendship symmetry;
-  groups unit + integration tests (`src/features/groups/`) covering membership
-  authorization on every route, archiving, deletion cascades, group invitations, and the
-  implicit pair group (idempotence under concurrency, immutability, cascade on unfriend);
+  (`src/features/friends/`) covering the invitation lifecycle, friendship symmetry, and
+  (`docs/specs/favorites.md`) that `GET /friends` carries the pair group's `groupId` and
+  `favorite`, personal to the caller, and lists favorited friends first; groups unit +
+  integration tests (`src/features/groups/`) covering membership authorization on every
+  route, archiving, deletion cascades, group invitations, the implicit pair group
+  (created eagerly at friendship creation rather than on first access, a single group
+  under a race, immutability, cascade on unfriend), and favorites
+  (`docs/specs/favorites.md`): toggling, idempotence, personal-to-the-caller, unaffected
+  by archived state, refused for a non-member, dropped when the membership is removed,
+  and favorite-first ordering within both the group list's active/archived sections and a
+  parent's joined sub-groups;
   transactions unit + integration tests (`src/features/transactions/`) covering the
   balance calculation (sign convention, sum-to-zero) in isolation, and end-to-end: every
   split shape, the pair-group regression (transactions must **not** be refused by the
@@ -101,15 +108,29 @@ interaction is a device concern.
   payment-count bound over 200 generated balance sets, exact-match pairing, a chain of
   debts collapsing into one payment, zero-balance people left out, and independence from
   input order.
-- `apps/mobile`: API clients (`src/lib/api/`, with shared fakes in `src/test-utils/`),
-  auth state machine (`src/features/auth/auth-client.test.ts`), auth screens, the
-  invitation feature (`src/features/invites/`): pending-invite store and the confirmation
-  flow for both kinds of invitation, the friends feature (`src/features/friends/`): list,
-  invite sharing and opening the group shared with a friend, the groups feature
+- `apps/mobile`: `src/lib/stable-order.test.ts` — the order-preserving merge behind the
+  "don't jump when I favorite it" behaviour below: known ids keep their previous position,
+  a fresh field value applies without moving the row, an id absent from the previous order
+  is appended, one dropped from the fresh data disappears, and an empty previous order
+  keeps the fresh data as-is; API clients (`src/lib/api/`, with shared fakes in
+  `src/test-utils/`), auth state machine (`src/features/auth/auth-client.test.ts`), auth
+  screens, the invitation feature (`src/features/invites/`): pending-invite store and the
+  confirmation flow for both kinds of invitation, the friends feature
+  (`src/features/friends/`): list, opening the group shared with a friend directly by its
+  already-known id (no request first), and the favorite star (`docs/specs/favorites.md`)
+  on a friend's row — toggling through the same `setGroupFavorite` a group uses, pinning
+  favorited friends first, and not reordering the instant a friend is favorited (only once
+  something else refreshes the list afterwards) — the groups feature
   (`src/features/groups/`): list with the archived toggle, creation with friend selection,
   the detail screen — now transaction-first, with group management behind the "Details"
   sheet, including the pair-group variant where every management action is absent **but
-  "Add a transaction" is present** — and the transactions feature
+  "Add a transaction" is present** — plus the favorite star (`docs/specs/favorites.md`) on
+  the group list row, the group screen's header (including on a pair group's own page),
+  and a joined sub-group's own row, including the notify-then-refetch path a sub-group's
+  own toggle relies on, and — on both the group list and the friend list — that favoriting
+  a row does not move it in the same tap: the refetch that toggle itself triggers keeps
+  the row put, and only a *later*, unrelated refresh (another change elsewhere notifying
+  the same `groupsChanged` signal) brings the pinned order into view — and the transactions feature
   (`src/features/transactions/`): the split editor (selection, weight stepper, live
   preview, mode switching, the allocation indicator), the add/edit form (defaults — Other
   by default — request shape for each kind, full-replace edit, transfer validation, the

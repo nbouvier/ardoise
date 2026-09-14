@@ -136,12 +136,19 @@ describe('groups routes', () => {
   const acceptInvite = (user: TestUser, code: string) =>
     app.inject({ method: 'POST', url: `/invites/${code}/accept`, headers: user.headers });
 
-  const pairGroup = (user: TestUser, friendId: string) =>
-    app.inject({
-      method: 'POST',
-      url: `/groups/pair/${friendId}`,
-      headers: user.headers,
-    });
+  const listFriends = (user: TestUser) =>
+    app.inject({ method: 'GET', url: '/friends', headers: user.headers });
+
+  /**
+   * The group `user` shares with `friendId` — created the moment the two
+   * became friends (`docs/specs/friends-and-invitations.md`), so this is
+   * just a lookup through the friend list, not a get-or-create call.
+   */
+  async function pairGroup(user: TestUser, friendId: string) {
+    const { friends } = (await listFriends(user)).json();
+    const friend = friends.find((f: { id: string }) => f.id === friendId);
+    return getGroup(user, friend.groupId);
+  }
 
   /** A minimal equal-shares expense, for the balance tests below. */
   function expense(payerId: string, participantIds: string[], amount = 1000) {
@@ -366,6 +373,159 @@ describe('groups routes', () => {
     });
   });
 
+  const setFavorite = (user: TestUser, groupId: string, favorite: boolean) =>
+    app.inject({
+      method: favorite ? 'PUT' : 'DELETE',
+      url: `/groups/${groupId}/favorite`,
+      headers: user.headers,
+    });
+
+  describe('favorites', () => {
+    it('toggles the caller’s own favorite marker', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      expect(group.favorite).toBe(false);
+
+      const favorited = await setFavorite(ada, group.id, true);
+      expect(favorited.statusCode).toBe(200);
+      expect(favorited.json().group.favorite).toBe(true);
+      expect((await getGroup(ada, group.id)).json().group.favorite).toBe(true);
+
+      const unfavorited = await setFavorite(ada, group.id, false);
+      expect(unfavorited.statusCode).toBe(200);
+      expect(unfavorited.json().group.favorite).toBe(false);
+      expect((await getGroup(ada, group.id)).json().group.favorite).toBe(false);
+    });
+
+    it('is idempotent', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+
+      expect((await setFavorite(ada, group.id, true)).statusCode).toBe(200);
+      const again = await setFavorite(ada, group.id, true);
+      expect(again.statusCode).toBe(200);
+      expect(again.json().group.favorite).toBe(true);
+
+      expect((await setFavorite(ada, group.id, false)).statusCode).toBe(200);
+      const againOff = await setFavorite(ada, group.id, false);
+      expect(againOff.statusCode).toBe(200);
+      expect(againOff.json().group.favorite).toBe(false);
+    });
+
+    it('is personal to the caller — another member is unaffected', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+
+      await setFavorite(ada, group.id, true);
+
+      expect((await getGroup(ada, group.id)).json().group.favorite).toBe(true);
+      expect((await getGroup(grace, group.id)).json().group.favorite).toBe(false);
+    });
+
+    it('works the same on an archived group, without changing anything else', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      await patchGroup(ada, group.id, { archived: true });
+
+      const response = await setFavorite(ada, group.id, true);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().group).toMatchObject({ favorite: true, archivedAt: clock.toISOString() });
+    });
+
+    it('is refused for a group the caller does not belong to', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const group = await createdGroup(ada, 'Private');
+
+      const response = await setFavorite(alan, group.id, true);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: 'group_not_found' });
+    });
+
+    it('drops the favorite when the member leaves, even if they rejoin later', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+      await setFavorite(grace, group.id, true);
+
+      await removeMember(grace, group.id, grace.userId);
+      const rejoined = await addMembers(ada, group.id, [grace.userId]);
+
+      expect(rejoined.json().group.memberCount).toBe(2);
+      expect((await getGroup(grace, group.id)).json().group.favorite).toBe(false);
+    });
+
+    it('pins favorited groups above non-favorited ones within the active and archived sections', async () => {
+      const ada = await signIn('ada');
+      await createdGroup(ada, 'Alpha');
+      await createdGroup(ada, 'Bravo');
+      const charlie = await createdGroup(ada, 'Charlie');
+      const oldAlpha = await createdGroup(ada, 'Old Alpha');
+      const oldBravo = await createdGroup(ada, 'Old Bravo');
+      await patchGroup(ada, oldAlpha.id, { archived: true });
+      await patchGroup(ada, oldBravo.id, { archived: true });
+
+      // Favorite the later-alphabetical group in each section.
+      await setFavorite(ada, charlie.id, true);
+      await setFavorite(ada, oldBravo.id, true);
+
+      const { groups: listed } = (await listGroups(ada)).json();
+
+      expect(listed.map((group: { name: string }) => group.name)).toEqual([
+        'Charlie',
+        'Alpha',
+        'Bravo',
+        'Old Bravo',
+        'Old Alpha',
+      ]);
+    });
+
+    it('pins a favorited joined sub-group above other joined ones in its parent', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const alpha = await createdSubgroup(ada, root.id, 'Alpha sub');
+      const bravo = await createdSubgroup(ada, root.id, 'Bravo sub');
+      await createdSubgroup(ada, root.id, 'Charlie sub'); // never joined by anyone else here
+
+      await setFavorite(ada, bravo.id, true);
+
+      const detail = (await getGroup(ada, root.id)).json().group;
+
+      expect(detail.subgroups.map((sub: { name: string }) => sub.name)).toEqual([
+        'Bravo sub',
+        'Alpha sub',
+        'Charlie sub',
+      ]);
+      expect(detail.subgroups.find((sub: { id: string }) => sub.id === bravo.id).favorite).toBe(
+        true,
+      );
+      expect(detail.subgroups.find((sub: { id: string }) => sub.id === alpha.id).favorite).toBe(
+        false,
+      );
+    });
+
+    it('never reports favorite for a sub-group the viewer has not joined', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      // Grace cannot favorite a sub-group she is not a member of at all.
+      const response = await setFavorite(grace, sub.id, true);
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'join_required' });
+
+      const graceView = (await getGroup(grace, root.id)).json().group;
+      expect(graceView.subgroups[0]).toMatchObject({ id: sub.id, favorite: false });
+    });
+  });
+
   describe('DELETE /groups/:groupId', () => {
     it('is refused to a member who does not own the group', async () => {
       const ada = await signIn('ada');
@@ -399,7 +559,10 @@ describe('groups routes', () => {
 
       expect(response.statusCode).toBe(204);
       expect((await listGroups(grace)).json()).toEqual({ groups: [] });
-      expect(await app.db.select().from(groupMembers)).toHaveLength(0);
+      // Only the two membership rows of ada and grace's own implicit pair
+      // group are left — it is a separate group from the deleted one, and
+      // exists independently of it (`docs/specs/friends-and-invitations.md`).
+      expect(await app.db.select().from(groupMembers)).toHaveLength(2);
       expect(await app.db.select().from(invites)).toHaveLength(1); // only ada's friend link
 
       // The link went with the group, so the code is simply unknown now — a
@@ -579,6 +742,7 @@ describe('groups routes', () => {
           memberCount: 1,
           viewerIsMember: true,
           viewerBalanceCents: 0,
+          favorite: false,
         },
       ]);
     });
@@ -719,6 +883,7 @@ describe('groups routes', () => {
           memberCount: 1,
           viewerIsMember: false,
           viewerBalanceCents: 0,
+          favorite: false,
         },
       ]);
     });
@@ -1384,32 +1549,28 @@ describe('groups routes', () => {
     });
   });
 
-  describe('POST /groups/pair/:friendId', () => {
-    it('creates the shared group on first access and reuses it afterwards', async () => {
+  describe('the implicit pair group', () => {
+    it('is created the moment two people become friends, the same one for each side', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
 
-      const first = await pairGroup(ada, grace.userId);
-      const second = await pairGroup(ada, grace.userId);
+      const forAda = (await pairGroup(ada, grace.userId)).json().group;
+      const forGrace = (await pairGroup(grace, ada.userId)).json().group;
 
-      expect(first.statusCode).toBe(200);
-      expect(first.json().group.id).toBe(second.json().group.id);
+      expect(forAda.id).toBe(forGrace.id);
       expect(await app.db.select().from(groups)).toHaveLength(1);
     });
 
-    it('creates exactly one group when both devices open it at once', async () => {
+    it('stays a single group even when the friendship is accepted twice', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
+      // Re-accepting an already-valid link is idempotent for the friendship
+      // itself (`docs/specs/friends-and-invitations.md`) — the group it
+      // materialises must stay a singleton under the same retry.
+      await befriend(ada, grace);
 
-      const responses = await Promise.all([
-        pairGroup(ada, grace.userId),
-        pairGroup(grace, ada.userId),
-      ]);
-
-      expect(responses.map((r) => r.statusCode)).toEqual([200, 200]);
-      expect(responses[0]!.json().group.id).toBe(responses[1]!.json().group.id);
       expect(await app.db.select().from(groups)).toHaveLength(1);
     });
 
@@ -1433,26 +1594,9 @@ describe('groups routes', () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');
       await befriend(ada, grace);
-      await pairGroup(ada, grace.userId);
 
       expect((await listGroups(ada)).json()).toEqual({ groups: [] });
       expect((await listGroups(grace)).json()).toEqual({ groups: [] });
-    });
-
-    it('is refused for someone who is not a friend', async () => {
-      const ada = await signIn('ada');
-      const alan = await signIn('alan');
-
-      const response = await pairGroup(ada, alan.userId);
-
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: 'group_not_found' });
-      expect(await app.db.select().from(groups)).toHaveLength(0);
-    });
-
-    it('is refused for oneself', async () => {
-      const ada = await signIn('ada');
-      expect((await pairGroup(ada, ada.userId)).statusCode).toBe(404);
     });
 
     it('refuses every operation that would change who is in it', async () => {
