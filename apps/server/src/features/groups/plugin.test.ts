@@ -867,6 +867,48 @@ describe('groups routes', () => {
       ]);
     });
 
+    it('names a pair group ancestor after the other member, per viewer', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = (await pairGroup(ada, grace.userId)).json().group;
+      const sub = await createdSubgroup(ada, pair.id, 'Ski trip');
+
+      // A pair group carries no name of its own, so the breadcrumb above a
+      // sub-group of one has to name it the way the friend list does — the
+      // *other* member, which differs on each side.
+      expect((await getGroup(ada, sub.id)).json().group.ancestors).toEqual([
+        { id: pair.id, name: 'Grace Hopper' },
+      ]);
+      expect((await getGroup(grace, sub.id)).json().group.ancestors).toEqual([
+        { id: pair.id, name: 'Ada Lovelace' },
+      ]);
+    });
+
+    it('tells whoever accepts a sub-group invitation where it sits', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+
+      const { invite } = (await groupInvite(ada, sub.id)).json();
+
+      // The preview, before joining, discloses no position in the tree; the
+      // acceptance does — they have just joined every ancestor of it.
+      const preview = (
+        await app.inject({
+          method: 'GET',
+          url: `/invites/${invite.code}`,
+          headers: alan.headers,
+        })
+      ).json();
+      expect(preview.invite.group.ancestors).toBeUndefined();
+      const accepted = (await acceptInvite(alan, invite.code)).json();
+      expect(accepted.result.group.ancestors).toEqual([
+        { id: root.id, name: 'Corsica 2026' },
+      ]);
+    });
+
     it('lists a sub-group the caller has not joined, marked as such', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');

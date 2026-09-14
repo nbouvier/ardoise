@@ -251,16 +251,18 @@ Shared error codes:
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
 
-`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
+`GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, ancestors, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
-is the number of *direct* sub-groups only. `viewerBalanceCents` is the caller's own net
+is the number of *direct* sub-groups only. `ancestors` is every group above it, root
+first, each `{ id, name }` — empty for a root group, and named the way the group itself
+is (a pair group among them carries the *other* member's name, per caller).
+`viewerBalanceCents` is the caller's own net
 position **in that group alone** — positive means they are owed, negative means they owe
 (`docs/specs/balances.md`). It is the caller's own entry of
 `GET /groups/:groupId/transactions/balances`, and a sub-group is never folded into it.
 `GroupDetail` adds `members` (a
 `FriendSummary` plus `role`), `viewerRole`, `subgroups` (the group's direct sub-groups — see
-below), `ancestors`
-(root-first, empty for a root group), `readOnly` — `true` when the group itself is
+below), `readOnly` — `true` when the group itself is
 archived *or any ancestor of it is*; for a root group this always equals
 `archivedAt !== null`, since it has no ancestors — and `pairRooted`. A **pair group stores
 no name**: the API fills it with the *other* member's name, so each side sees who they
@@ -282,9 +284,8 @@ when `viewerIsMember` is `false`, since a non-member is on none of its transacti
 `favorite` is likewise always `false` when `viewerIsMember` is `false` — there is no
 membership row to hold it on (`docs/specs/favorites.md`); the list is otherwise ordered
 with favorited sub-groups first among those the viewer has joined, alphabetical within
-that. An `ancestors` entry is `{ id, name }`. Neither carries `archivedAt`, `depth` or its
-own `subgroups` — they are read from the sub-group's own `GET /groups/:groupId` when
-opened.
+that. It carries no `ancestors`, `archivedAt`, `depth` or `subgroups` of its own — those
+are read from the sub-group's own `GET /groups/:groupId` when opened.
 
 ### `GET /groups`
 

@@ -1,5 +1,6 @@
 import type {
   CreateGroupRequest,
+  GroupAncestor,
   GroupDetail,
   GroupRole,
   GroupSummary,
@@ -187,6 +188,30 @@ async function assertNotPairRooted(repository: GroupsRepository, group: GroupRow
 export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const { repository, invites, ledger, now = () => new Date() } = deps;
 
+  /**
+   * A group's ancestors as a breadcrumb reads them, root first. Named the
+   * same way the group itself is: a pair group can be an ancestor too — a
+   * friendship may have sub-groups (`docs/specs/groups.md`) — and it carries
+   * no name of its own, so it is named after the other member, exactly as
+   * `nameFor` names it everywhere else. Its member list is the only extra
+   * read, and only for a pair-rooted tree.
+   */
+  function nameAncestors(
+    rows: readonly GroupRow[],
+    viewerId: string,
+  ): Promise<GroupAncestor[]> {
+    return Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        name:
+          row.kind === 'pair'
+            ? nameFor(row, viewerId, await repository.listMembers(row.id))
+            : (row.name ?? 'Untitled group'),
+      })),
+    );
+  }
+
+
   function summaryOf(
     group: GroupRow,
     name: string,
@@ -194,6 +219,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     subgroupCount: number,
     viewerBalanceCents: number,
     favorite: boolean,
+    ancestors: readonly GroupAncestor[],
   ): GroupSummary {
     return {
       id: group.id,
@@ -202,6 +228,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       memberCount,
       parentId: group.parentId,
       depth: group.depth,
+      ancestors: [...ancestors],
       subgroupCount,
       viewerBalanceCents,
       favorite,
@@ -216,11 +243,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     role: GroupRole,
     favoritedAt: Date | null,
   ) {
-    const [members, children, ancestors] = await Promise.all([
+    const [members, children, ancestorRows] = await Promise.all([
       repository.listMembers(group.id),
       repository.listChildren(group.id),
       repository.listAncestors(group.id),
     ]);
+    // The rows themselves still answer "is any of them archived / is this
+    // tree pair-rooted" below; the breadcrumb needs them named.
+    const ancestors = await nameAncestors(ancestorRows, viewerId);
     const joinedChildIds = new Set(
       await repository.filterMemberGroupIds(
         viewerId,
@@ -254,6 +284,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         children.length,
         balances.get(group.id) ?? 0,
         favoritedAt !== null,
+        ancestors,
       ),
       members: members.map((member) => ({
         ...toUserSummary(member.user),
@@ -270,15 +301,11 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         viewerBalanceCents: balances.get(child.group.id) ?? 0,
         favorite: favoriteChildIds.has(child.group.id),
       })),
-      ancestors: ancestors.map((ancestor) => ({
-        id: ancestor.id,
-        name: ancestor.name ?? 'Untitled group',
-      })),
       // A root group's `readOnly` is exactly its own archived flag, since it
       // has no ancestors — this only differs from `archivedAt !== null` for a
       // sub-group whose ancestor is archived (`docs/specs/groups.md`).
-      readOnly: isEffectivelyArchived(group, ancestors),
-      pairRooted: isPairRooted(group, ancestors),
+      readOnly: isEffectivelyArchived(group, ancestorRows),
+      pairRooted: isPairRooted(group, ancestorRows),
     };
   }
 
@@ -351,6 +378,9 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           subgroupCount,
           balances.get(group.id) ?? 0,
           favoritedAt !== null,
+          // Every group here is a root one, by `listGroupsForUser`'s own
+          // filter — there is nothing above it to name.
+          [],
         ),
       );
     },
@@ -538,7 +568,9 @@ export function createGroupInviteHandler(
    * itself, or any ancestor of it — takes no new members: the holder's next
    * step is the same as for a dead link (`docs/specs/groups.md`).
    */
-  async function resolveGroup(groupId: string | null): Promise<GroupRow> {
+  async function resolveGroup(
+    groupId: string | null,
+  ): Promise<{ group: GroupRow; ancestors: GroupRow[] }> {
     const group = groupId ? await repository.findGroupById(groupId) : undefined;
     if (!group || group.kind === 'pair') {
       throw new InviteError('gone');
@@ -547,12 +579,15 @@ export function createGroupInviteHandler(
     if (isEffectivelyArchived(group, ancestors)) {
       throw new InviteError('gone');
     }
-    return group;
+    return { group, ancestors };
   }
 
   return {
     async preview({ invite, inviter }) {
-      const group = await resolveGroup(invite.groupId);
+      // Deliberately without the ancestors `resolveGroup` also returns: a
+      // preview never discloses where in a tree the group sits
+      // (`docs/specs/groups.md`).
+      const { group } = await resolveGroup(invite.groupId);
       return {
         kind: 'group',
         inviter,
@@ -565,7 +600,7 @@ export function createGroupInviteHandler(
     },
 
     async accept({ invite }, userId) {
-      const group = await resolveGroup(invite.groupId);
+      const { group, ancestors } = await resolveGroup(invite.groupId);
       // Membership flows down the tree: this also joins every ancestor of
       // `group` (`docs/specs/groups.md`) — a side effect of `addMembers`, not
       // something reflected in the summary below, which describes `group`
@@ -589,6 +624,14 @@ export function createGroupInviteHandler(
           memberCount: await repository.countMembers(group.id),
           parentId: group.parentId,
           depth: group.depth,
+          // Disclosed here, unlike in the preview above: whoever accepted has
+          // just joined every one of them (`docs/specs/groups.md`). None can
+          // be a pair group — a pair-rooted group refuses invitations
+          // outright — so each carries its own name.
+          ancestors: ancestors.map((ancestor) => ({
+            id: ancestor.id,
+            name: ancestor.name ?? 'Untitled group',
+          })),
           subgroupCount: children.length,
           viewerBalanceCents,
           favorite: Boolean(membership?.favoritedAt),

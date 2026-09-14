@@ -63,6 +63,7 @@ export const groupSummary = {
   memberCount: 2,
   parentId: null,
   depth: 0,
+  ancestors: [],
   subgroupCount: 0,
   viewerBalanceCents: 0,
   favorite: false,
@@ -78,7 +79,6 @@ export const groupDetail = {
   ],
   viewerRole: 'owner' as const,
   subgroups: [],
-  ancestors: [],
   readOnly: false,
   pairRooted: false,
 };

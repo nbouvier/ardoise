@@ -14,6 +14,7 @@ const trip: GroupSummary = {
   memberCount: 3,
   parentId: null,
   depth: 0,
+  ancestors: [],
   subgroupCount: 0,
   viewerBalanceCents: 0,
   favorite: false,

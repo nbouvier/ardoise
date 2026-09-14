@@ -22,6 +22,13 @@ export const groupMemberSchema = friendSummarySchema.extend({
 });
 export type GroupMember = z.infer<typeof groupMemberSchema>;
 
+/** One ancestor of a sub-group, for a breadcrumb — id and name only. */
+export const groupAncestorSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+});
+export type GroupAncestor = z.infer<typeof groupAncestorSchema>;
+
 /**
  * Groups nest up to this many levels below a root group (five levels total,
  * depth 0..4). Fixed and not configurable — see `docs/specs/groups.md`.
@@ -33,9 +40,11 @@ export const MAX_GROUP_DEPTH = 4;
  * stores none, so the server fills it with the *other* member's name — each
  * side sees the person they share with.
  *
- * `parentId` is `null` for a root group. `subgroupCount` is the number of
- * *direct* sub-groups only — see `subgroups` on `GroupDetail` for the list
- * itself. `viewerBalanceCents` is the viewer's own net position **in this
+ * `parentId` is `null` for a root group, and `ancestors` is empty for one;
+ * for a sub-group it is every one of its ancestors, root first, so a row can
+ * say where in a tree it sits without a second read. `subgroupCount` is the
+ * number of *direct* sub-groups only — see `subgroups` on `GroupDetail` for
+ * the list itself. `viewerBalanceCents` is the viewer's own net position **in this
  * group alone** — positive means they are owed, negative means they owe
  * (`docs/specs/balances.md`). A sub-group is never folded into its parent's
  * figure: each space answers "where do I stand here", and each carries its
@@ -49,6 +58,7 @@ export const groupSummarySchema = z.object({
   memberCount: z.number().int().positive(),
   parentId: z.uuid().nullable(),
   depth: z.number().int().min(0).max(MAX_GROUP_DEPTH),
+  ancestors: z.array(groupAncestorSchema),
   subgroupCount: z.number().int().nonnegative(),
   viewerBalanceCents: z.number().int(),
   favorite: z.boolean(),
@@ -79,18 +89,10 @@ export const subgroupSummarySchema = z.object({
 });
 export type SubgroupSummary = z.infer<typeof subgroupSummarySchema>;
 
-/** One ancestor of a sub-group, for a breadcrumb — id and name only. */
-export const groupAncestorSchema = z.object({
-  id: z.uuid(),
-  name: z.string().min(1),
-});
-export type GroupAncestor = z.infer<typeof groupAncestorSchema>;
-
 /**
  * A group opened by one of its members. `viewerRole` drives which actions
  * show. `subgroups` are the group's *direct* sub-groups (`docs/specs/groups.md`);
- * `ancestors` is empty for a root group and, for a sub-group, every one of its
- * ancestors root-first, for a breadcrumb. `readOnly` is `true` when the group
+ * its own `ancestors` come from the summary above. `readOnly` is `true` when the group
  * itself is archived *or any ancestor of it is* — a root group's `readOnly`
  * always equals its own `archivedAt !== null`, since it has no ancestors.
  * `pairRooted` is `true` when this group — or one of its ancestors — is the
@@ -103,7 +105,6 @@ export const groupDetailSchema = groupSummarySchema.extend({
   members: z.array(groupMemberSchema),
   viewerRole: groupRoleSchema,
   subgroups: z.array(subgroupSummarySchema),
-  ancestors: z.array(groupAncestorSchema),
   readOnly: z.boolean(),
   pairRooted: z.boolean(),
 });
