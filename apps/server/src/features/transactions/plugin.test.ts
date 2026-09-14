@@ -146,6 +146,13 @@ describe('transactions routes', () => {
       headers: user.headers,
     });
 
+  const listRecent = (user: TestUser, limit?: number) =>
+    app.inject({
+      method: 'GET',
+      url: `/me/transactions${limit === undefined ? '' : `?limit=${limit}`}`,
+      headers: user.headers,
+    });
+
   function expense(payerId: string, participantIds: string[], amount = 900) {
     return {
       kind: 'expense',
@@ -695,4 +702,125 @@ describe('transactions routes', () => {
       expect((await getBalances(alan, group.id)).statusCode).toBe(404);
     });
   });
+  describe('GET /me/transactions', () => {
+    it('lists what involves the caller across every group they belong to', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Beach day', [grace.userId]);
+      const pair = await pairGroupOf(ada, grace.userId);
+
+      // One in each kind of space the caller belongs to, oldest first.
+      await createdTx(ada, root.id, {
+        ...expense(ada.userId, [ada.userId, grace.userId]),
+        title: 'Ferry',
+        occurredOn: '2026-09-01',
+      });
+      await createdTx(grace, sub.id, {
+        ...expense(grace.userId, [ada.userId, grace.userId]),
+        title: 'Parasol',
+        occurredOn: '2026-09-05',
+      });
+      await createdTx(ada, pair.id, {
+        ...expense(ada.userId, [ada.userId, grace.userId]),
+        title: 'Cinema',
+        occurredOn: '2026-09-09',
+      });
+
+      const response = await listRecent(ada);
+
+      expect(response.statusCode).toBe(200);
+      const listed = response.json().transactions as {
+        transaction: { title: string };
+        group: { id: string; name: string; ancestors: { id: string; name: string }[] };
+      }[];
+      // Most recent first, and each one says where it happened — the pair
+      // group under the other member's name, the sub-group under its own
+      // with its parent above it.
+      expect(
+        listed.map((entry) => [entry.transaction.title, entry.group.name]),
+      ).toEqual([
+        ['Cinema', 'Grace Hopper'],
+        ['Parasol', 'Beach day'],
+        ['Ferry', 'Corsica 2026'],
+      ]);
+      expect(listed[1]!.group.ancestors).toEqual([{ id: root.id, name: 'Corsica 2026' }]);
+      expect(listed[0]!.group.ancestors).toEqual([]);
+    });
+
+    it('leaves out a transaction between two other members', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const group = await createdGroup(ada, 'Corsica 2026', [grace.userId, alan.userId]);
+
+      await createdTx(grace, group.id, {
+        ...expense(grace.userId, [grace.userId, alan.userId]),
+        title: 'Not mine',
+      });
+      const mine = await createdTx(grace, group.id, {
+        ...expense(grace.userId, [ada.userId, grace.userId]),
+        title: 'Mine',
+      });
+
+      const listed = (await listRecent(ada)).json().transactions as {
+        transaction: { id: string; title: string };
+      }[];
+
+      // Ada's own group, but she is neither payer nor participant of the
+      // first one: the section answers "what moved my money".
+      expect(listed.map((entry) => entry.transaction.id)).toEqual([mine.id]);
+    });
+
+    it('never reaches into a group the caller has left', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      await createdTx(ada, group.id, expense(ada.userId, [ada.userId, grace.userId]));
+
+      expect((await listRecent(grace)).json().transactions).toHaveLength(1);
+      await app.inject({
+        method: 'DELETE',
+        url: `/groups/${group.id}/members/${grace.userId}`,
+        headers: grace.headers,
+      });
+
+      // Still a participant of that transaction; no longer a member of its
+      // group, which is what decides.
+      expect((await listRecent(grace)).json().transactions).toEqual([]);
+    });
+
+    it('caps the list, newest first, with same-day ties in recording order', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      for (const title of ['first', 'second', 'third']) {
+        await createdTx(ada, group.id, {
+          ...expense(ada.userId, [ada.userId]),
+          title,
+          occurredOn: '2026-09-11',
+        });
+      }
+
+      const capped = (await listRecent(ada, 2)).json().transactions as {
+        transaction: { title: string };
+      }[];
+
+      expect(capped.map((entry) => entry.transaction.title)).toEqual(['third', 'second']);
+      // An unusable limit falls back to the default rather than failing.
+      expect((await listRecent(ada, 0)).statusCode).toBe(200);
+      expect((await listRecent(ada, 0)).json().transactions).toHaveLength(3);
+    });
+
+    it('is empty for an account with nothing, and requires authentication', async () => {
+      const ada = await signIn('ada');
+
+      expect((await listRecent(ada)).json()).toEqual({ transactions: [] });
+      expect((await app.inject({ method: 'GET', url: '/me/transactions' })).statusCode).toBe(401);
+    });
+  });
+
 });

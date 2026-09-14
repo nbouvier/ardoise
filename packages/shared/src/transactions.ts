@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { transactionCategorySchema } from './categories.js';
 import { friendSummarySchema } from './friends.js';
+import { groupAncestorSchema } from './groups.js';
 
 /**
  * `expense` — the payer spent on behalf of the people it concerns; each of
@@ -168,6 +169,44 @@ export type TransactionsListResponse = z.infer<typeof transactionsListResponseSc
 
 export const transactionResponseSchema = z.object({ transaction: transactionSchema });
 export type TransactionResponse = z.infer<typeof transactionResponseSchema>;
+
+/**
+ * One entry of the home screen's latest-transactions section
+ * (`docs/specs/home.md`): a transaction that involves the viewer, plus which
+ * group it happened in — the transaction alone carries a `groupId`, but a
+ * list spanning several groups has to name each one, and say where it sits
+ * when it is a sub-group.
+ */
+export const recentTransactionSchema = z.object({
+  transaction: transactionSchema,
+  group: z.object({
+    id: z.uuid(),
+    /** Resolved the way it is everywhere: a pair group takes the other member's name. */
+    name: z.string().min(1),
+    /** Root first, empty when the group is a root one. */
+    ancestors: z.array(groupAncestorSchema),
+  }),
+});
+export type RecentTransaction = z.infer<typeof recentTransactionSchema>;
+
+/** How many entries the home screen asks for, and the ceiling the server allows. */
+export const DEFAULT_RECENT_TRANSACTIONS = 10;
+export const MAX_RECENT_TRANSACTIONS = 50;
+
+/** `GET /me/transactions?limit=`. An absent or unusable `limit` falls back to the default. */
+export const recentTransactionsQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_RECENT_TRANSACTIONS)
+    .default(DEFAULT_RECENT_TRANSACTIONS),
+});
+
+export const recentTransactionsResponseSchema = z.object({
+  transactions: z.array(recentTransactionSchema),
+});
+export type RecentTransactionsResponse = z.infer<typeof recentTransactionsResponseSchema>;
 
 /** `GET /groups/:groupId/transactions/balances`. Positive: the group owes them. */
 export const balanceSchema = z.object({

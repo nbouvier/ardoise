@@ -1,9 +1,12 @@
 import {
   balancesResponseSchema,
+  recentTransactionsResponseSchema,
   transactionResponseSchema,
   transactionsListResponseSchema,
+  DEFAULT_RECENT_TRANSACTIONS,
   type Balance,
   type CreateTransactionRequest,
+  type RecentTransaction,
   type Transaction,
   type TransactionsListResponse,
   type TransactionsListScope,
@@ -31,6 +34,20 @@ export async function fetchTransactions(
     scope === 'subtree' ? `${transactionsPath(groupId)}?scope=subtree` : transactionsPath(groupId),
   );
   return parsedJson(response, transactionsListResponseSchema);
+}
+
+/**
+ * The caller's own most recent transactions across every group they belong
+ * to — the home screen's latest-transactions section (`docs/specs/home.md`).
+ * Only what involves them, most recent first, each with the group it happened
+ * in; the server does the filtering, the ordering and the cap.
+ */
+export async function fetchRecentTransactions(
+  fetcher: AuthorizedFetch,
+  limit: number = DEFAULT_RECENT_TRANSACTIONS,
+): Promise<RecentTransaction[]> {
+  const response = await fetcher(`/me/transactions?limit=${limit}`);
+  return (await parsedJson(response, recentTransactionsResponseSchema)).transactions;
 }
 
 export async function fetchTransaction(

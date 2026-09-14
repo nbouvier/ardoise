@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, inArray, ne, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
+  groupMembers,
   transactionParticipants,
   transactions,
   type NewTransactionParticipantRow,
@@ -44,6 +45,15 @@ export interface TransactionsRepository {
    * member-visible descendants in one call rather than one per group.
    */
   listByGroups(groupIds: readonly string[]): Promise<TransactionRow[]>;
+  /**
+   * The `limit` most recent transactions that **involve** `userId` — they
+   * paid, or they are one of the people it concerns — across every group and
+   * sub-group they currently belong to, most recent first
+   * (`docs/specs/home.md`). Membership is part of the query, not a filter
+   * applied after: having been a participant in a group since left is never
+   * enough to be served its rows.
+   */
+  listRecentForUser(userId: string, limit: number): Promise<TransactionRow[]>;
   /** Every participant of the given transactions, in one query. */
   listParticipants(transactionIds: readonly string[]): Promise<TransactionParticipantRow[]>;
   create(
@@ -114,6 +124,44 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
         .from(transactions)
         .where(inArray(transactions.groupId, [...groupIds]))
         .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+    },
+
+    async listRecentForUser(userId, limit) {
+      const rows = await db
+        .select({ transaction: transactions })
+        .from(transactions)
+        // The join *is* the authorization: only groups `userId` belongs to
+        // right now contribute a row at all.
+        .innerJoin(
+          groupMembers,
+          and(
+            eq(groupMembers.groupId, transactions.groupId),
+            eq(groupMembers.userId, userId),
+          ),
+        )
+        .where(
+          or(
+            eq(transactions.payerId, userId),
+            exists(
+              db
+                .select({ id: transactionParticipants.id })
+                .from(transactionParticipants)
+                .where(
+                  and(
+                    eq(transactionParticipants.transactionId, transactions.id),
+                    eq(transactionParticipants.userId, userId),
+                  ),
+                ),
+            ),
+          ),
+        )
+        // The same ordering a group's own list uses: the date it is *for*
+        // first, then the order they were recorded, so same-day entries are
+        // deterministic and the ceiling below always cuts at the same place.
+        .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
+        .limit(limit);
+
+      return rows.map((row) => row.transaction);
     },
 
     async listParticipants(transactionIds) {

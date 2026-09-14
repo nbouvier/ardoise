@@ -6,6 +6,7 @@ import {
   createTransaction,
   deleteTransaction,
   fetchBalances,
+  fetchRecentTransactions,
   fetchTransaction,
   fetchTransactions,
   updateTransaction,
@@ -13,6 +14,28 @@ import {
 
 afterEach(() => {
   jest.restoreAllMocks();
+});
+
+describe('fetchRecentTransactions', () => {
+  const entry = {
+    transaction,
+    group: { id: transaction.groupId, name: 'Corsica 2026', ancestors: [] },
+  };
+
+  it('asks for the caller\u2019s own feed and parses it', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { transactions: [entry] } }));
+
+    await expect(fetchRecentTransactions(fetcher)).resolves.toEqual([entry]);
+    expect(fetcher).toHaveBeenCalledWith('/me/transactions?limit=10');
+  });
+
+  it('rejects a response that does not match the contract', async () => {
+    const fetcher = fakeAuthorizedFetch(
+      response({ jsonBody: { transactions: [{ transaction }] } }),
+    );
+
+    await expect(fetchRecentTransactions(fetcher)).rejects.toThrow();
+  });
 });
 
 describe('fetchTransactions', () => {

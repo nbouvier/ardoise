@@ -460,6 +460,44 @@ transaction's `category` is never `null`. There is no route to create, rename or
 categories dynamically; the emoji and label for each key are a client-side lookup
 (`categoryDefinition()`), not part of the `Transaction` response.
 
+### `GET /me/transactions`
+
+The caller's own most recent transactions, across **every group and sub-group they
+currently belong to**, pair groups included — the home screen's latest-transactions
+section (`docs/specs/home.md`). The only transaction route not scoped to one group.
+
+Only what **involves the caller** is returned: they paid it, or they are one of the
+people it concerns. A transaction between two other members of a group they belong to is
+not listed. Membership is re-established by the query itself, so a transaction the caller
+participated in, in a group they have since left, is never served.
+
+Most recent first — by `occurredOn`, then by recording order, the same ordering a group's
+own list uses, so same-day entries are deterministic and the cap always cuts at the same
+place.
+
+Query: `limit` (default `10`, max `50`). An absent, malformed or out-of-range `limit`
+falls back to the default rather than failing — it changes how much comes back, not what.
+
+Response `200`:
+
+```json
+{
+  "transactions": [
+    {
+      "transaction": "<Transaction>",
+      "group": {
+        "id": "<uuid>",
+        "name": "Beach day",
+        "ancestors": [{ "id": "<uuid>", "name": "Corsica 2026" }]
+      }
+    }
+  ]
+}
+```
+
+`group.name` is resolved the way it is everywhere (a pair group carries the other
+member's name) and `ancestors` is empty for a root group.
+
 ### `GET /groups/:groupId/transactions`
 
 The group's transactions, most recent first (by date, then by recording order for

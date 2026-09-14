@@ -1,7 +1,9 @@
 import {
   createTransactionRequestSchema,
+  recentTransactionsQuerySchema,
   transactionsListScopeSchema,
   updateTransactionRequestSchema,
+  DEFAULT_RECENT_TRANSACTIONS,
 } from '@splitcount/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
@@ -111,6 +113,19 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
     }
 
     const authenticated = { preHandler: app.authenticate };
+
+    /**
+     * The caller's own recent transactions, across every group they belong
+     * to (`docs/specs/home.md`) — the one route here that is not scoped to a
+     * group, hence outside `route()` above and its group-shaped refusals.
+     * An unusable `limit` falls back to the default rather than failing: as
+     * with `scope` below, it changes how much comes back, not what.
+     */
+    app.get('/me/transactions', authenticated, async (request, reply) => {
+      const query = recentTransactionsQuerySchema.safeParse(request.query ?? {});
+      const limit = query.success ? query.data.limit : DEFAULT_RECENT_TRANSACTIONS;
+      return reply.send({ transactions: await transactions.recent(request.userId!, limit) });
+    });
 
     app.get(
       '/groups/:groupId/transactions',

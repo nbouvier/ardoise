@@ -4,6 +4,7 @@ import type {
   CreateTransactionRequest,
   FriendSummary,
   GroupDetail,
+  RecentTransaction,
   SplitMode,
   Transaction,
   TransactionCategory,
@@ -51,6 +52,13 @@ export interface TransactionsService {
    * it (`planReimbursements`, `docs/specs/reimbursements.md`).
    */
   balances(userId: string, groupId: string): Promise<Balance[]>;
+  /**
+   * The `limit` most recent transactions that involve the caller — paid by
+   * them, or concerning them — across every group and sub-group they belong
+   * to, each with the group it happened in (`docs/specs/home.md`). Not scoped
+   * to one group, unlike everything above: it is the home screen's own read.
+   */
+  recent(userId: string, limit: number): Promise<RecentTransaction[]>;
 }
 
 export interface TransactionsServiceDeps {
@@ -245,6 +253,46 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
         transactions: rows.map((row) => toTransaction(row, byTransaction.get(row.id) ?? [], userMap)),
         excludedSubgroupCount,
       };
+    },
+
+    async recent(userId, limit) {
+      // No `requireMembership` here: there is no one group to check. The
+      // repository's own join is the authorization — only groups the caller
+      // currently belongs to produce a row — and `groups.labels` re-applies
+      // the same rule before naming any of them.
+      const rows = await repository.listRecentForUser(userId, limit);
+      if (rows.length === 0) {
+        return [];
+      }
+
+      const [participants, labels] = await Promise.all([
+        repository.listParticipants(rows.map((row) => row.id)),
+        groups.labels(
+          userId,
+          rows.map((row) => row.groupId),
+        ),
+      ]);
+      const byTransaction = groupParticipantsByTransaction(participants);
+      const userMap = await buildUserMap([
+        ...rows.map((row) => row.payerId),
+        ...participants.map((participant) => participant.userId),
+      ]);
+
+      return rows.flatMap((row) => {
+        const label = labels.get(row.groupId);
+        // Unreachable through the query above, which only returns rows from
+        // groups the caller belongs to — dropped rather than guessed at if a
+        // membership disappears between the two reads.
+        if (!label) {
+          return [];
+        }
+        return [
+          {
+            transaction: toTransaction(row, byTransaction.get(row.id) ?? [], userMap),
+            group: { id: row.groupId, ...label },
+          },
+        ];
+      });
     },
 
     async get(userId, groupId, transactionId) {

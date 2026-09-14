@@ -37,6 +37,15 @@ interface GroupContext {
   favoritedAt: Date | null;
 }
 
+/**
+ * How a group is presented outside its own page: the name the viewer knows it
+ * by, and the breadcrumb that says where it sits (`docs/specs/home.md`).
+ */
+export interface GroupLabel {
+  name: string;
+  ancestors: GroupAncestor[];
+}
+
 export interface RemovedMember {
   /** The group had no members left and was deleted with its contents. */
   groupDeleted: boolean;
@@ -57,6 +66,14 @@ export interface GroupsService {
    * before archived, alphabetical within each.
    */
   listFavorites(userId: string): Promise<GroupSummary[]>;
+  /**
+   * How to present each of `groupIds` to `userId` — what a list of things
+   * drawn from several groups at once needs to name each of them
+   * (`docs/specs/home.md`). A group the caller does not belong to is simply
+   * absent from the result: this never becomes a way to resolve the name of
+   * a group one cannot see.
+   */
+  labels(userId: string, groupIds: readonly string[]): Promise<Map<string, GroupLabel>>;
   get(userId: string, groupId: string): Promise<GroupDetail>;
   create(userId: string, input: CreateGroupRequest): Promise<GroupDetail>;
   update(userId: string, groupId: string, input: UpdateGroupRequest): Promise<GroupDetail>;
@@ -203,6 +220,24 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
    * `nameFor` names it everywhere else. Its member list is the only extra
    * read, and only for a pair-rooted tree.
    */
+  /**
+   * A group as somewhere other than its own page presents it. Costs a read
+   * only for what it cannot know from the row itself: a pair group's members
+   * (it stores no name) and a sub-group's ancestors. A favorited root group,
+   * the common case, costs neither.
+   */
+  async function labelOf(group: GroupRow, viewerId: string): Promise<GroupLabel> {
+    const [name, ancestors] = await Promise.all([
+      group.kind === 'pair'
+        ? repository.listMembers(group.id).then((members) => nameFor(group, viewerId, members))
+        : Promise.resolve(group.name ?? 'Untitled group'),
+      group.parentId
+        ? repository.listAncestors(group.id).then((rows) => nameAncestors(rows, viewerId))
+        : Promise.resolve([]),
+    ]);
+    return { name, ancestors };
+  }
+
   function nameAncestors(
     rows: readonly GroupRow[],
     viewerId: string,
@@ -403,20 +438,12 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         rows.map(({ group }) => group.id),
       );
 
-      // Two reads per row at worst — a pair group's members to name it, a
-      // sub-group's ancestors for its breadcrumb — and none at all for the
-      // ordinary case of a favorited root group. Bounded by how many groups
-      // one person has starred, which is a handful by construction: the
-      // point of a favorite is to be one of few.
+      // `labelOf`'s per-row reads are bounded by how many groups one person
+      // has starred, which is a handful by construction: the point of a
+      // favorite is to be one of few.
       const summaries = await Promise.all(
         rows.map(async ({ group, memberCount, subgroupCount }) => {
-          const name =
-            group.kind === 'pair'
-              ? nameFor(group, userId, await repository.listMembers(group.id))
-              : (group.name ?? 'Untitled group');
-          const ancestors = group.parentId
-            ? await nameAncestors(await repository.listAncestors(group.id), userId)
-            : [];
+          const { name, ancestors } = await labelOf(group, userId);
           return summaryOf(
             group,
             name,
@@ -436,6 +463,22 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         const archivedB = b.archivedAt === null ? 0 : 1;
         return archivedA - archivedB || a.name.localeCompare(b.name);
       });
+    },
+
+    async labels(userId, groupIds) {
+      const wanted = [...new Set(groupIds)];
+      // Membership decides what is answered for, in one query — a caller who
+      // is no longer in a group gets nothing back for it rather than its name.
+      const allowed = await repository.filterMemberGroupIds(userId, wanted);
+
+      const entries = await Promise.all(
+        allowed.map(async (groupId) => {
+          const group = await repository.findGroupById(groupId);
+          return group ? ([groupId, await labelOf(group, userId)] as const) : null;
+        }),
+      );
+
+      return new Map(entries.filter((entry) => entry !== null));
     },
 
     async get(userId, groupId) {
