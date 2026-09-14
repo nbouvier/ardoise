@@ -1,5 +1,4 @@
 import type {
-  GroupAncestor,
   GroupDetail,
   GroupMember,
   SubgroupSummary,
@@ -19,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
+import { Breadcrumb } from '@/components/breadcrumb';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { FavoriteStar } from '@/components/favorite-star';
@@ -325,9 +325,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     <ThemedView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          {group.ancestors.length > 0 ? (
-            <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
-          ) : null}
+          <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
           <View style={styles.headerRow}>
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
               {group.name}
@@ -564,34 +562,6 @@ function HeaderChip({
         {label}
       </ThemedText>
     </Pressable>
-  );
-}
-
-/** Every ancestor of a sub-group, root first, each one tappable. */
-function Breadcrumb({
-  ancestors,
-  onOpen,
-}: {
-  ancestors: readonly GroupAncestor[];
-  onOpen: (groupId: string) => void;
-}) {
-  return (
-    <View style={styles.breadcrumb}>
-      {ancestors.map((ancestor, index) => (
-        <View key={ancestor.id} style={styles.breadcrumbItem}>
-          {index > 0 ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {' › '}
-            </ThemedText>
-          ) : null}
-          <Pressable onPress={() => onOpen(ancestor.id)}>
-            <ThemedText type="smallBold" themeColor="primary" numberOfLines={1}>
-              {ancestor.name}
-            </ThemedText>
-          </Pressable>
-        </View>
-      ))}
-    </View>
   );
 }
 
@@ -1074,14 +1044,6 @@ const styles = StyleSheet.create({
   balanceCard: {
     marginTop: Spacing.two,
     gap: Spacing.one,
-  },
-  breadcrumb: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  breadcrumbItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   subgroups: {
     gap: Spacing.two,

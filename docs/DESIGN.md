@@ -123,6 +123,11 @@ or box**; a screen that styles its own is a bug in this document.
   `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
   no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
   never nested inside it, so tapping it never also navigates.
+- **`Breadcrumb`** — where a sub-group sits, above its name: its ancestors root first,
+  chevron-separated, in the quietest type there is. `onOpen` makes each one its own hit
+  area (a group's own header); without it the trail is plain `small` text — what a row in
+  a list wants, where the row is already the target and a nested pressable would steal
+  the tap. Shown wherever a group is named away from its parent (`docs/specs/home.md`).
 - **`ScreenHeader`** — the top of a tab screen: **SplitCount's own identity first** — the
   `BrandMark`, sized to stand as tall as the two text lines beside it, next to the
   wordmark and, directly under it, the current page named in smaller, secondary-coloured
@@ -153,6 +158,9 @@ or box**; a screen that styles its own is a bug in this document.
   rather than a text button per choice or an icon whose single meaning has to be guessed.
 - A list screen's footer action sits **pinned to the bottom of the screen** (the body
   above it takes `flex: 1`), not just after whatever content happens to be there.
+- A group named anywhere other than under its own parent carries a **`Breadcrumb`** above
+  its name — the group list, the home's favorites, a group's own header. "Beach day" on
+  its own is ambiguous between two trips; "Corsica 2026 › Beach day" is not.
 
 ## Screens
 
@@ -181,7 +189,9 @@ card**: a medallion carrying the group's initials, the name, the member count, a
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
 `docs/specs/balances.md`), with a **`FavoriteStar`** at the far right of the row, aligned
 with the name line specifically (`docs/specs/favorites.md`) — favorited groups are pinned
-above non-favorited ones, alphabetical within each. Tapping the star flips it in place
+above non-favorited ones, alphabetical within each. The row leads with a **`Breadcrumb`**
+of the group's ancestors when it has any — never here, where every group is a root one,
+but the same row is reused by the home's favorites section, which mixes depths. Tapping the star flips it in place
 without moving the row: the refetch that tap itself triggers (`groupsChanged`) keeps the
 row where it is, and only a *later*, unrelated refetch brings the pinned order into
 view — a visible list reordering under the viewer's own finger reads as disorienting,

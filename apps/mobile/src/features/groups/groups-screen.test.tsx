@@ -77,6 +77,35 @@ describe('GroupsScreen', () => {
     expect(screen.getByText('3 members')).toBeTruthy();
   });
 
+  it('leads a sub-group’s row with a breadcrumb of its ancestors', async () => {
+    mockFetchGroups.mockResolvedValue([
+      {
+        ...trip,
+        name: 'Beach day',
+        parentId: '55555555-5555-4555-8555-555555555555',
+        depth: 1,
+        ancestors: [
+          { id: '55555555-5555-4555-8555-555555555555', name: 'Corsica 2026' },
+          { id: '66666666-6666-4666-8666-666666666666', name: 'Ajaccio weekend' },
+        ],
+      },
+    ]);
+
+    await render(<GroupsScreen />);
+
+    expect(await screen.findByText('Beach day')).toBeTruthy();
+    expect(screen.getByText('Corsica 2026')).toBeTruthy();
+    expect(screen.getByText('Ajaccio weekend')).toBeTruthy();
+
+    // The row itself is the hit area — tapping an ancestor here opens the
+    // row's own group, not the ancestor.
+    await fireEvent.press(screen.getByText('Corsica 2026'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/groups/[id]',
+      params: { id: trip.id },
+    });
+  });
+
   it("shows the viewer's own balance in the group", async () => {
     mockFetchGroups.mockResolvedValue([{ ...trip, viewerBalanceCents: 2500 }]);
 

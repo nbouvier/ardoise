@@ -1,6 +1,7 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Breadcrumb } from '@/components/breadcrumb';
 import { Card } from '@/components/card';
 import { FavoriteStar } from '@/components/favorite-star';
 import { MedallionBadge } from '@/components/medallion-badge';
@@ -33,7 +34,9 @@ function initials(name: string): string {
 /**
  * One card of the group list: its medallion, name, size, and where the viewer
  * stands in that group — its own transactions, not its sub-groups'
- * (`docs/specs/balances.md`).
+ * (`docs/specs/balances.md`). A group that sits under another leads with a
+ * breadcrumb of its ancestors, so a list mixing depths — the home screen's
+ * favorites (`docs/specs/home.md`) — never leaves a name ambiguous.
  */
 export function GroupRow({
   group,
@@ -54,6 +57,9 @@ export function GroupRow({
           style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
           <MedallionBadge seed={group.id} content={initials(group.name)} />
           <View style={styles.text}>
+            {/* Plain text, not tappable: the row itself opens the group, and
+                a nested pressable here would steal that tap. */}
+            <Breadcrumb ancestors={group.ancestors} />
             <ThemedText type="sectionTitle" numberOfLines={1}>
               {group.name}
             </ThemedText>
