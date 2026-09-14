@@ -105,6 +105,13 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       reply.send({ groups: await groups.list(request.userId!) }),
     );
 
+    // Declared before `/groups/:groupId` reads: a static segment always wins
+    // over a parametric one in Fastify's router, but the order here says so
+    // to the reader too.
+    app.get('/groups/favorites', authenticated, async (request, reply) =>
+      reply.send({ groups: await groups.listFavorites(request.userId!) }),
+    );
+
     app.post('/groups', authenticated, async (request, reply) => {
       const parsed = createGroupRequestSchema.safeParse(request.body);
       if (!parsed.success) {

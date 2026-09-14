@@ -97,6 +97,9 @@ describe('groups routes', () => {
   const listGroups = (user: TestUser) =>
     app.inject({ method: 'GET', url: '/groups', headers: user.headers });
 
+  const listFavorites = (user: TestUser) =>
+    app.inject({ method: 'GET', url: '/groups/favorites', headers: user.headers });
+
   const getGroup = (user: TestUser, groupId: string) =>
     app.inject({ method: 'GET', url: `/groups/${groupId}`, headers: user.headers });
 
@@ -523,6 +526,92 @@ describe('groups routes', () => {
 
       const graceView = (await getGroup(grace, root.id)).json().group;
       expect(graceView.subgroups[0]).toMatchObject({ id: sub.id, favorite: false });
+    });
+
+    describe('GET /groups/favorites', () => {
+      it('gathers every kind of favorited group, active first then alphabetical', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const pair = (await pairGroup(ada, grace.userId)).json().group;
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const sub = await createdSubgroup(ada, root.id, 'Beach day');
+        const old = await createdGroup(ada, 'Alpine 2025');
+        await patchGroup(ada, old.id, { archived: true });
+        await createdGroup(ada, 'Never starred');
+
+        for (const id of [pair.id, root.id, sub.id, old.id]) {
+          expect((await setFavorite(ada, id, true)).statusCode).toBe(200);
+        }
+
+        const response = await listFavorites(ada);
+
+        expect(response.statusCode).toBe(200);
+        // A pair group is named after the other member, so it sorts under
+        // that name — 'Grace Hopper' — not under a name of its own.
+        expect(response.json().groups).toMatchObject([
+          { id: sub.id, name: 'Beach day', kind: 'standard', favorite: true },
+          { id: root.id, name: 'Corsica 2026' },
+          { id: pair.id, name: 'Grace Hopper', kind: 'pair' },
+          { id: old.id, name: 'Alpine 2025', archivedAt: clock.toISOString() },
+        ]);
+      });
+
+      it('shows a favorited sub-group where it sits, with its own balance', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+        const sub = await createdSubgroup(ada, root.id, 'Beach day', [grace.userId]);
+        await recordExpense(ada, sub.id, ada.userId, [ada.userId, grace.userId], 1000);
+        await setFavorite(ada, sub.id, true);
+
+        const [favorite] = (await listFavorites(ada)).json().groups;
+
+        expect(favorite).toMatchObject({
+          id: sub.id,
+          parentId: root.id,
+          depth: 1,
+          memberCount: 2,
+          // Ada paid 1000 and owes 500 of it: the sub-group's own figure,
+          // never folded into its parent's (`docs/specs/balances.md`).
+          viewerBalanceCents: 500,
+        });
+        expect(favorite.ancestors).toEqual([{ id: root.id, name: 'Corsica 2026' }]);
+      });
+
+      it('is empty when nothing is favorited, and never shows another member’s', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const group = await createdGroup(ada, 'Trip', [grace.userId]);
+
+        expect((await listFavorites(ada)).json()).toEqual({ groups: [] });
+
+        await setFavorite(grace, group.id, true);
+
+        expect((await listFavorites(ada)).json()).toEqual({ groups: [] });
+        expect((await listFavorites(grace)).json().groups).toHaveLength(1);
+      });
+
+      it('drops a favorite when its membership goes', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const group = await createdGroup(ada, 'Trip', [grace.userId]);
+        await setFavorite(grace, group.id, true);
+        expect((await listFavorites(grace)).json().groups).toHaveLength(1);
+
+        await removeMember(grace, group.id, grace.userId);
+
+        expect((await listFavorites(grace)).json()).toEqual({ groups: [] });
+      });
+
+      it('requires authentication', async () => {
+        const response = await app.inject({ method: 'GET', url: '/groups/favorites' });
+
+        expect(response.statusCode).toBe(401);
+      });
     });
   });
 

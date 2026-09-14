@@ -17,6 +17,17 @@ export async function fetchGroups(fetcher: AuthorizedFetch): Promise<GroupSummar
   return (await parsedJson(response, groupsListResponseSchema)).groups;
 }
 
+/**
+ * The caller's favorited groups — unlike `fetchGroups`, of any kind and any
+ * depth: a sub-group, and the implicit pair group behind a favorited friend,
+ * both belong in the home screen's own section (`docs/specs/home.md`).
+ * Ordered by the server: active before archived, alphabetical within each.
+ */
+export async function fetchFavoriteGroups(fetcher: AuthorizedFetch): Promise<GroupSummary[]> {
+  const response = await fetcher('/groups/favorites');
+  return (await parsedJson(response, groupsListResponseSchema)).groups;
+}
+
 export async function fetchGroup(
   fetcher: AuthorizedFetch,
   groupId: string,

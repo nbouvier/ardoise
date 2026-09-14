@@ -50,6 +50,13 @@ export interface RemovedMember {
 
 export interface GroupsService {
   list(userId: string): Promise<GroupSummary[]>;
+  /**
+   * Every group the caller has favorited, of any kind and any depth — the
+   * home screen's own section (`docs/specs/home.md`), and the only read that
+   * returns root groups, sub-groups and pair groups side by side. Active
+   * before archived, alphabetical within each.
+   */
+  listFavorites(userId: string): Promise<GroupSummary[]>;
   get(userId: string, groupId: string): Promise<GroupDetail>;
   create(userId: string, input: CreateGroupRequest): Promise<GroupDetail>;
   update(userId: string, groupId: string, input: UpdateGroupRequest): Promise<GroupDetail>;
@@ -383,6 +390,52 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           [],
         ),
       );
+    },
+
+    async listFavorites(userId) {
+      const rows = await repository.listFavoriteGroupsForUser(userId);
+      if (rows.length === 0) {
+        return [];
+      }
+
+      const balances = await ledger.balancesByGroup(
+        userId,
+        rows.map(({ group }) => group.id),
+      );
+
+      // Two reads per row at worst — a pair group's members to name it, a
+      // sub-group's ancestors for its breadcrumb — and none at all for the
+      // ordinary case of a favorited root group. Bounded by how many groups
+      // one person has starred, which is a handful by construction: the
+      // point of a favorite is to be one of few.
+      const summaries = await Promise.all(
+        rows.map(async ({ group, memberCount, subgroupCount }) => {
+          const name =
+            group.kind === 'pair'
+              ? nameFor(group, userId, await repository.listMembers(group.id))
+              : (group.name ?? 'Untitled group');
+          const ancestors = group.parentId
+            ? await nameAncestors(await repository.listAncestors(group.id), userId)
+            : [];
+          return summaryOf(
+            group,
+            name,
+            memberCount,
+            subgroupCount,
+            balances.get(group.id) ?? 0,
+            true,
+            ancestors,
+          );
+        }),
+      );
+
+      // Sorted here rather than in SQL: a pair group's name is not a column,
+      // it is the other member's, so the database cannot order on it.
+      return summaries.sort((a, b) => {
+        const archivedA = a.archivedAt === null ? 0 : 1;
+        const archivedB = b.archivedAt === null ? 0 : 1;
+        return archivedA - archivedB || a.name.localeCompare(b.name);
+      });
     },
 
     async get(userId, groupId) {

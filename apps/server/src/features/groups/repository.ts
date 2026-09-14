@@ -19,11 +19,11 @@ export interface GroupWithCount {
 }
 
 /**
- * A root group as `listGroupsForUser` reports it: its own direct sub-group
+ * A group as the listing queries below report it: its own direct sub-group
  * count, and the caller's own `favorited_at` off their membership row
  * (`docs/specs/favorites.md`).
  */
-export interface RootGroupSummary extends GroupWithCount {
+export interface ListedGroupSummary extends GroupWithCount {
   subgroupCount: number;
   favoritedAt: Date | null;
 }
@@ -58,7 +58,15 @@ export interface GroupsRepository {
    * Pair groups are excluded, and so is any group that is itself a sub-group —
    * it is reached by opening its parent, not listed at the top level.
    */
-  listGroupsForUser(userId: string): Promise<RootGroupSummary[]>;
+  listGroupsForUser(userId: string): Promise<ListedGroupSummary[]>;
+  /**
+   * Every group the user has favorited, with the same counts — of any kind
+   * and any depth, unlike `listGroupsForUser`: a sub-group and the implicit
+   * pair group behind a favorited friend both belong in the one place the
+   * product gathers favorites (`docs/specs/home.md`). Unordered here; a pair
+   * group has no name of its own to sort on until the service resolves it.
+   */
+  listFavoriteGroupsForUser(userId: string): Promise<ListedGroupSummary[]>;
   listMembers(groupId: string): Promise<MemberWithUser[]>;
   countMembers(groupId: string): Promise<number>;
   createGroup(input: CreateGroupInput): Promise<GroupRow>;
@@ -183,6 +191,44 @@ async function fetchDescendantIds(db: Database, groupId: string): Promise<string
   return rows.map((row) => row.id);
 }
 
+/**
+ * Add each listed group's direct sub-group count, in one further query.
+ *
+ * A second, separate query rather than a third join in the listing itself:
+ * joining both the member count and the sub-group count in a single query
+ * multiplies rows (3 members × 2 sub-groups = 6 rows) before any aggregation
+ * runs, forcing every count into a `distinct` — a plain `group by parent_id`
+ * here is simpler and reads its own index.
+ */
+async function withSubgroupCounts(
+  db: Database,
+  rows: readonly { group: GroupRow; memberCount: number; favoritedAt: Date | null }[],
+): Promise<ListedGroupSummary[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const subgroupCounts = await db
+    .select({ parentId: groups.parentId, count: sql<number>`count(*)` })
+    .from(groups)
+    .where(
+      inArray(
+        groups.parentId,
+        rows.map((row) => row.group.id),
+      ),
+    )
+    .groupBy(groups.parentId);
+
+  const countByParent = new Map(subgroupCounts.map((row) => [row.parentId, toCount(row.count)]));
+
+  return rows.map((row) => ({
+    group: row.group,
+    memberCount: toCount(row.memberCount),
+    subgroupCount: countByParent.get(row.group.id) ?? 0,
+    favoritedAt: row.favoritedAt,
+  }));
+}
+
 export function createGroupsRepository(db: Database): GroupsRepository {
   return {
     async findGroupById(groupId) {
@@ -231,36 +277,29 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           asc(groups.name),
         );
 
-      if (own.length === 0) {
-        return [];
-      }
+      return withSubgroupCounts(db, own);
+    },
 
-      // A second, separate query rather than a third join in the one above:
-      // joining both the member count and the sub-group count in a single
-      // query multiplies rows (3 members × 2 sub-groups = 6 rows) before any
-      // aggregation runs, forcing every count into a `distinct` — a plain
-      // `group by parent_id` here is simpler and reads its own index.
-      const subgroupCounts = await db
-        .select({ parentId: groups.parentId, count: sql<number>`count(*)` })
-        .from(groups)
+    async listFavoriteGroupsForUser(userId) {
+      const everyone = aliasedTable(groupMembers, 'everyone');
+
+      const own = await db
+        .select({
+          group: groups,
+          memberCount: sql<number>`count(${everyone.id})`,
+          favoritedAt: groupMembers.favoritedAt,
+        })
+        .from(groupMembers)
+        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+        .innerJoin(everyone, eq(everyone.groupId, groups.id))
+        // No kind or depth filter, unlike `listGroupsForUser`: a favorite is
+        // gathered wherever it lives (`docs/specs/home.md`).
         .where(
-          inArray(
-            groups.parentId,
-            own.map((row) => row.group.id),
-          ),
+          and(eq(groupMembers.userId, userId), sql`${groupMembers.favoritedAt} is not null`),
         )
-        .groupBy(groups.parentId);
+        .groupBy(groups.id, groupMembers.favoritedAt);
 
-      const countByParent = new Map(
-        subgroupCounts.map((row) => [row.parentId, toCount(row.count)]),
-      );
-
-      return own.map((row) => ({
-        group: row.group,
-        memberCount: toCount(row.memberCount),
-        subgroupCount: countByParent.get(row.group.id) ?? 0,
-        favoritedAt: row.favoritedAt,
-      }));
+      return withSubgroupCounts(db, own);
     },
 
     async listMembers(groupId) {

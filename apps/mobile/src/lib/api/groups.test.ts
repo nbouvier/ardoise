@@ -13,6 +13,7 @@ import {
   addGroupMembers,
   createGroup,
   deleteGroup,
+  fetchFavoriteGroups,
   fetchGroup,
   fetchGroupInvite,
   fetchGroups,
@@ -39,6 +40,21 @@ describe('fetchGroups', () => {
     );
 
     await expect(fetchGroups(fetcher)).rejects.toThrow();
+  });
+});
+
+describe('fetchFavoriteGroups', () => {
+  it('parses the list, pair groups included', async () => {
+    const pair = { ...groupSummary, kind: 'pair' as const, name: 'Grace', favorite: true };
+    const fetcher = fakeAuthorizedFetch(
+      response({ jsonBody: { groups: [{ ...groupSummary, favorite: true }, pair] } }),
+    );
+
+    await expect(fetchFavoriteGroups(fetcher)).resolves.toEqual([
+      { ...groupSummary, favorite: true },
+      pair,
+    ]);
+    expect(fetcher).toHaveBeenCalledWith('/groups/favorites');
   });
 });
 

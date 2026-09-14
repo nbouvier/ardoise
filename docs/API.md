@@ -296,6 +296,17 @@ groups first (`docs/specs/favorites.md`), then alphabetical.
 
 Response `200`: `{ "groups": [ "<GroupSummary>" ] }`
 
+### `GET /groups/favorites`
+
+The caller's favorited groups (`docs/specs/favorites.md`), for the home screen
+(`docs/specs/home.md`). Unlike `GET /groups`, it crosses every boundary that list draws:
+a sub-group at any depth and the implicit pair group behind a favorited friend are both
+included, each with its name resolved, its `ancestors` and the caller's own balance in it.
+Active groups first, then archived ones; alphabetical within each — a pair group sorts
+under the other member's name, since that is the name it is shown with.
+
+Response `200`: `{ "groups": [ "<GroupSummary>" ] }` — every entry has `favorite: true`.
+
 ### `POST /groups`
 
 Create a group. `memberIds` is optional and must contain only friends of the caller.
