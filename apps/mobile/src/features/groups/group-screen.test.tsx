@@ -469,6 +469,8 @@ describe('GroupScreen', () => {
       viewerIsMember: true,
       viewerBalanceCents: -1250,
       favorite: false,
+      viewerRole: 'owner',
+      archivedAt: null,
     };
 
     const unjoinedSub: SubgroupSummary = {
@@ -478,6 +480,8 @@ describe('GroupScreen', () => {
       viewerIsMember: false,
       viewerBalanceCents: 0,
       favorite: false,
+      viewerRole: null,
+      archivedAt: null,
     };
 
     it('shows a joined sub-group and opens it directly', async () => {
@@ -525,6 +529,39 @@ describe('GroupScreen', () => {
       await render(<GroupScreen groupId={trip.id} />);
 
       expect(await screen.findByText('You owe 12.50')).toBeTruthy();
+    });
+
+    it('offers a joined sub-group its own "⋮" actions menu, opening Manage onto its Details sheet', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Ajaccio weekend');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ajaccio weekend' }));
+
+      expect(screen.getByText('Manage')).toBeTruthy();
+      expect(screen.getByText('Delete group')).toBeTruthy();
+
+      await fireEvent.press(screen.getByText('Manage'));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/groups/[id]',
+        params: { id: joinedSub.id, openSheet: 'details' },
+      });
+    });
+
+    it('gives an unjoined sub-group no actions menu — nothing to manage there', async () => {
+      mockFetchGroup.mockResolvedValue({
+        ...trip,
+        subgroups: [joinedSub, unjoinedSub],
+        subgroupCount: 2,
+      });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Ajaccio weekend');
+      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+      await screen.findByText('Bastia weekend');
+
+      expect(screen.queryByRole('button', { name: 'Actions for Bastia weekend' })).toBeNull();
     });
 
     it('hides an unjoined sub-group behind a toggle', async () => {

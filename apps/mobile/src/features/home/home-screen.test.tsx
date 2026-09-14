@@ -53,6 +53,9 @@ jest.mock('@/features/auth/use-auth', () => ({
 jest.mock('@/lib/api/groups', () => ({
   fetchFavoriteGroups: () => mockFetchFavoriteGroups(),
   setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
+  updateGroup: jest.fn(),
+  removeGroupMember: jest.fn(),
+  deleteGroup: jest.fn(),
 }));
 
 jest.mock('@/lib/api/transactions', () => ({
@@ -101,6 +104,27 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Beach day')).toBeTruthy();
     expect(screen.getByText('Grace')).toBeTruthy();
     expect(screen.getByText('You owe 15.00')).toBeTruthy();
+  });
+
+  it('offers only Manage and Remove friend on a favorited pair group’s row', async () => {
+    const pair: GroupSummary = {
+      ...groupSummary,
+      id: '99999999-9999-4999-8999-999999999999',
+      kind: 'pair',
+      name: 'Grace',
+      favorite: true,
+    };
+    mockFetchFavoriteGroups.mockResolvedValue([pair]);
+
+    await render(<HomeScreen />);
+    await screen.findByText('Grace');
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Grace' }));
+
+    expect(screen.getByText('Manage')).toBeTruthy();
+    expect(screen.getByText('Remove friend')).toBeTruthy();
+    expect(screen.queryByText('Archive group')).toBeNull();
+    expect(screen.queryByText('Leave group')).toBeNull();
+    expect(screen.queryByText('Delete group')).toBeNull();
   });
 
   it('opens a favorited group when its row is tapped', async () => {

@@ -57,9 +57,11 @@ import { errorFields, logger } from '@/lib/logger';
 
 import { CreateGroupScreen } from './create-group-screen';
 import { FriendPicker } from './friend-picker';
+import { GroupActionsMenu } from './group-actions-menu';
 import { GroupInviteScreen } from './group-invite-screen';
 import { groupsChanged } from './groups-changed';
 import { useGroup } from './use-group';
+import { useGroupRowActions } from './use-group-row-actions';
 
 /**
  * `details` is the group-management sheet (members, balances, rename,
@@ -72,7 +74,7 @@ import { useGroup } from './use-group';
  * it back, one payment shorter. `createSubgroup` is launched from the
  * sub-groups section.
  */
-type Sheet =
+export type Sheet =
   | 'details'
   | 'invite'
   | 'members'
@@ -83,13 +85,19 @@ type Sheet =
   | 'createSubgroup'
   | null;
 
-export function GroupScreen({ groupId }: { groupId: string }) {
+export interface GroupScreenProps {
+  groupId: string;
+  /** Opens straight onto a sheet — a row's own "Manage" action, elsewhere in the app. */
+  initialSheet?: Sheet;
+}
+
+export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) {
   const { status, group, refresh, set } = useGroup(groupId);
   const { authorizedFetch, state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const router = useRouter();
   const theme = useTheme();
-  const [sheet, setSheet] = useState<Sheet>(null);
+  const [sheet, setSheet] = useState<Sheet>(initialSheet);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   // Set only when the transaction sheet was opened from the reimbursement
   // plan — it is both the form's starting values and how the sheet knows to
@@ -100,6 +108,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   // this screen is showing, so it cannot ride the screen-wide `busy` flag —
   // just the one row mid-request.
   const [favoriteBusySubgroupId, setFavoriteBusySubgroupId] = useState<string | null>(null);
+  const subgroupActions = useGroupRowActions();
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the details sheet: the summary above the
   // transaction list and the per-member list in the sheet are the same figures.
@@ -206,6 +215,10 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
   function openGroup(id: string) {
     router.push({ pathname: '/groups/[id]', params: { id } });
+  }
+
+  function manageSubgroup(id: string) {
+    router.push({ pathname: '/groups/[id]', params: { id, openSheet: 'details' } });
   }
 
   function confirmArchive() {
@@ -391,10 +404,18 @@ export function GroupScreen({ groupId }: { groupId: string }) {
           readOnly={readOnly}
           busy={busy}
           favoriteBusyId={favoriteBusySubgroupId}
+          actionsBusyId={subgroupActions.busyId}
           onOpen={openGroup}
           onJoin={confirmJoin}
           onCreate={() => setSheet('createSubgroup')}
           onToggleFavorite={toggleSubgroupFavorite}
+          onManage={manageSubgroup}
+          // A sub-group is always a standard group (`groups_pair_no_parent`)
+          // and doesn't carry its own `subgroupCount` — it is shown one level
+          // deep only, so the leave/delete confirmations skip that clause.
+          onArchiveToggle={(subgroup) => subgroupActions.archiveToggle({ ...subgroup, kind: 'standard' })}
+          onLeave={(subgroup) => subgroupActions.confirmLeave({ ...subgroup, kind: 'standard' })}
+          onDelete={(subgroup) => subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })}
         />
 
         <TransactionList
@@ -592,20 +613,31 @@ function SubgroupsSection({
   readOnly,
   busy,
   favoriteBusyId,
+  actionsBusyId,
   onOpen,
   onJoin,
   onCreate,
   onToggleFavorite,
+  onManage,
+  onArchiveToggle,
+  onLeave,
+  onDelete,
 }: {
   subgroups: readonly SubgroupSummary[];
   readOnly: boolean;
   busy: boolean;
   /** The one sub-group whose favorite star is mid-request, if any. */
   favoriteBusyId: string | null;
+  /** The one sub-group whose "⋮" action is mid-request, if any. */
+  actionsBusyId: string | null;
   onOpen: (groupId: string) => void;
   onJoin: (subgroup: SubgroupSummary) => void;
   onCreate: () => void;
   onToggleFavorite: (subgroup: SubgroupSummary) => void;
+  onManage: (groupId: string) => void;
+  onArchiveToggle: (subgroup: SubgroupSummary) => void;
+  onLeave: (subgroup: SubgroupSummary) => void;
+  onDelete: (subgroup: SubgroupSummary) => void;
 }) {
   const [showUnjoined, setShowUnjoined] = useState(false);
   const joined = subgroups.filter((subgroup) => subgroup.viewerIsMember);
@@ -635,8 +667,13 @@ function SubgroupsSection({
           key={subgroup.id}
           subgroup={subgroup}
           favoriteBusy={favoriteBusyId === subgroup.id}
+          actionsBusy={actionsBusyId === subgroup.id}
           onPress={() => onOpen(subgroup.id)}
           onToggleFavorite={() => onToggleFavorite(subgroup)}
+          onManage={() => onManage(subgroup.id)}
+          onArchiveToggle={() => onArchiveToggle(subgroup)}
+          onLeave={() => onLeave(subgroup)}
+          onDelete={() => onDelete(subgroup)}
         />
       ))}
 
@@ -678,15 +715,26 @@ function SubgroupRow({
   subgroup,
   muted = false,
   favoriteBusy = false,
+  actionsBusy = false,
   onPress,
   onToggleFavorite,
+  onManage,
+  onArchiveToggle,
+  onLeave,
+  onDelete,
 }: {
   subgroup: SubgroupSummary;
   muted?: boolean;
   favoriteBusy?: boolean;
+  actionsBusy?: boolean;
   onPress: () => void;
   /** Absent for a sub-group the viewer has not joined — nothing to favorite there. */
   onToggleFavorite?: () => void;
+  /** Absent for a sub-group the viewer has not joined — nothing to manage there. */
+  onManage?: () => void;
+  onArchiveToggle?: () => void;
+  onLeave?: () => void;
+  onDelete?: () => void;
 }) {
   const members = subgroup.memberCount === 1 ? '1 member' : `${subgroup.memberCount} members`;
 
@@ -719,6 +767,20 @@ function SubgroupRow({
             label={subgroup.name}
             disabled={favoriteBusy}
             onToggle={onToggleFavorite}
+          />
+        ) : null}
+        {onManage && onArchiveToggle && onLeave && onDelete ? (
+          <GroupActionsMenu
+            name={subgroup.name}
+            kind="standard"
+            viewerRole={subgroup.viewerRole}
+            memberCount={subgroup.memberCount}
+            archived={subgroup.archivedAt !== null}
+            busy={actionsBusy}
+            onManage={onManage}
+            onArchiveToggle={onArchiveToggle}
+            onLeave={onLeave}
+            onDelete={onDelete}
           />
         ) : null}
       </View>

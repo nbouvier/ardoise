@@ -16,10 +16,12 @@ import { useTheme } from '@/hooks/use-theme';
 
 import { CreateGroupScreen } from './create-group-screen';
 import { GroupRow } from './group-row';
+import { useGroupRowActions } from './use-group-row-actions';
 import { useGroups } from './use-groups';
 
 export function GroupsScreen() {
   const { status, active, archived, refresh, toggleFavorite, favoriteBusyId } = useGroups();
+  const rowActions = useGroupRowActions();
   const router = useRouter();
   const theme = useTheme();
   const [creating, setCreating] = useState(false);
@@ -30,6 +32,9 @@ export function GroupsScreen() {
 
   const open = (group: GroupSummary) =>
     router.push({ pathname: '/groups/[id]', params: { id: group.id } });
+
+  const manage = (group: GroupSummary) =>
+    router.push({ pathname: '/groups/[id]', params: { id: group.id, openSheet: 'details' } });
 
   function handleCreated(group: GroupSummary) {
     setCreating(false);
@@ -57,7 +62,12 @@ export function GroupsScreen() {
                 group={group}
                 onPress={open}
                 onToggleFavorite={toggleFavorite}
+                onManage={manage}
+                onArchiveToggle={rowActions.archiveToggle}
+                onLeave={rowActions.confirmLeave}
+                onDelete={rowActions.confirmDelete}
                 favoriteBusy={favoriteBusyId === group.id}
+                actionsBusy={rowActions.busyId === group.id}
                 muted
               />
             ))}
@@ -110,7 +120,12 @@ export function GroupsScreen() {
             group={item}
             onPress={open}
             onToggleFavorite={toggleFavorite}
+            onManage={manage}
+            onArchiveToggle={rowActions.archiveToggle}
+            onLeave={rowActions.confirmLeave}
+            onDelete={rowActions.confirmDelete}
             favoriteBusy={favoriteBusyId === item.id}
+            actionsBusy={rowActions.busyId === item.id}
           />
         )}
         ListFooterComponent={archivedSection}

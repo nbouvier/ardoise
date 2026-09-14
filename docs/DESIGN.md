@@ -116,9 +116,10 @@ or box**; a screen that styles its own is a bug in this document.
   group's initials, a category's emoji, a sub-group's `↳`. Takes an explicit `color` when
   the subject owns one (a category), a seed otherwise.
 - **`BrandMark`** — the logo, drawn from the tokens.
-- **`Icon`** — the app's small glyph set (`plus`, `key`, `close`, `star`), drawn as strokes
-  on a 24×24 grid rather than an icon font, coloured through `theme` like everything else;
-  `filled` swaps the hollow outline for a solid fill of the same colour.
+- **`Icon`** — the app's small glyph set (`plus`, `key`, `close`, `star`, `more`, `manage`,
+  `archive`, `leave`, `trash`), drawn as strokes on a 24×24 grid rather than an icon font,
+  coloured through `theme` like everything else; `filled` swaps the hollow outline for a
+  solid fill of the same colour — used for `more`'s three dots, always solid.
 - **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
   `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
   no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
@@ -151,6 +152,18 @@ or box**; a screen that styles its own is a bug in this document.
   group"). Tapping it opens a bottom sheet of icon + label rows for the couple of related
   choices behind it (create or join) — the sheet replaces the button in place rather than
   popping out from beside it, so there is no separate position to get wrong.
+- **`IconMenuButton`** — the same icon-+-label-rows sheet as `AddMenuButton`, anchored to a
+  small "⋮" icon (the `more` glyph, filled) instead of a full-width footer button, centred
+  on screen rather than docked to the bottom — for actions that belong to one row in a
+  list, not to the screen as a whole. An option can be marked `destructive`, rendering its
+  icon and label in `danger`.
+- **`GroupActionsMenu`** — the business logic behind a group's own `IconMenuButton`: given
+  its `kind`, `viewerRole`, `memberCount` and archived state, decides which of Manage /
+  Archive (or Reopen) / Leave / Delete actually apply, mirroring the group page's own
+  Details sheet exactly (`docs/specs/groups.md`) — a row's menu never offers something
+  opening the group would refuse. A pair group only ever gets Manage and a Delete labelled
+  "Remove friend", since that is exactly what it does. Sits next to `FavoriteStar` on
+  `GroupRow` and on a group's own joined `SubgroupRow`.
 - **`ThemedText`** — `title`, `subtitle` (a screen's own name), `sectionTitle` (a block
   inside a screen), `overline` (a small all-caps label above a block — quiet structure,
   never a sentence), `amount` (a figure that must read as a figure), `default`, `small`,
@@ -219,9 +232,11 @@ detail — pushed above the tabs, under its own Stack header — keeps a plain h
 **Two sections** follow, each an `overline` heading over its own content, and each with
 its own loading spinner, error card ("Try again") and empty line — one section failing
 never takes the other, or the identity, down with it. `Favorites` reuses **`GroupRow`**
-unchanged, so a group looks the same here as in the group list, breadcrumb included (this
-is the list that mixes depths); tapping a star here *removes* the row rather than moving
-it, since the section is the favorites. `Latest` reuses **`TransactionRow`**, passing
+unchanged, so a group looks the same here as in the group list, breadcrumb, actions menu
+and all — this is the one place the menu can land on a pair group (a favorited friend),
+where it offers only Manage and "Remove friend" (`docs/specs/groups.md`); this
+is the list that mixes depths, too. Tapping a star here *removes* the row rather than
+moving it, since the section is the favorites. `Latest` reuses **`TransactionRow`**, passing
 `group` so each row leads with "Corsica 2026 › Beach day" above the title; tapping one
 opens the group, not the transaction. Pull to refresh reloads both.
 
@@ -231,16 +246,17 @@ opens the group, not the transaction. Pull to refresh reloads both.
 `ScreenHeader` with `wash` and the active-group count as caption. Each group is a **`GroupRow`
 card**: a medallion carrying the group's initials, the name, the member count, and the
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
-`docs/specs/balances.md`), with a **`FavoriteStar`** at the far right of the row, aligned
-with the name line specifically (`docs/specs/favorites.md`) — favorited groups are pinned
-above non-favorited ones, alphabetical within each. The row leads with a **`Breadcrumb`**
-of the group's ancestors when it has any — never here, where every group is a root one,
-but the same row is reused by the home's favorites section, which mixes depths. Tapping the star flips it in place
-without moving the row: the refetch that tap itself triggers (`groupsChanged`) keeps the
-row where it is, and only a *later*, unrelated refetch brings the pinned order into
-view — a visible list reordering under the viewer's own finger reads as disorienting,
-one caused by something else happening elsewhere does not. Empty state: a brand card with
-a glyph, "No groups yet" and what a group is for.
+`docs/specs/balances.md`), with a **`FavoriteStar`**, and next to it a **`GroupActionsMenu`**, both at the far right
+of the row, aligned with the name line specifically (`docs/specs/favorites.md`) —
+favorited groups are pinned above non-favorited ones, alphabetical within each. The row
+leads with a **`Breadcrumb`** of the group's ancestors when it has any — never here, where
+every group is a root one, but the same row is reused by the home's favorites section,
+which mixes depths. Tapping the star flips it in place without moving the row: the
+refetch that tap itself triggers (`groupsChanged`) keeps the row where it is, and only a
+*later*, unrelated refetch brings the pinned order into view — a visible list reordering
+under the viewer's own finger reads as disorienting, one caused by something else
+happening elsewhere does not. Empty state: a brand card with a glyph, "No groups yet" and
+what a group is for.
 
 A full-width **`AddMenuButton`** ("New group", pinned to the bottom of the screen) opens
 a bottom sheet with "Create a group" (`plus` icon) and "Join a group" (`key` icon).
@@ -281,12 +297,13 @@ state: a brand card with a glyph and an explanation.
 sub-groups too): an `overline` "Sub-groups" heading with a brand "+ Create" link, then
 every sub-group the viewer has joined as a card (`↳` medallion, name, member count, and
 where they stand across *that* sub-group's own sub-tree), with its own **`FavoriteStar`**
-at the right of the name line (`docs/specs/favorites.md`) — favorited joined sub-groups
-are pinned above non-favorited ones. Ones they have **not** joined hide behind a "Show
-sub-groups I'm not in (n)" toggle, mirroring the archived pattern; revealed, they render
-`muted` with "n members · not joined" and no balance line (never being a member, it is
-always exactly zero) and **no star** — there is no membership row to favorite on — and
-tapping one opens a "Join this group?" `Alert` instead of navigating. The section renders
+and **`GroupActionsMenu`** at the right of the name line (`docs/specs/favorites.md`) —
+favorited joined sub-groups are pinned above non-favorited ones. Ones they have **not**
+joined hide behind a "Show sub-groups I'm not in (n)" toggle, mirroring the archived
+pattern; revealed, they render `muted` with "n members · not joined" and no balance line
+(never being a member, it is always exactly zero) and **no star or menu** — there is no
+membership row to favorite on, or manage — and tapping one opens a "Join this group?"
+`Alert` instead of navigating. The section renders
 nothing when there are no sub-groups and the group is read-only, so it never becomes a
 permanent empty box.
 

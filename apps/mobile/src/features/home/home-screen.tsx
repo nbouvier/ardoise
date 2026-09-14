@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { GroupRow } from '@/features/groups/group-row';
+import { useGroupRowActions } from '@/features/groups/use-group-row-actions';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -26,6 +27,7 @@ import { useRecentTransactions } from './use-recent-transactions';
 export function HomeScreen() {
   const favorites = useFavoriteGroups();
   const recent = useRecentTransactions();
+  const rowActions = useGroupRowActions();
   const { state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const router = useRouter();
@@ -37,6 +39,9 @@ export function HomeScreen() {
 
   const openGroup = (groupId: string) =>
     router.push({ pathname: '/groups/[id]', params: { id: groupId } });
+
+  const manageGroup = (groupId: string) =>
+    router.push({ pathname: '/groups/[id]', params: { id: groupId, openSheet: 'details' } });
 
   async function refreshAll() {
     setRefreshing(true);
@@ -80,7 +85,12 @@ export function HomeScreen() {
                 group={group}
                 onPress={(favorite) => openGroup(favorite.id)}
                 onToggleFavorite={favorites.toggleFavorite}
+                onManage={(favorite) => manageGroup(favorite.id)}
+                onArchiveToggle={rowActions.archiveToggle}
+                onLeave={rowActions.confirmLeave}
+                onDelete={rowActions.confirmDelete}
                 favoriteBusy={favorites.favoriteBusyId === group.id}
+                actionsBusy={rowActions.busyId === group.id}
                 muted={group.archivedAt !== null}
               />
             ))}

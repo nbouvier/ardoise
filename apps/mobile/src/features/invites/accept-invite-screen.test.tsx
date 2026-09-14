@@ -30,6 +30,7 @@ const group = {
   favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
+  viewerRole: 'member' as const,
 };
 
 const mockPreviewInvite = jest.fn<() => Promise<InvitePreview>>();

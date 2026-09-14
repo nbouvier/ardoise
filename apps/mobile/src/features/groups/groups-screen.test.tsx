@@ -1,6 +1,7 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
 
@@ -20,6 +21,7 @@ const trip: GroupSummary = {
   favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
+  viewerRole: 'owner',
 };
 
 const lastYear: GroupSummary = {
@@ -32,10 +34,18 @@ const lastYear: GroupSummary = {
 
 const mockFetchGroups = jest.fn<() => Promise<GroupSummary[]>>();
 const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupSummary>>();
+const mockUpdateGroup = jest.fn<(...args: unknown[]) => Promise<GroupSummary>>();
+const mockDeleteGroup = jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockPush = jest.fn();
 
 // Stable across renders, like the real memoised auth context.
-const mockAuthContext = { authorizedFetch: jest.fn() };
+const mockAuthContext = {
+  authorizedFetch: jest.fn(),
+  state: {
+    status: 'signedIn',
+    user: { id: 'viewer-1', name: 'Viewer', email: 'viewer@example.com', picture: null },
+  },
+};
 
 jest.mock('@/features/auth/use-auth', () => ({
   useAuth: () => mockAuthContext,
@@ -45,6 +55,9 @@ jest.mock('@/lib/api/groups', () => ({
   fetchGroups: () => mockFetchGroups(),
   createGroup: jest.fn(),
   setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
+  updateGroup: (...args: unknown[]) => mockUpdateGroup(...args),
+  removeGroupMember: jest.fn(),
+  deleteGroup: (...args: unknown[]) => mockDeleteGroup(...args),
 }));
 
 jest.mock('@/lib/api/friends', () => ({
@@ -57,6 +70,8 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 beforeEach(() => {
   mockFetchGroups.mockReset().mockResolvedValue([]);
   mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
+  mockUpdateGroup.mockReset().mockResolvedValue(trip);
+  mockDeleteGroup.mockReset().mockResolvedValue(undefined);
   mockPush.mockReset();
   pendingInvite.clear();
 });
@@ -75,6 +90,101 @@ describe('GroupsScreen', () => {
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
     expect(screen.getByText('3 members')).toBeTruthy();
+  });
+
+  describe('a row’s own "⋮" actions menu', () => {
+    it('offers Manage and Archive, and Delete since the viewer owns it — but not Leave', async () => {
+      mockFetchGroups.mockResolvedValue([trip]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+
+      expect(screen.getByText('Manage')).toBeTruthy();
+      expect(screen.getByText('Archive group')).toBeTruthy();
+      expect(screen.getByText('Delete group')).toBeTruthy();
+      expect(screen.queryByText('Leave group')).toBeNull();
+    });
+
+    it('offers Leave instead of Delete for a group the viewer doesn’t own', async () => {
+      mockFetchGroups.mockResolvedValue([{ ...trip, viewerRole: 'member' }]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+
+      expect(screen.getByText('Leave group')).toBeTruthy();
+      expect(screen.queryByText('Delete group')).toBeNull();
+    });
+
+    it('opens the group straight onto its Details sheet from Manage', async () => {
+      mockFetchGroups.mockResolvedValue([trip]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+      await fireEvent.press(screen.getByText('Manage'));
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/groups/[id]',
+        params: { id: trip.id, openSheet: 'details' },
+      });
+    });
+
+    it('archives without asking for confirmation', async () => {
+      mockFetchGroups.mockResolvedValue([trip]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+      await fireEvent.press(screen.getByText('Archive group'));
+
+      await waitFor(() => {
+        expect(mockUpdateGroup).toHaveBeenCalledWith(expect.anything(), trip.id, {
+          archived: true,
+        });
+      });
+    });
+
+    it('deletes only once the confirmation is accepted', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+      mockFetchGroups.mockResolvedValue([trip]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+      await fireEvent.press(screen.getByText('Delete group'));
+
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Delete group',
+        expect.stringContaining('Corsica 2026'),
+        expect.anything(),
+      );
+      expect(mockDeleteGroup).not.toHaveBeenCalled();
+
+      alertSpy.mockRestore();
+    });
+
+    it('deletes the group once confirmed', async () => {
+      const alertSpy = jest
+        .spyOn(Alert, 'alert')
+        .mockImplementation((_title, _message, buttons) => {
+          const confirm = buttons?.find((button) => button.text === 'Delete');
+          confirm?.onPress?.();
+        });
+      mockFetchGroups.mockResolvedValue([trip]);
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+      await fireEvent.press(screen.getByText('Delete group'));
+
+      await waitFor(() => {
+        expect(mockDeleteGroup).toHaveBeenCalledWith(expect.anything(), trip.id);
+      });
+
+      alertSpy.mockRestore();
+    });
   });
 
   it('leads a sub-group’s row with a breadcrumb of its ancestors', async () => {

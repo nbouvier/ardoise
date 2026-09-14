@@ -9,14 +9,22 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
 
+import { GroupActionsMenu } from './group-actions-menu';
+
 export interface GroupRowProps {
   group: GroupSummary;
   onPress: (group: GroupSummary) => void;
   onToggleFavorite: (group: GroupSummary) => void;
+  onManage: (group: GroupSummary) => void;
+  onArchiveToggle: (group: GroupSummary) => void;
+  onLeave: (group: GroupSummary) => void;
+  onDelete: (group: GroupSummary) => void;
   /** Muted rendering for an archived group. */
   muted?: boolean;
   /** Disables the star while its own toggle request is in flight. */
   favoriteBusy?: boolean;
+  /** Disables the "⋮" menu while its own action request is in flight. */
+  actionsBusy?: boolean;
 }
 
 /** The group's initials, so two cards in a list never look the same. */
@@ -42,8 +50,13 @@ export function GroupRow({
   group,
   onPress,
   onToggleFavorite,
+  onManage,
+  onArchiveToggle,
+  onLeave,
+  onDelete,
   muted = false,
   favoriteBusy = false,
+  actionsBusy = false,
 }: GroupRowProps) {
   const members = group.memberCount === 1 ? '1 member' : `${group.memberCount} members`;
 
@@ -76,6 +89,18 @@ export function GroupRow({
           label={group.name}
           disabled={favoriteBusy}
           onToggle={() => onToggleFavorite(group)}
+        />
+        <GroupActionsMenu
+          name={group.name}
+          kind={group.kind}
+          viewerRole={group.viewerRole}
+          memberCount={group.memberCount}
+          archived={group.archivedAt !== null}
+          busy={actionsBusy}
+          onManage={() => onManage(group)}
+          onArchiveToggle={() => onArchiveToggle(group)}
+          onLeave={() => onLeave(group)}
+          onDelete={() => onDelete(group)}
         />
       </View>
     </Card>

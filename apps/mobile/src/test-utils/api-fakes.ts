@@ -69,6 +69,7 @@ export const groupSummary = {
   favorite: false,
   archivedAt: null,
   createdAt: '2026-09-11T12:00:00.000Z',
+  viewerRole: 'owner' as const,
 };
 
 export const groupDetail = {
@@ -77,7 +78,6 @@ export const groupDetail = {
     { ...ada, role: 'owner' as const },
     { ...grace, role: 'member' as const },
   ],
-  viewerRole: 'owner' as const,
   subgroups: [],
   readOnly: false,
   pairRooted: false,
