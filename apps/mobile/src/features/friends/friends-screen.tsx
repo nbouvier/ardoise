@@ -121,7 +121,7 @@ export function FriendsScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScreenHeader title="Friends" caption={friendCount} />
+        <ScreenHeader title="Friends" caption={friendCount} wash />
 
         <View style={styles.body}>
           {status === 'loading' ? (

@@ -133,6 +133,13 @@ or box**; a screen that styles its own is a bug in this document.
   wordmark and, directly under it, the current page named in smaller, secondary-coloured
   type, with an optional trailing caption and room for one screen-level action. Every tab
   opens the same way, and reads as SplitCount before it reads as "Groups" or "Friends".
+  `wash` draws `HeroWash` behind it, bleeding to the edges of the screen's own padding —
+  used on Friends and Account, not on the (unfavorited) Groups list.
+- **`HeroWash`** — the app's decorative colour wash, extracted from the home screen's own
+  hero: three overlapping radial gradients (brand, accent, a third medallion hue) fading
+  to transparent over a `primarySoft` ground, filling whatever it is placed behind. Drawn,
+  not blurred — see Home below. Used on the home hero, and behind the header of Group
+  detail, Friends and Account (`docs/specs/home.md`).
 - **`AddMenuButton`** — a list screen's single, full-width footer `Button` (e.g. "New
   group"). Tapping it opens a bottom sheet of icon + label rows for the couple of related
   choices behind it (create or join) — the sheet replaces the button in place rather than
@@ -178,8 +185,9 @@ on user cancellation). On web the button is disabled with a "coming soon" captio
 
 ### Account (`src/features/auth/account-screen.tsx`)
 
-One brand-toned identity card — avatar, name, email — and a secondary "Sign out" at the
-bottom. The screen has exactly one piece of content, so it gets exactly one card.
+`ScreenHeader` with `wash`, then one brand-toned identity card — avatar, name, email — and
+a secondary "Sign out" at the bottom. The screen has exactly one piece of content below
+the header, so it gets exactly one card.
 
 ### Home (`src/features/home/home-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
@@ -187,16 +195,18 @@ The first screen of the app (`docs/specs/home.md`), a scroll of three stacked bl
 no `ScreenHeader`, since the first block *is* the identity, at full size.
 
 **The identity** takes about a quarter of the screen height (`useWindowDimensions`), runs
-edge to edge with its bottom corners rounded off, and carries the `BrandMark`, the
-wordmark in `title`, and the tagline "Settle up, stay friends." in secondary
-`sectionTitle`. Behind it, `HomeHero`'s wash: three overlapping ellipses on
-`primarySoft`, each a **radial gradient fading to transparent** — brand, accent, and a
-third hue borrowed from the medallion family so it reads as the app's palette rather than
-as two brand colours meeting. Drawn, not blurred: a real blur is a native module on one
-platform and a CSS filter on another, and gradients fading to nothing give the same
-out-of-focus read from the tokens themselves, identically everywhere. The safe-area inset
-is padding *inside* the block, so the wash runs under the status bar. Nothing in it is
-tappable and it never carries a figure.
+edge to edge, square-cornered, and carries the wordmark in `title` and the tagline
+"Settle up, stay friends." in secondary `sectionTitle`, both centred — no mark, since the
+block already reads as the app's own identity without one. Behind it, `HeroWash`: three
+overlapping ellipses on `primarySoft`, each a **radial gradient fading to transparent** —
+brand, accent, and a third hue borrowed from the medallion family so it reads as the
+app's palette rather than as two brand colours meeting. Drawn, not blurred: a real blur is
+a native module on one platform and a CSS filter on another, and gradients fading to
+nothing give the same out-of-focus read from the tokens themselves, identically
+everywhere. The safe-area inset is padding *inside* the block, so the wash runs under the
+status bar. Nothing in it is tappable and it never carries a figure. The same `HeroWash`
+sits behind the header of Group detail, Friends and Account, so the same "out of focus"
+read shows up at the top of every screen with an identity to lead with.
 
 **Two sections** follow, each an `overline` heading over its own content, and each with
 its own loading spinner, error card ("Try again") and empty line — one section failing
@@ -239,7 +249,8 @@ shows the toggle, not the empty state.
 
 Pushed above the tabs, so it has a back button. **Transactions are the primary content.**
 
-The header is: a **breadcrumb** of ancestors (brand-coloured, tappable, only on a
+The header sits on the home screen's `HeroWash`, bled to the edges of the screen. It is: a
+**breadcrumb** of ancestors (brand-coloured, tappable, only on a
 sub-group), the group's name with a **`FavoriteStar`** at the right of the same line
 (`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
 group's own page is one of the two places its star shows, the other being its row on the
@@ -379,7 +390,7 @@ is added automatically.
 
 ### Friends (`src/features/friends/friends-screen.tsx`)
 
-`ScreenHeader` with the friend count. Each friend is a card: avatar, name, **where the
+`ScreenHeader` with `wash` and the friend count. Each friend is a card: avatar, name, **where the
 two of them stand** — "owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted
 across every group they share — and a **`FavoriteStar`** at the far right (`docs/specs/
 favorites.md`), favoriting the implicit pair group behind that row; favorited friends are

@@ -22,6 +22,7 @@ import { Breadcrumb } from '@/components/breadcrumb';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { FavoriteStar } from '@/components/favorite-star';
+import { HeroWash } from '@/components/hero-wash';
 import { MedallionBadge } from '@/components/medallion-badge';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
@@ -335,7 +336,8 @@ export function GroupScreen({ groupId }: { groupId: string }) {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={[styles.header, styles.headerWash]}>
+          <HeroWash />
           <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
           <View style={styles.headerRow}>
             <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
@@ -1036,6 +1038,16 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: Spacing.one,
+  },
+  headerWash: {
+    // Bleeds to the edges of the screen's own padding, like the home
+    // screen's hero (`docs/specs/home.md`).
+    marginHorizontal: -Spacing.four,
+    marginTop: -Spacing.four,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.three,
+    overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',
