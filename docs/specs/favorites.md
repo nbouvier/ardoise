@@ -57,10 +57,15 @@ that **the people I settle up with most stay near the top of my Friends list too
   same membership row, the same star, the same pinning rule as any other group
   (`docs/specs/friends-and-invitations.md`).
 
+- Favorited groups are also **collected on the home screen**, which is the one place they
+  are gathered rather than merely pinned — every kind at once, the implicit pair group of
+  a favorited friend included (`docs/specs/home.md`). Wherever a group is *listed* among
+  others, though, a favorite still only changes its position.
+
 ## Out of scope
 
-- A dedicated "Favorites" view, filter or tab collecting every favorited group in one
-  place — favorites only change ordering where a group already appears.
+- A filter, a search or a tab restricted to favorites: outside the home's own section,
+  favorites only change ordering where a group already appears.
 - Favoriting anything other than a group (or, through it, a friend): a transaction, a
   category.
 - Reordering within the favorited or non-favorited bucket by hand — alphabetical order
@@ -134,7 +139,9 @@ that **the people I settle up with most stay near the top of my Friends list too
   endpoints below rather than one of its own (`docs/specs/friends-and-invitations.md`).
 - Two endpoints toggle it, mirroring the shape of every other per-group action
   (`docs/API.md`): setting favorited is idempotent to call repeatedly, and so is clearing
-  it.
+  it. A third *lists* them for the home screen (`docs/specs/home.md`) — the only read in
+  the product that crosses group kinds, returning root groups, sub-groups and pair groups
+  side by side.
 
 ## UX / UI considerations
 
