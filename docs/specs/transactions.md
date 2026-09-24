@@ -299,8 +299,8 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   (`docs/DESIGN.md`).
 - Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
   transaction" action, confirmed.
-- Empty state: an explanation and the same "Add a transaction" action as the group's
-  primary button.
+- Empty state: an explanation and the same "Add a transaction" action as the
+  "+ Add" in the group's "Transactions" section title (there is no separate large button).
 - On a pair group, the transaction list and "Add a transaction" are present exactly as on
   a standard group; only the (already-absent) management actions differ.
 - On an archived group, "Add a transaction" is absent and existing entries are not

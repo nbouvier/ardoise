@@ -288,8 +288,9 @@ ancestor, `readOnly` on `GroupDetail`). Then **the viewer's own balance in a bra
 — "Your balance here" over the figure, said in words so it never rests on spotting a minus
 sign, read straight off `group.viewerBalanceCents` rather than a separate fetch.
 
-Below: the sub-groups section, the transaction list (`TransactionRow` cards), and a
-primary "Add a transaction" — absent when effectively archived. A row opens the same
+Below: the sub-groups section, then a "Transactions" section of the same shape (overline
+title, "+ Add" text action at the end — absent when effectively archived) over the
+transaction list (`TransactionRow` cards). A row opens the same
 add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
 state: a brand card with a glyph and an explanation.
 

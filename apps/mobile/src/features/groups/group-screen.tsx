@@ -418,18 +418,28 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
           onDelete={(subgroup) => subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })}
         />
 
+        <View style={styles.subgroupsHeader}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Transactions
+          </ThemedText>
+          {readOnly ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add a transaction"
+              onPress={openNewTransaction}>
+              <ThemedText type="smallBold" themeColor="primary">
+                + Add
+              </ThemedText>
+            </Pressable>
+          )}
+        </View>
+
         <TransactionList
           result={transactionsResult}
           viewerId={viewerId}
           archived={readOnly}
           onOpen={openTransaction}
         />
-
-        {readOnly ? null : (
-          <View style={styles.footer}>
-            <Button label="Add a transaction" onPress={openNewTransaction} />
-          </View>
-        )}
       </View>
 
       <Modal
@@ -1167,9 +1177,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.three,
     padding: Spacing.four,
-  },
-  footer: {
-    paddingBottom: Spacing.four,
   },
   members: {
     gap: Spacing.two,

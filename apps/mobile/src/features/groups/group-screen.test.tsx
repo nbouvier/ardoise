@@ -208,6 +208,7 @@ describe('GroupScreen', () => {
     await screen.findByText('Corsica 2026');
 
     expect(await screen.findByText(/No transactions yet/)).toBeTruthy();
+    expect(screen.getByText('Transactions')).toBeTruthy();
     expect(screen.getByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
