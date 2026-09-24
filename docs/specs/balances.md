@@ -232,7 +232,7 @@ See `docs/API.md` for the authoritative surface.
   way a group balance is (owed to the viewer / owed by the viewer) rather than merely
   signed, with a short label so the direction is never ambiguous from a sign alone. Zero
   reads as settled, in the secondary text colour. The row's existing behaviour — tap to
-  open the shared group, "Remove" as a separate hit area — is unchanged.
+  open the shared group, the "⋮" actions menu as a separate hit area — is unchanged.
 - The **friend picker** (create a group, add members) shows no balance: it is a selection
   list, and a money figure there is noise.
 - **Group screen**: the viewer's own balance appears on the screen itself, above the

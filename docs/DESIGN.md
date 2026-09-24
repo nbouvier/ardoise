@@ -425,8 +425,8 @@ tap-does-not-jump behaviour the group list has. No grand total above the list: m
 shared groups who are not friends are absent from it, so a sum of the rows would not be
 the viewer's overall position. **Tapping a card opens the group shared with that
 friend**, directly by its already-known id — no request first, the group exists from the
-moment the friendship does (`docs/specs/friends-and-invitations.md`); "Remove" stays a
-separate hit area at the end. Empty state: a brand card. A footer holds the same
+moment the friendship does (`docs/specs/friends-and-invitations.md`); a "⋮" `IconMenuButton` ("Manage" → the shared
+group's details sheet, "Delete friend") stays a separate hit area after the star. Empty state: a brand card. A footer holds the same
 **`AddMenuButton`** pattern as Groups ("Add a friend"): "Invite a friend" (`plus` icon)
 opens the invite sheet, "Enter a code" (`key` icon) opens a sheet holding the
 invitation-code entry.

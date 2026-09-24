@@ -1,5 +1,6 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { groupsChanged } from '@/features/groups/groups-changed';
@@ -147,6 +148,47 @@ describe('FriendsScreen', () => {
       pathname: '/groups/[id]',
       params: { id: ada.groupId },
     });
+  });
+
+  it('offers Manage and Delete friend in the row’s actions menu', async () => {
+    mockFetchFriends.mockResolvedValue([ada]);
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ada Lovelace' }));
+
+    expect(screen.getByText('Manage')).toBeTruthy();
+    expect(screen.getByText('Delete friend')).toBeTruthy();
+  });
+
+  it('opens the shared group’s details from Manage', async () => {
+    mockFetchFriends.mockResolvedValue([ada]);
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ada Lovelace' }));
+    await fireEvent.press(screen.getByText('Manage'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/groups/[id]',
+      params: { id: ada.groupId, openSheet: 'details' },
+    });
+  });
+
+  it('removes the friend once Delete friend is confirmed', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      buttons?.find((button) => button.style === 'destructive')?.onPress?.();
+    });
+    mockFetchFriends.mockResolvedValue([ada]);
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ada Lovelace' }));
+    await fireEvent.press(screen.getByText('Delete friend'));
+
+    expect(alert).toHaveBeenCalledWith('Delete friend', expect.any(String), expect.any(Array));
+    await waitFor(() => expect(mockRemoveFriend).toHaveBeenCalledTimes(1));
+    alert.mockRestore();
   });
 
   it('toggles a friend’s favorite from their row', async () => {

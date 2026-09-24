@@ -491,8 +491,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   it also removes the member from.
 - The **invitation screen is the one that already exists** for groups, reused unchanged
   for a sub-group's own link.
-- The **friend row becomes tappable** and opens the shared group; the existing "Remove"
-  action stays on the row and its confirmation now mentions the shared group's contents.
+- The **friend row becomes tappable** and opens the shared group; the row's trailing
+  "Remove" text button is replaced by a "⋮" actions menu ("Manage", "Delete friend"); the
+  confirmation mentions the shared group's contents.
 - The **landing page** gains the group's name when the link is a group invitation, exactly
   as before — unaffected by whether that group is a sub-group.
 - Light and dark themes through the existing tokens.

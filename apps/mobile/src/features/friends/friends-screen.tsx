@@ -9,6 +9,7 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { FavoriteStar } from '@/components/favorite-star';
+import { IconMenuButton } from '@/components/icon-menu-button';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -26,6 +27,7 @@ function FriendRow({
   friend,
   favoriteBusy,
   onOpen,
+  onManage,
   onRemove,
   onToggleFavorite,
 }: {
@@ -33,13 +35,14 @@ function FriendRow({
   /** Disables the star while its own toggle request is in flight. */
   favoriteBusy: boolean;
   onOpen: (friend: FriendEntry) => void;
+  onManage: (friend: FriendEntry) => void;
   onRemove: (friend: FriendEntry) => void;
   onToggleFavorite: (friend: FriendEntry) => void;
 }) {
   return (
     <Card>
       <View style={styles.row}>
-        {/* The row opens the group the two share; "Remove" stays a separate hit area. */}
+        {/* The row opens the group the two share; the star and "⋮" stay separate hit areas. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open your shared group with ${friend.name}`}
@@ -62,15 +65,18 @@ function FriendRow({
           onToggle={() => onToggleFavorite(friend)}
         />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${friend.name}`}
-          onPress={() => onRemove(friend)}
-          style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Remove
-          </ThemedText>
-        </Pressable>
+        <IconMenuButton
+          accessibilityLabel={`Actions for ${friend.name}`}
+          options={[
+            { icon: 'manage', label: 'Manage', onPress: () => onManage(friend) },
+            {
+              icon: 'trash',
+              label: 'Delete friend',
+              destructive: true,
+              onPress: () => onRemove(friend),
+            },
+          ]}
+        />
       </View>
     </Card>
   );
@@ -88,14 +94,22 @@ export function FriendsScreen() {
     router.push({ pathname: '/groups/[id]', params: { id: friend.groupId } });
   }
 
+  /** Same destination as the "⋮" menus elsewhere: the shared group's details sheet. */
+  function handleManage(friend: FriendEntry) {
+    router.push({
+      pathname: '/groups/[id]',
+      params: { id: friend.groupId, openSheet: 'details' },
+    });
+  }
+
   function handleRemove(friend: FriendEntry) {
     Alert.alert(
-      'Remove friend',
-      `Remove ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
+      'Delete friend',
+      `Delete ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
+          text: 'Delete',
           style: 'destructive',
           onPress: () => {
             remove(friend.id)
@@ -155,6 +169,7 @@ export function FriendsScreen() {
                   friend={item}
                   favoriteBusy={favoriteBusyId === item.id}
                   onOpen={handleOpen}
+                  onManage={handleManage}
                   onRemove={handleRemove}
                   onToggleFavorite={toggleFavorite}
                 />
@@ -261,10 +276,6 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     gap: Spacing.half,
-  },
-  remove: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
   },
   pressed: {
     opacity: 0.6,
