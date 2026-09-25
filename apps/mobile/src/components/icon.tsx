@@ -10,10 +10,21 @@ export type IconName =
   | 'archive'
   | 'leave'
   | 'trash'
-  | 'back';
+  | 'back'
+  | 'share'
+  | 'copy'
+  | 'refresh'
+  | 'check';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
+  // The curved arrow sweeping to the right: pass this on.
+  share: 'M14 5l6 6-6 6M20 11H10a6 6 0 0 0-6 6v2',
+  // Two overlapping sheets.
+  copy: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM16 9V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3',
+  // An arc with an arrowhead: start over with a new one.
+  refresh: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
   back: 'M15 5l-7 7 7 7',
   plus: 'M12 5v14M5 12h14',
   // A key: the ring you hold, the shaft, and its teeth — reads as "enter a

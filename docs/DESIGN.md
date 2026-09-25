@@ -54,6 +54,7 @@ All in `apps/mobile/src/constants/theme.ts`. Reach for a token, never a literal.
   (`src/features/transactions/balance-display.ts`) rather than testing the sign by hand.
 - **Destructive** — `danger`. A different meaning that happens to share a hue with
   `debit`; never write it inline.
+- **Scrim** — `scrim`, the violet-tinted dim behind a `ConfirmDialog`.
 
 Read them through `useTheme()`. `useIsDark()` exists only for the handful of tokens that
 are a function of the scheme rather than a colour (`cardShadow`, a medallion's two
@@ -122,6 +123,16 @@ or box**; a screen that styles its own is a bug in this document.
   `archive`, `leave`, `trash`, `back`), drawn as strokes on a 24×24 grid rather than an icon font,
   coloured through `theme` like everything else; `filled` swaps the hollow outline for a
   solid fill of the same colour — used for `more`'s three dots, always solid.
+- **`IconButton`** — a bare tappable glyph for an action belonging to the block it sits in
+  (the invitation card's share / copy / generate): a 32pt box, padded hit area, dimmed when
+  disabled. Always given an `accessibilityLabel` in words; the caller passes the colour.
+  Also in the `Icon` set now: `share`, `copy`, `refresh`, `check`.
+- **`ConfirmDialog`** — the app's own "are you sure": a card (title, message, a ghost
+  Cancel and the confirming button — `danger` when `destructive`) centred over a `scrim`-dimmed
+  screen, in place of the stock OS `Alert`. Tapping outside or the back gesture cancels.
+  **It is the norm for every confirmation** — never reach for the OS `Alert` in new work.
+  Only used for generating a new invitation link so far; the existing `Alert`
+  confirmations (leave, delete, …) still have to be moved onto it.
 - **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
   `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
   no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
@@ -474,10 +485,14 @@ once the code is handed off.
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 
 One component behind both the friend link and the group link. The link sits in a
-**brand-toned card** under an "Your invitation link" overline, and is **selectable**, so a
-failed clipboard write is not a dead end. Primary "Share", secondary "Copy link" (flips to
-"Copied"), the expiry in words, and a bottom ghost "Generate a new link" with a caption
-warning that the previous link stops working.
+**brand-toned card**, and is **selectable**, so a failed clipboard write is not a dead
+end. The card's title line — the "Your invitation link" overline — carries **three
+`IconButton`s at its far end**: share (`share`), copy (`copy`, which flips to a `check`
+labelled "Copied") and generate a new one (`refresh`). Each is labelled in words for
+accessibility. **Tapping the link itself copies it too**, and a small "Copied" tooltip floats
+over the page for two seconds, then goes (the copy icon's tick reverts with it). Generating asks first through the app's own **`ConfirmDialog`** —
+"Generating a new link stops the previous one from working." — so the page itself carries
+no such caption. The expiry is said in words under the card.
 
 ### Invitation confirmation (`src/features/invites/invite-prompt.tsx`)
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
 
 import type { Invite } from '@splitcount/shared';
@@ -56,7 +56,8 @@ describe('InviteScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /copy link/i }));
 
     await waitFor(() => expect(mockSetString).toHaveBeenCalledWith(invite.url));
-    expect(await screen.findByText('Copied')).toBeTruthy();
+    // The icon flips to a tick, and says so in words.
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
   });
 
   it('opens the OS share sheet with the link', async () => {
@@ -72,15 +73,77 @@ describe('InviteScreen', () => {
     share.mockRestore();
   });
 
-  it('replaces the link when a new one is generated', async () => {
+  it('puts share, copy and generate as icons on the link’s own title line', async () => {
     await render(<InviteScreen />);
     await screen.findByText(invite.url);
 
+    for (const name of ['Share', 'Copy link', 'Generate a new link']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    // The warning moved into the confirmation; it is no longer on the page.
+    expect(screen.queryByText(/stops the previous one/)).toBeNull();
+  });
+
+  it('copies the link, and says so, when the link itself is tapped', async () => {
+    await render(<InviteScreen />);
+    await screen.findByText(invite.url);
+    expect(screen.queryByText('Copied')).toBeNull();
+
+    await fireEvent.press(screen.getByRole('button', { name: /tap to copy/i }));
+
+    await waitFor(() => expect(mockSetString).toHaveBeenCalledWith(invite.url));
+    expect(await screen.findByText('Copied')).toBeTruthy();
+  });
+
+  it('lets the "Copied" tooltip go after a couple of seconds', async () => {
+    jest.useFakeTimers();
+    try {
+      await render(<InviteScreen />);
+      await screen.findByText(invite.url);
+
+      await fireEvent.press(screen.getByRole('button', { name: /tap to copy/i }));
+      expect(await screen.findByText('Copied')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(2100);
+      });
+
+      expect(screen.queryByText('Copied')).toBeNull();
+      // The icon goes back to "copy" with it.
+      expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('warns in the app’s own dialog before replacing the link, then replaces it', async () => {
+    await render(<InviteScreen />);
+    await screen.findByText(invite.url);
+    expect(screen.queryByText(/stops the previous one/)).toBeNull();
+
     await fireEvent.press(screen.getByRole('button', { name: /generate a new link/i }));
+
+    expect(screen.getByText('Generate a new link?')).toBeTruthy();
+    expect(screen.getByText(/stops the previous one from working/)).toBeTruthy();
+    // Nothing happens until the warning is accepted.
+    expect(mockRotateInvite).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Generate' }));
 
     expect(mockRotateInvite).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(rotated.url)).toBeTruthy();
     expect(screen.queryByText(invite.url)).toBeNull();
+  });
+
+  it('keeps the link when the warning is cancelled', async () => {
+    await render(<InviteScreen />);
+    await screen.findByText(invite.url);
+
+    await fireEvent.press(screen.getByRole('button', { name: /generate a new link/i }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(mockRotateInvite).not.toHaveBeenCalled();
+    expect(screen.getByText(invite.url)).toBeTruthy();
   });
 
   it('offers a retry when the link cannot be created', async () => {

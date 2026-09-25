@@ -39,6 +39,9 @@ chore**.
   link. This matches how it is actually shared (a group conversation, a message forwarded).
 - The link **expires after ~7 days**. The screen states when it expires.
 - The user can **generate a new link**, which immediately invalidates the previous one.
+  Since that cannot be undone, it first asks for confirmation, warning that the previous
+  link stops working. Share, copy and generate are icon actions on the link card's title
+  line. Tapping the link itself copies it, with a "Copied" tooltip that disappears after about two seconds.
 
 ### Receiving
 

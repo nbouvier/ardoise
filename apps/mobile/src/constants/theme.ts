@@ -34,6 +34,8 @@ export interface Theme {
   credit: string;
   debit: string;
   danger: string;
+  /** The dim laid over a screen behind a dialog — violet-tinted, never plain black. */
+  scrim: string;
 }
 
 export const Colors: Record<'light' | 'dark', Theme> = {
@@ -69,6 +71,7 @@ export const Colors: Record<'light' | 'dark', Theme> = {
     debit: '#E0455E',
     /** Destructive actions. A different meaning that happens to share a hue. */
     danger: '#D6334B',
+    scrim: 'rgba(36, 28, 74, 0.45)',
   },
   dark: {
     text: '#F2EEFF',
@@ -90,6 +93,7 @@ export const Colors: Record<'light' | 'dark', Theme> = {
     credit: '#37D39B',
     debit: '#FF7A8F',
     danger: '#FF6B7F',
+    scrim: 'rgba(8, 5, 24, 0.65)',
   },
 };
 
