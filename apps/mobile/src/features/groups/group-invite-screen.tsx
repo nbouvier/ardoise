@@ -4,6 +4,8 @@ import { fetchGroupInvite, rotateGroupInvite } from '@/lib/api/groups';
 export interface GroupInviteScreenProps {
   groupId: string;
   groupName: string;
+  /** Just the link card, for a page that has more to show above it. */
+  embedded?: boolean;
 }
 
 /**
@@ -11,7 +13,7 @@ export interface GroupInviteScreenProps {
  * member sees and shares the same one, and it keeps working after whoever
  * created it leaves.
  */
-export function GroupInviteScreen({ groupId, groupName }: GroupInviteScreenProps) {
+export function GroupInviteScreen({ groupId, groupName, embedded }: GroupInviteScreenProps) {
   return (
     <InviteShareScreen
       title="Invite to this group"
@@ -19,6 +21,7 @@ export function GroupInviteScreen({ groupId, groupName }: GroupInviteScreenProps
       shareMessage={(url) => `Join “${groupName}” on SplitCount: ${url}`}
       load={(fetcher) => fetchGroupInvite(fetcher, groupId)}
       rotate={(fetcher) => rotateGroupInvite(fetcher, groupId)}
+      embedded={embedded}
     />
   );
 }

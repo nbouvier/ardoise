@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, type GestureResponderEvent } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
 
@@ -7,7 +7,7 @@ export interface IconButtonProps {
   /** What the button does, said in words — the icon alone is never the label. */
   accessibilityLabel: string;
   color: string;
-  onPress: () => void;
+  onPress: (event: GestureResponderEvent) => void;
   disabled?: boolean;
 }
 

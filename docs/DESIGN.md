@@ -302,7 +302,7 @@ Pushed above the tabs. **Transactions are the default content**, one of four tab
 
 **Top banner.** The same `PageHero` wash as the tab screens, in the same two-line shape as
 `ScreenHeader` — but with the group in the place of the app: the group's **name** on the
-first line (`sectionTitle`) and its **member count** on the second (`smallBold`, secondary).
+first line (overline, like "Sub-groups" and "Transactions") and its **member count** on the second (`smallBold`, secondary).
 The route has no native Stack header (`headerShown: false` on the stack), so the banner
 draws its own **back arrow** at its start; a **breadcrumb** of ancestors (brand-coloured,
 tappable, only on a sub-group) sits above the name, and a **`FavoriteStar`** at the far
@@ -349,9 +349,18 @@ permanent empty box.
 **Manage tab** — the member list (avatar + name, an accent "Owner" tag on the owner) in
 one card, headed by an overline member count with a brand **"+ Invite"** text action at
 its end (the same shape as "+ Create" and "+ Add"), then the management actions.
-"+ Invite" opens an **Invite sheet** grouping the two ways in: "Add friends" (the friend
-picker) and "Share an invitation link" (the group's link); each returns to the sheet it
-came from, and adding friends closes it.
+"+ Invite" **swaps the Manage tab's own content for the invite page** (`InvitePanel`) —
+no modal, no navigation; the banner and tabs stay, and picking any tab leaves it. Both
+ways in are on it, no menu between, told apart by a hairline. "Add friends" (overline
+section title) heads the friend picker, in the same surface card as the member list,
+headed by an overline count ("0 selected", "2 selected") where the member list says
+"n members". The card **always fills the room the link leaves** even with few friends,
+its list scrolling when it runs out; friends already in the group are listed too, ticked
+and disabled. "Add to group" closes the section, under the card. "Invitation link"
+(overline, its share / copy / generate icons at the end of that line) over a surface card
+holding just the link, and its small expiry line, sits below the hairline, and a **"Done"**
+button closes the page back to the member list (as does adding friends), spaced clear of
+the link. (A modal was tried and rejected.)
 
 **One screen for both kinds of group.** Transactions and sub-groups behave identically on
 a pair group. Every other management action is **absent**, not disabled, there, and the
@@ -489,8 +498,9 @@ One component behind both the friend link and the group link. The link sits in a
 end. The card's title line — the "Your invitation link" overline — carries **three
 `IconButton`s at its far end**: share (`share`), copy (`copy`, which flips to a `check`
 labelled "Copied") and generate a new one (`refresh`). Each is labelled in words for
-accessibility. **Tapping the link itself copies it too**, and a small "Copied" tooltip floats
-over the page for two seconds, then goes (the copy icon's tick reverts with it). Generating asks first through the app's own **`ConfirmDialog`** —
+accessibility. **Tapping the link itself copies it too**, and a small "Copied" tooltip in the
+brand colours appears **at the spot that was tapped** for two seconds, then goes (the copy
+icon's tick reverts with it). Generating asks first through the app's own **`ConfirmDialog`** —
 "Generating a new link stops the previous one from working." — so the page itself carries
 no such caption. The expiry is said in words under the card.
 

@@ -1,9 +1,4 @@
-import type {
-  GroupDetail,
-  GroupMember,
-  SubgroupSummary,
-  Transaction,
-} from '@splitcount/shared';
+import type { GroupDetail, GroupMember, SubgroupSummary, Transaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -60,9 +55,8 @@ import {
 import { errorFields, logger } from '@/lib/logger';
 
 import { CreateGroupScreen } from './create-group-screen';
-import { FriendPicker } from './friend-picker';
 import { GroupActionsMenu } from './group-actions-menu';
-import { GroupInviteScreen } from './group-invite-screen';
+import { InvitePanel } from './invite-panel';
 import { groupsChanged } from './groups-changed';
 import { useGroup } from './use-group';
 import { useGroupRowActions } from './use-group-row-actions';
@@ -95,14 +89,7 @@ export function parseGroupTab(value: string | undefined): GroupTab | undefined {
  * `createSubgroup` is launched from the sub-groups section, and `rename`
  * from Manage.
  */
-type Sheet =
-  | 'invite'
-  | 'friends'
-  | 'link'
-  | 'rename'
-  | 'transaction'
-  | 'createSubgroup'
-  | null;
+type Sheet = 'rename' | 'transaction' | 'createSubgroup' | null;
 
 export interface GroupScreenProps {
   groupId: string;
@@ -117,6 +104,8 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   const router = useRouter();
   const theme = useTheme();
   const [tab, setTab] = useState<GroupTab>(initialTab);
+  // "+ Invite" swaps the Manage tab's content for the invite page, in place.
+  const [inviting, setInviting] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   // Set only when the transaction sheet was opened from the reimbursement
@@ -140,10 +129,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
    * Reports whether it worked, so a caller that navigates away only does so on
    * success.
    */
-  async function run(
-    what: string,
-    action: () => Promise<GroupDetail | null>,
-  ): Promise<boolean> {
+  async function run(what: string, action: () => Promise<GroupDetail | null>): Promise<boolean> {
     setBusy(true);
     try {
       const updated = await action();
@@ -403,7 +389,14 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       </PageHero>
 
       <View style={styles.content}>
-        <TabBar tabs={GROUP_TABS} selected={tab} onSelect={setTab} />
+        <TabBar
+          tabs={GROUP_TABS}
+          selected={tab}
+          onSelect={(next) => {
+            setInviting(false);
+            setTab(next);
+          }}
+        />
 
         {tab === 'transactions' ? (
           <>
@@ -424,9 +417,15 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
               // A sub-group is always a standard group (`groups_pair_no_parent`)
               // and doesn't carry its own `subgroupCount` — it is shown one level
               // deep only, so the leave/delete confirmations skip that clause.
-              onArchiveToggle={(subgroup) => subgroupActions.archiveToggle({ ...subgroup, kind: 'standard' })}
-              onLeave={(subgroup) => subgroupActions.confirmLeave({ ...subgroup, kind: 'standard' })}
-              onDelete={(subgroup) => subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })}
+              onArchiveToggle={(subgroup) =>
+                subgroupActions.archiveToggle({ ...subgroup, kind: 'standard' })
+              }
+              onLeave={(subgroup) =>
+                subgroupActions.confirmLeave({ ...subgroup, kind: 'standard' })
+              }
+              onDelete={(subgroup) =>
+                subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })
+              }
             />
 
             <View style={styles.sectionHeader}>
@@ -483,7 +482,19 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           />
         ) : null}
 
-        {tab === 'manage' ? (
+        {tab === 'manage' && inviting ? (
+          <InvitePanel
+            group={group}
+            busy={busy}
+            onAdd={(memberIds) => {
+              setInviting(false);
+              void run('members.add', () => addGroupMembers(authorizedFetch, groupId, memberIds));
+            }}
+            onClose={() => setInviting(false)}
+          />
+        ) : null}
+
+        {tab === 'manage' && !inviting ? (
           <ManageTab
             group={group}
             managed={managed}
@@ -493,7 +504,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             isOwner={isOwner}
             alone={alone}
             busy={busy}
-            onInvite={() => setSheet('invite')}
+            onInvite={() => setInviting(true)}
             onRename={() => setSheet('rename')}
             onArchiveToggle={confirmArchive}
             onLeave={confirmLeave}
@@ -519,37 +530,6 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
                   openGroup(created.id);
                 }}
                 onCancel={() => setSheet(null)}
-              />
-            ) : null}
-
-            {sheet === 'invite' ? (
-              <InviteSheet
-                onAddFriends={() => setSheet('friends')}
-                onShareLink={() => setSheet('link')}
-                onClose={() => setSheet(null)}
-              />
-            ) : null}
-
-            {sheet === 'link' ? (
-              <>
-                <GroupInviteScreen groupId={groupId} groupName={group.name} />
-                <ThemedView style={styles.sheetFooter}>
-                  <Button label="Done" variant="secondary" onPress={() => setSheet('invite')} />
-                </ThemedView>
-              </>
-            ) : null}
-
-            {sheet === 'friends' ? (
-              <AddMembersSheet
-                group={group}
-                busy={busy}
-                onCancel={() => setSheet('invite')}
-                onAdd={(memberIds) => {
-                  setSheet(null);
-                  void run('members.add', () =>
-                    addGroupMembers(authorizedFetch, groupId, memberIds),
-                  );
-                }}
               />
             ) : null}
 
@@ -977,43 +957,11 @@ function ManageTab({
         </View>
       ) : (
         <ThemedText type="small" themeColor="textSecondary" style={styles.centeredText}>
-          This is the space you share with {group.name}. It’s just the two of you — to
-          include other people, create a group.
+          This is the space you share with {group.name}. It’s just the two of you — to include other
+          people, create a group.
         </ThemedText>
       )}
     </ScrollView>
-  );
-}
-
-/**
- * Where "+ Invite" leads: the two ways to bring someone into the group, side
- * by side — pick from your friends, or hand out a link for anyone else.
- */
-function InviteSheet({
-  onAddFriends,
-  onShareLink,
-  onClose,
-}: {
-  onAddFriends: () => void;
-  onShareLink: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">Invite</ThemedText>
-      <ThemedText themeColor="textSecondary">
-        Add people you’re already friends with, or share a link with anyone else.
-      </ThemedText>
-
-      <View style={styles.actions}>
-        <Button label="Add friends" variant="secondary" onPress={onAddFriends} />
-        <Button label="Share an invitation link" variant="secondary" onPress={onShareLink} />
-      </View>
-
-      <View style={styles.sheetFooter}>
-        <Button label="Close" variant="ghost" onPress={onClose} />
-      </View>
-    </ThemedView>
   );
 }
 
@@ -1032,50 +980,6 @@ function MemberRow({ member }: { member: GroupMember }) {
         </View>
       ) : null}
     </View>
-  );
-}
-
-function AddMembersSheet({
-  group,
-  busy,
-  onAdd,
-  onCancel,
-}: {
-  group: GroupDetail;
-  busy: boolean;
-  onAdd: (memberIds: string[]) => void;
-  onCancel: () => void;
-}) {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const members = new Set(group.members.map((member) => member.id));
-
-  return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">Add friends</ThemedText>
-      <FriendPicker
-        selected={selected}
-        onToggle={(id) =>
-          setSelected((current) => {
-            const next = new Set(current);
-            if (!next.delete(id)) {
-              next.add(id);
-            }
-            return next;
-          })
-        }
-        excludeIds={members}
-        emptyLabel="All of your friends are already in this group. Share a link to invite anyone else."
-      />
-      <View style={styles.actions}>
-        <Button
-          label="Add to group"
-          busy={busy}
-          disabled={selected.size === 0}
-          onPress={() => onAdd([...selected])}
-        />
-        <Button label="Cancel" variant="ghost" onPress={onCancel} />
-      </View>
-    </ThemedView>
   );
 }
 
@@ -1273,9 +1177,5 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.three,
-  },
-  sheetFooter: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.four,
   },
 });

@@ -89,7 +89,7 @@ know where I stand on the trip as a whole**.
   list and the actions on the group itself).
 - Any member can **add friends of theirs** to the group, **share an invitation link**
   (both from the "+ Invite" action heading the Manage tab's member list, which opens one
-  page offering the two), **rename** the group, **archive** it, and **create a sub-group**
+  page carrying both at once: the friend picker on top, the link at the bottom), **rename** the group, **archive** it, and **create a sub-group**
   under it.
 - Only the **owner** can **delete** it.
 - A member can **leave** a group. The owner cannot leave while others remain — they

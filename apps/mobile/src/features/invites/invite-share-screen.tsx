@@ -1,7 +1,14 @@
 import type { Invite } from '@splitcount/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  Share,
+  StyleSheet,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -16,12 +23,13 @@ import type { AuthorizedFetch } from '@/lib/api/client';
 import { errorFields, logger } from '@/lib/logger';
 
 type InviteState =
-  | { status: 'loading' }
-  | { status: 'ready'; invite: Invite }
-  | { status: 'error' };
+  { status: 'loading' } | { status: 'ready'; invite: Invite } | { status: 'error' };
 
 /** How long the "Copied" tooltip stays up. */
 const COPIED_TOOLTIP_MS = 2000;
+
+/** The tooltip sits in a box this wide, centred on the tap. */
+const TOOLTIP_ANCHOR_WIDTH = 96;
 
 /** "17 September 2026" — the expiry needs to be readable, not precise. */
 function formatExpiry(isoDate: string): string {
@@ -40,6 +48,11 @@ export interface InviteShareScreenProps {
   shareMessage: (url: string) => string;
   load: (fetcher: AuthorizedFetch) => Promise<Invite>;
   rotate: (fetcher: AuthorizedFetch) => Promise<Invite>;
+  /**
+   * Just the link card and its expiry, sized to its content, for a page that
+   * has something else to show above it: no title, blurb or full-height layout.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -53,6 +66,7 @@ export function InviteShareScreen({
   shareMessage,
   load,
   rotate,
+  embedded = false,
 }: InviteShareScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
@@ -62,6 +76,9 @@ export function InviteShareScreen({
   const [copied, setCopied] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<View>(null);
+  // Where the tooltip goes: the spot that was tapped, in the root's own coordinates.
+  const [tooltipAt, setTooltipAt] = useState<{ x: number; y: number } | null>(null);
 
   // The "Copied" tooltip is a passing acknowledgement, not a state to keep.
   useEffect(
@@ -105,12 +122,19 @@ export function InviteShareScreen({
 
   const invite = state.status === 'ready' ? state.invite : null;
 
-  async function handleCopy() {
+  async function handleCopy(event?: GestureResponderEvent) {
     if (!invite) {
       return;
     }
+    // Read before the first await: the event is not kept around after it.
+    const pageX = event?.nativeEvent?.pageX;
+    const pageY = event?.nativeEvent?.pageY;
     try {
       await Clipboard.setStringAsync(invite.url);
+      setTooltipAt(null);
+      if (pageX !== undefined && pageY !== undefined) {
+        rootRef.current?.measureInWindow?.((x, y) => setTooltipAt({ x: pageX - x, y: pageY - y }));
+      }
       setCopied(true);
       if (copiedTimer.current) {
         clearTimeout(copiedTimer.current);
@@ -148,7 +172,10 @@ export function InviteShareScreen({
 
   if (state.status === 'error') {
     return (
-      <ThemedView style={styles.centered}>
+      <ThemedView
+        style={
+          embedded ? [styles.centeredEmbedded, { backgroundColor: 'transparent' }] : styles.centered
+        }>
         <ThemedText type="subtitle">Can’t create a link</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
           We couldn’t reach SplitCount. Check your connection and try again.
@@ -160,66 +187,105 @@ export function InviteShareScreen({
 
   if (!invite) {
     return (
-      <ThemedView style={styles.centered}>
+      <ThemedView
+        style={
+          embedded ? [styles.centeredEmbedded, { backgroundColor: 'transparent' }] : styles.centered
+        }>
         <ActivityIndicator testID="invite-loading" color={theme.primary} />
       </ThemedView>
     );
   }
 
-  return (
-    <ThemedView style={styles.container}>
-      <View style={styles.intro}>
-        <ThemedText type="subtitle">{title}</ThemedText>
-        <ThemedText themeColor="textSecondary">{blurb}</ThemedText>
-      </View>
+  const actions = (color: string) => (
+    <>
+      <IconButton
+        icon="share"
+        accessibilityLabel="Share"
+        color={color}
+        onPress={() => void handleShare()}
+      />
+      <IconButton
+        icon={copied ? 'check' : 'copy'}
+        accessibilityLabel={copied ? 'Copied' : 'Copy link'}
+        color={color}
+        onPress={(event) => void handleCopy(event)}
+      />
+      <IconButton
+        icon="refresh"
+        accessibilityLabel="Generate a new link"
+        color={color}
+        disabled={rotating}
+        // The old link stops working the moment a new one exists — never a stray tap.
+        onPress={() => setConfirmingRotate(true)}
+      />
+    </>
+  );
 
-      {/* The link itself is the content here, so it gets the card — with the
-          three things to do with it as icons at the end of its own title line. */}
-      <Card tone="brand" style={styles.linkBox}>
-        <View style={styles.linkHeader}>
-          <ThemedText type="overline" themeColor="onPrimarySoft" style={styles.linkTitle}>
-            Your invitation link
-          </ThemedText>
-          <IconButton
-            icon="share"
-            accessibilityLabel="Share"
-            color={theme.onPrimarySoft}
-            onPress={() => void handleShare()}
-          />
-          <IconButton
-            icon={copied ? 'check' : 'copy'}
-            accessibilityLabel={copied ? 'Copied' : 'Copy link'}
-            color={theme.onPrimarySoft}
-            onPress={() => void handleCopy()}
-          />
-          <IconButton
-            icon="refresh"
-            accessibilityLabel="Generate a new link"
-            color={theme.onPrimarySoft}
-            disabled={rotating}
-            // The old link stops working the moment a new one exists — never a stray tap.
-            onPress={() => setConfirmingRotate(true)}
-          />
+  return (
+    <View
+      ref={rootRef}
+      style={
+        embedded
+          ? styles.containerEmbedded
+          : [styles.container, { backgroundColor: theme.background }]
+      }>
+      {embedded ? null : (
+        <View style={styles.intro}>
+          <ThemedText type="subtitle">{title}</ThemedText>
+          <ThemedText themeColor="textSecondary">{blurb}</ThemedText>
         </View>
+      )}
+
+      {/* The three things to do with the link, as icons at the end of a title line:
+          the card's own when the page is just this link, the section's when the
+          link is one section of a larger page. */}
+      {embedded ? (
+        <View style={styles.linkHeader}>
+          <ThemedText type="overline" themeColor="textSecondary" style={styles.linkTitle}>
+            Invitation link
+          </ThemedText>
+          {actions(theme.primary)}
+        </View>
+      ) : null}
+
+      <Card tone={embedded ? 'surface' : 'brand'} style={styles.linkBox}>
+        {embedded ? null : (
+          <View style={styles.linkHeader}>
+            <ThemedText type="overline" themeColor="onPrimarySoft" style={styles.linkTitle}>
+              Your invitation link
+            </ThemedText>
+            {actions(theme.onPrimarySoft)}
+          </View>
+        )}
         {/* Tapping the link itself copies it, the quickest way there is. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Invitation link, tap to copy"
-          onPress={() => void handleCopy()}
+          onPress={(event) => void handleCopy(event)}
           style={({ pressed }) => pressed && styles.pressed}>
           <ThemedText style={styles.link}>{invite.url}</ThemedText>
         </Pressable>
       </Card>
 
       {copied ? (
-        <View pointerEvents="none" style={[styles.tooltip, { backgroundColor: theme.text }]}>
-          <ThemedText type="smallBold" style={{ color: theme.background }}>
-            Copied
-          </ThemedText>
+        // In the app's own colours, at the spot that was tapped.
+        <View
+          pointerEvents="none"
+          style={[
+            styles.tooltipAnchor,
+            tooltipAt
+              ? { left: tooltipAt.x - TOOLTIP_ANCHOR_WIDTH / 2, top: tooltipAt.y - 48 }
+              : styles.tooltipCentred,
+          ]}>
+          <View style={[styles.tooltip, { backgroundColor: theme.primary }]}>
+            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
+              Copied
+            </ThemedText>
+          </View>
         </View>
       ) : null}
 
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="small" themeColor="textSecondary" style={styles.expiry}>
         {`This link works until ${formatExpiry(invite.expiresAt)}.`}
       </ThemedText>
 
@@ -234,7 +300,7 @@ export function InviteShareScreen({
           void handleRotate();
         }}
       />
-    </ThemedView>
+    </View>
   );
 }
 
@@ -246,6 +312,14 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.three,
+  },
+  containerEmbedded: {
+    gap: Spacing.two,
+  },
+  centeredEmbedded: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.three,
   },
   centered: {
     flex: 1,
@@ -274,14 +348,25 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 14,
   },
+  expiry: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
   pressed: {
     opacity: 0.6,
   },
   // A bubble that floats over the page briefly, then goes.
-  tooltip: {
+  tooltipAnchor: {
     position: 'absolute',
+    width: TOOLTIP_ANCHOR_WIDTH,
+    alignItems: 'center',
+  },
+  // Until the tap's position is known (or where it cannot be): over the link.
+  tooltipCentred: {
     alignSelf: 'center',
-    bottom: Spacing.five,
+    top: '30%',
+  },
+  tooltip: {
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.medium,

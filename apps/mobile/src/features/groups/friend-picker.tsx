@@ -12,8 +12,8 @@ export interface FriendPickerProps {
   /** Ids currently selected. */
   selected: ReadonlySet<string>;
   onToggle: (friendId: string) => void;
-  /** Friends already in the group — not offered again. */
-  excludeIds?: ReadonlySet<string>;
+  /** Friends already in the group: shown ticked, and not togglable. */
+  lockedIds?: ReadonlySet<string>;
   /** Shown when there is nobody left to pick. */
   emptyLabel?: string;
 }
@@ -25,7 +25,7 @@ export interface FriendPickerProps {
 export function FriendPicker({
   selected,
   onToggle,
-  excludeIds,
+  lockedIds,
   emptyLabel = 'Invite someone from the Friends tab first.',
 }: FriendPickerProps) {
   const { status, friends, refresh } = useFriends();
@@ -50,9 +50,7 @@ export function FriendPicker({
     );
   }
 
-  const selectable = friends.filter((friend) => !excludeIds?.has(friend.id));
-
-  if (selectable.length === 0) {
+  if (friends.length === 0) {
     return (
       <View style={styles.centered}>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
@@ -64,11 +62,12 @@ export function FriendPicker({
 
   return (
     <ScrollView contentContainerStyle={styles.list}>
-      {selectable.map((friend) => (
+      {friends.map((friend) => (
         <FriendOption
           key={friend.id}
           friend={friend}
-          checked={selected.has(friend.id)}
+          locked={lockedIds?.has(friend.id) ?? false}
+          checked={(lockedIds?.has(friend.id) ?? false) || selected.has(friend.id)}
           onPress={() => onToggle(friend.id)}
         />
       ))}
@@ -79,10 +78,12 @@ export function FriendPicker({
 function FriendOption({
   friend,
   checked,
+  locked,
   onPress,
 }: {
   friend: FriendSummary;
   checked: boolean;
+  locked: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -90,12 +91,14 @@ function FriendOption({
   return (
     <Pressable
       accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
+      accessibilityState={{ checked, disabled: locked }}
+      disabled={locked}
       accessibilityLabel={friend.name}
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: checked ? theme.primarySoft : 'transparent' },
+        locked && styles.locked,
         pressed && styles.pressed,
       ]}>
       <Avatar name={friend.name} picture={friend.picture} seed={friend.id} />
@@ -138,6 +141,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
     borderRadius: Radius.medium,
+  },
+  locked: {
+    opacity: 0.55,
   },
   name: {
     flex: 1,

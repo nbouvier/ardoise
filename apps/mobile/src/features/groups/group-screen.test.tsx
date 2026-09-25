@@ -2,6 +2,7 @@ import type {
   Balance,
   FriendSummary,
   GroupDetail,
+  Invite,
   SubgroupSummary,
   Transaction,
   TransactionsListResponse,
@@ -94,7 +95,9 @@ const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
+const mockFriendList: unknown[] = [];
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
+const mockFetchGroupInvite = jest.fn<() => Promise<Invite>>();
 const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -117,7 +120,7 @@ jest.mock('@/lib/api/groups', () => ({
   removeGroupMember: jest.fn(),
   joinGroup: () => mockJoinGroup(),
   setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
-  fetchGroupInvite: jest.fn(),
+  fetchGroupInvite: () => mockFetchGroupInvite(),
   rotateGroupInvite: jest.fn(),
 }));
 
@@ -130,7 +133,7 @@ jest.mock('@/lib/api/transactions', () => ({
 }));
 
 jest.mock('@/lib/api/friends', () => ({
-  fetchFriends: async () => [],
+  fetchFriends: async () => mockFriendList,
   removeFriend: jest.fn(),
 }));
 
@@ -147,6 +150,11 @@ beforeEach(() => {
   mockFetchBalances.mockReset().mockResolvedValue([]);
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
   mockJoinGroup.mockReset().mockResolvedValue(trip);
+  mockFetchGroupInvite.mockReset().mockResolvedValue({
+    code: 'abc',
+    url: 'https://api.test/i/abc',
+    expiresAt: '2026-09-30T12:00:00.000Z',
+  });
   mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
   mockPush.mockReset();
   mockBack.mockReset();
@@ -381,23 +389,47 @@ describe('GroupScreen', () => {
     }
   });
 
-  it('brings "Add friends" and "Share an invitation link" together behind "+ Invite"', async () => {
+  it('puts the friend picker and the invitation link on one "+ Invite" page', async () => {
+    mockFetchGroupInvite.mockResolvedValue({
+      code: 'abc',
+      url: 'https://api.test/i/abc',
+      expiresAt: '2026-09-30T12:00:00.000Z',
+    });
     await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
 
-    // Neither is on the tab itself any more.
-    expect(screen.queryByRole('button', { name: /add friends/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /share an invitation link/i })).toBeNull();
+    // Neither is on the tab itself.
+    expect(screen.queryByRole('button', { name: /add to group/i })).toBeNull();
+    expect(screen.queryByText('https://api.test/i/abc')).toBeNull();
 
     await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
 
-    expect(await screen.findByRole('button', { name: /add friends/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /share an invitation link/i })).toBeTruthy();
-
-    // Each returns to the page it came from.
-    await fireEvent.press(screen.getByRole('button', { name: /add friends/i }));
+    // Both are on the page at once, with no menu in between.
     expect(await screen.findByRole('button', { name: /add to group/i })).toBeTruthy();
-    await fireEvent.press(screen.getByRole('button', { name: /cancel/i }));
-    expect(await screen.findByRole('button', { name: /share an invitation link/i })).toBeTruthy();
+    expect(await screen.findByText('https://api.test/i/abc')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
+
+    // It replaces the Manage tab's content in place — the tabs stay — and
+    // "Done" brings the members back.
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Manage' })).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByRole('button', { name: 'Invite' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /add to group/i })).toBeNull();
+  });
+
+  it('lists friends already in the group ticked and disabled, and counts the picked ones', async () => {
+    mockFriendList.push({ ...grace, groupId: pair.id, favorite: false });
+    try {
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
+
+      const row = await screen.findByRole('checkbox', { name: 'Grace Hopper' });
+      expect(row).toBeDisabled();
+      expect(row).toBeChecked();
+      expect(screen.getByText('0 selected')).toBeTruthy();
+    } finally {
+      mockFriendList.length = 0;
+    }
   });
 
   it('keeps deletion to the owner', async () => {
