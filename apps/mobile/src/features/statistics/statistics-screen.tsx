@@ -13,8 +13,7 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Pill } from '@/components/pill';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
@@ -33,7 +32,6 @@ export interface StatisticsScreenProps {
   members: readonly GroupMember[];
   /** The signed-in member, labelled "You" in the participant list. */
   viewerId: string | null;
-  onClose: () => void;
 }
 
 const CHART_SIZE = 220;
@@ -65,7 +63,6 @@ export function StatisticsScreen({
   hasSubgroups,
   members,
   viewerId,
-  onClose,
 }: StatisticsScreenProps) {
   const [type, setType] = useState<StatisticsType>('spending');
   // Sub-groups are included by default — the natural reading of "this trip's
@@ -127,9 +124,7 @@ export function StatisticsScreen({
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
 
   return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">Statistics</ThemedText>
-
+    <View style={styles.panel}>
       <View style={styles.toggles}>
         <View style={styles.toggleRow}>
           {(['spending', 'income'] as const).map((option) => (
@@ -240,11 +235,7 @@ export function StatisticsScreen({
           </Card>
         </ScrollView>
       )}
-
-      <View style={styles.footer}>
-        <Button label="Close" variant="ghost" onPress={onClose} />
-      </View>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -323,12 +314,8 @@ function LegendRow({
 }
 
 const styles = StyleSheet.create({
-  sheet: {
+  panel: {
     flex: 1,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    padding: Spacing.four,
     gap: Spacing.three,
   },
   toggles: {
@@ -377,8 +364,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
-  },
-  footer: {
-    paddingTop: Spacing.two,
   },
 });

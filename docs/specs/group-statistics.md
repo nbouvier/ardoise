@@ -245,9 +245,9 @@ its own.
 
 ## UX / UI considerations
 
-- Opened as a **sheet from the group screen's header**, next to "Details" — the
-  transaction list stays the group's primary content, and the sheet pattern is the one
-  the group screen already uses for everything secondary.
+- Shown as the group screen's **Statistics tab** — the transaction list stays the group's
+  default and primary content, and the statistics are one tab over, read afresh each time
+  the tab is opened.
 - The type is a **segmented toggle above the chart**, reusing the pill styling of the
   existing kind and split-mode toggles. Participants are the same pill styling, one chip
   per member (the viewer's own chip reads "You"), wrapped onto multiple rows and all
@@ -305,5 +305,5 @@ amounts are financial data and must not be logged
   code today, chosen to read on both themes; custom categories (see
   `docs/specs/transactions.md`) would force the question.
 - **Should the scope toggle's choice be remembered** per group, so a member who always
-  wants the whole trip does not re-select it every time they open the sheet? Deliberately
+  wants the whole trip does not re-select it every time they open the tab? Deliberately
   simple (always defaults to including sub-groups) for this pass.

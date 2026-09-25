@@ -84,7 +84,6 @@ async function renderScreen(
       hasSubgroups={false}
       members={members}
       viewerId={ada.id}
-      onClose={jest.fn()}
       {...overrides}
     />,
   );
@@ -251,7 +250,6 @@ describe('StatisticsScreen', () => {
         hasSubgroups={false}
         members={members}
         viewerId={ada.id}
-        onClose={jest.fn()}
       />,
     );
 
@@ -270,7 +268,6 @@ describe('StatisticsScreen', () => {
         hasSubgroups={false}
         members={members}
         viewerId={ada.id}
-        onClose={jest.fn()}
       />,
     );
 
@@ -291,7 +288,6 @@ describe('StatisticsScreen', () => {
           hasSubgroups
           members={members}
           viewerId={ada.id}
-          onClose={jest.fn()}
         />,
       );
 
@@ -322,7 +318,6 @@ describe('StatisticsScreen', () => {
           hasSubgroups
           members={members}
           viewerId={ada.id}
-          onClose={jest.fn()}
         />,
       );
       await screen.findByTestId('statistics-centre-amount');

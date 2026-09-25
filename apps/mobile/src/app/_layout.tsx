@@ -44,18 +44,11 @@ export default function RootLayout() {
         {/* Above the gate: an invitation may arrive before there is an account. */}
         <InviteLinkHandler />
         <AuthGate>
-          {/* A stack around the tabs, so a group opens on top of them. */}
+          {/* A stack around the tabs, so a group opens on top of them. Its own
+              header (with the way back) is drawn by the group screen. */}
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="groups/[id]"
-              options={{
-                headerShown: true,
-                headerTitle: '',
-                headerBackTitle: 'Groups',
-                headerShadowVisible: false,
-              }}
-            />
+            <Stack.Screen name="groups/[id]" />
           </Stack>
           <InvitePrompt />
         </AuthGate>

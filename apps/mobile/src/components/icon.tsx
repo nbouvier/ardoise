@@ -9,10 +9,12 @@ export type IconName =
   | 'manage'
   | 'archive'
   | 'leave'
-  | 'trash';
+  | 'trash'
+  | 'back';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
+  back: 'M15 5l-7 7 7 7',
   plus: 'M12 5v14M5 12h14',
   // A key: the ring you hold, the shaft, and its teeth — reads as "enter a
   // code to get in", clearer for "join" than an abstract link/chain.
@@ -21,7 +23,7 @@ const paths: Record<IconName, string> = {
   star: 'M12 3.5l2.47 5.6 6.03.58-4.56 4.06 1.35 5.94L12 16.77 6.71 19.68l1.35-5.94-4.56-4.06 6.03-.58z',
   // A row's own "⋮" trigger — three dots, drawn filled.
   more: 'M12 5.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM12 10.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM12 15.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z',
-  // A clipboard: "Manage" opens the same Details sheet this evokes.
+  // A clipboard: "Manage" opens the group's Manage tab, which this evokes.
   manage: 'M6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zM9 4h6v3H9zM9 11h6M9 15h6',
   // A box with its lid line and handle: put away, not gone.
   archive: 'M3 7h18M5 7v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M9 11h6',

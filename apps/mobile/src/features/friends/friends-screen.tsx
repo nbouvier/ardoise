@@ -94,11 +94,11 @@ export function FriendsScreen() {
     router.push({ pathname: '/groups/[id]', params: { id: friend.groupId } });
   }
 
-  /** Same destination as the "⋮" menus elsewhere: the shared group's details sheet. */
+  /** Same destination as the "⋮" menus elsewhere: the shared group's Manage tab. */
   function handleManage(friend: FriendEntry) {
     router.push({
       pathname: '/groups/[id]',
-      params: { id: friend.groupId, openSheet: 'details' },
+      params: { id: friend.groupId, tab: 'manage' },
     });
   }
 

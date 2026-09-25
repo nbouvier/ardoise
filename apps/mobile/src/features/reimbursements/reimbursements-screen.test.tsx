@@ -35,7 +35,6 @@ async function renderScreen(
       viewerId={ada.id}
       readOnly={false}
       onRecord={jest.fn()}
-      onClose={jest.fn()}
       {...overrides}
     />,
   );

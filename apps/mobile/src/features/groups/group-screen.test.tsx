@@ -152,8 +152,9 @@ beforeEach(() => {
   mockBack.mockReset();
 });
 
-async function openDetails() {
-  await fireEvent.press(screen.getByRole('button', { name: 'Group details' }));
+/** Switch the page to one of its tabs. */
+async function openTab(name: 'Transactions' | 'Balances' | 'Statistics' | 'Manage') {
+  await fireEvent.press(screen.getByRole('tab', { name }));
 }
 
 describe('GroupScreen', () => {
@@ -203,12 +204,46 @@ describe('GroupScreen', () => {
     ).toBeTruthy();
   });
 
+  it('names the group and counts its members in a header of its own', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+
+    expect(await screen.findByText('Corsica 2026')).toBeTruthy();
+    expect(screen.getByText('2 members')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('opens on Transactions, with Balances, Statistics and Manage beside it', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    for (const name of ['Transactions', 'Balances', 'Statistics', 'Manage']) {
+      expect(screen.getByRole('tab', { name })).toBeTruthy();
+    }
+    expect(screen.getByRole('tab', { name: 'Transactions' }).props.accessibilityState).toMatchObject(
+      { selected: true },
+    );
+    // Sub-groups and transactions share the default tab; nothing else's content is up.
+    expect(screen.getByText('Sub-groups')).toBeTruthy();
+    expect(screen.queryByText('Your balance here')).toBeNull();
+    expect(screen.queryByText('Total spending')).toBeNull();
+  });
+
+  it('can open straight onto another tab', async () => {
+    await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+
+    expect(await screen.findByRole('button', { name: 'Invite' })).toBeTruthy();
+    expect(screen.queryByText('Sub-groups')).toBeNull();
+  });
+
   it('shows an empty state and an "Add a transaction" action', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
     expect(await screen.findByText(/No transactions yet/)).toBeTruthy();
-    expect(screen.getByText('Transactions')).toBeTruthy();
+    // The tab, and the section's own title under the sub-groups above it.
+    expect(screen.getAllByText('Transactions')).toHaveLength(2);
     expect(screen.getByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
@@ -230,7 +265,7 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Group statistics' }));
+    await openTab('Statistics');
 
     expect(await screen.findByTestId('statistics-centre-label')).toHaveTextContent(
       'Total spending',
@@ -241,17 +276,18 @@ describe('GroupScreen', () => {
     expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
   });
 
-  it('opens the reimbursement plan from the header', async () => {
+  it('shows the reimbursement plan and everyone’s balance on the Balances tab', async () => {
     mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+    await openTab('Balances');
 
     expect(
       await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
     ).toBeTruthy();
+    expect(screen.getByText('Where everyone stands')).toBeTruthy();
   });
 
   it('pre-fills a transfer from a suggested reimbursement', async () => {
@@ -259,7 +295,7 @@ describe('GroupScreen', () => {
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
-    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+    await openTab('Balances');
 
     await fireEvent.press(
       await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
@@ -290,12 +326,12 @@ describe('GroupScreen', () => {
     );
   });
 
-  it('returns to the plan once the reimbursement is recorded', async () => {
+  it('is back on the plan once the reimbursement is recorded', async () => {
     mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
-    await fireEvent.press(screen.getByRole('button', { name: 'Reimbursements' }));
+    await openTab('Balances');
     await fireEvent.press(
       await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
     );
@@ -329,26 +365,45 @@ describe('GroupScreen', () => {
     expect(notify).toHaveBeenCalled();
   });
 
-  it('keeps membership actions behind "Group details", alongside members and balances', async () => {
+  it('keeps the members and management actions on the Manage tab', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
-    for (const action of [/add friends/i, /share an invitation link/i, /rename/i, /archive group/i]) {
+    for (const action of [/invite/i, /rename/i, /archive group/i]) {
       expect(screen.queryByRole('button', { name: action })).toBeNull();
     }
 
-    await openDetails();
+    await openTab('Manage');
 
     expect(await screen.findByText('Grace Hopper')).toBeTruthy();
-    for (const action of [/add friends/i, /share an invitation link/i, /rename/i, /archive group/i]) {
+    for (const action of [/invite/i, /rename/i, /archive group/i]) {
       expect(screen.getByRole('button', { name: action })).toBeTruthy();
     }
+  });
+
+  it('brings "Add friends" and "Share an invitation link" together behind "+ Invite"', async () => {
+    await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+
+    // Neither is on the tab itself any more.
+    expect(screen.queryByRole('button', { name: /add friends/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /share an invitation link/i })).toBeNull();
+
+    await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
+
+    expect(await screen.findByRole('button', { name: /add friends/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /share an invitation link/i })).toBeTruthy();
+
+    // Each returns to the page it came from.
+    await fireEvent.press(screen.getByRole('button', { name: /add friends/i }));
+    expect(await screen.findByRole('button', { name: /add to group/i })).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: /cancel/i }));
+    expect(await screen.findByRole('button', { name: /share an invitation link/i })).toBeTruthy();
   });
 
   it('keeps deletion to the owner', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
-    await openDetails();
+    await openTab('Manage');
 
     expect(await screen.findByRole('button', { name: /delete this group/i })).toBeTruthy();
     // The owner cannot strand the others.
@@ -360,7 +415,7 @@ describe('GroupScreen', () => {
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
-    await openDetails();
+    await openTab('Manage');
 
     expect(await screen.findByRole('button', { name: /leave group/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /delete this group/i })).toBeNull();
@@ -379,11 +434,10 @@ describe('GroupScreen', () => {
     expect(screen.getByText(/Archived/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /add a transaction/i })).toBeNull();
 
-    await openDetails();
+    await openTab('Manage');
 
     expect(await screen.findByRole('button', { name: /reopen group/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /add friends/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /share an invitation link/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
   });
 
   it('offers a transaction on a pair group exactly like a standard one', async () => {
@@ -396,13 +450,15 @@ describe('GroupScreen', () => {
     expect(await screen.findByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
-  it('answers "where do I stand" on the screen itself, without opening the details', async () => {
+  it('answers "where do I stand" at the top of the Balances tab', async () => {
     // Ada is owed 21.25 — said in words, not left to a leading "+". Sourced
     // from the group's own viewerBalanceCents, not the per-member list.
     mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: 2125 });
     mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Balances');
 
     expect(await screen.findByText('You are owed 21.25')).toBeTruthy();
   });
@@ -415,6 +471,8 @@ describe('GroupScreen', () => {
     ]);
 
     await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Balances');
 
     expect(await screen.findByText('You owe 8.00')).toBeTruthy();
   });
@@ -425,15 +483,13 @@ describe('GroupScreen', () => {
 
     await render(<GroupScreen groupId={pair.id} />);
     await screen.findByText('Grace Hopper');
-    await openDetails();
+    await openTab('Manage');
 
-    // The other person names the group (header + details heading) *and*
-    // appears in both the member list and the balances list.
-    expect(await screen.findAllByText('Grace Hopper')).toHaveLength(4);
+    // The other person names the group (header) *and* is in the member list.
+    expect(await screen.findAllByText('Grace Hopper')).toHaveLength(2);
     // Absent, not disabled: none of these can ever apply to a pair group.
     for (const action of [
-      /add friends/i,
-      /share an invitation link/i,
+      /invite/i,
       /rename/i,
       /archive group/i,
       /leave group/i,
@@ -532,21 +588,22 @@ describe('GroupScreen', () => {
       expect(await screen.findByText('You owe 12.50')).toBeTruthy();
     });
 
-    it('offers a joined sub-group its own "⋮" actions menu, opening Manage onto its Details sheet', async () => {
+    it('offers a joined sub-group its own "⋮" actions menu, opening Manage onto its Manage tab', async () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);
       await screen.findByText('Ajaccio weekend');
       await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ajaccio weekend' }));
 
-      expect(screen.getByText('Manage')).toBeTruthy();
+      // The menu's own row — the page's "Manage" tab is a tab, not a button.
+      expect(screen.getByRole('button', { name: 'Manage' })).toBeTruthy();
       expect(screen.getByText('Delete group')).toBeTruthy();
 
-      await fireEvent.press(screen.getByText('Manage'));
+      await fireEvent.press(screen.getByRole('button', { name: 'Manage' }));
 
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/groups/[id]',
-        params: { id: joinedSub.id, openSheet: 'details' },
+        params: { id: joinedSub.id, tab: 'manage' },
       });
     });
 
@@ -638,14 +695,13 @@ describe('GroupScreen', () => {
       expect(screen.getByText('+ Create')).toBeTruthy();
     });
 
-    it('hides "add friends" and "invite" for a sub-group nested under a pair group', async () => {
+    it('hides "+ Invite" for a sub-group nested under a pair group', async () => {
       mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
 
-      await render(<GroupScreen groupId={trip.id} />);
-      await fireEvent.press(await screen.findByText('Details'));
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await screen.findByRole('button', { name: 'Rename' });
 
-      expect(screen.queryByRole('button', { name: 'Add friends' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Share an invitation link' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
       expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
       expect(
         screen.getByText('Just the two of you here too — no one else can be added.'),

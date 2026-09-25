@@ -34,7 +34,7 @@ export function GroupsScreen() {
     router.push({ pathname: '/groups/[id]', params: { id: group.id } });
 
   const manage = (group: GroupSummary) =>
-    router.push({ pathname: '/groups/[id]', params: { id: group.id, openSheet: 'details' } });
+    router.push({ pathname: '/groups/[id]', params: { id: group.id, tab: 'manage' } });
 
   function handleCreated(group: GroupSummary) {
     setCreating(false);

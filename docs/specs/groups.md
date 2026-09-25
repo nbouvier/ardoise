@@ -73,7 +73,7 @@ know where I stand on the trip as a whole**.
   are visually muted.
 - Empty state: an explanation and a "Create a group" action.
 - Each row carries its own **"⋮" actions menu**, next to its favorite star: Manage (opens
-  the group with its Details sheet already showing), Archive/Reopen, Leave and Delete —
+  the group opened on its Manage tab), Archive/Reopen, Leave and Delete —
   exactly the actions available from inside the group itself (see "Inside a group" below),
   gated the same way, so acting on a group never requires opening it first. The same menu
   sits on a group's own row wherever else it is shown as a row with a favorite star — a
@@ -83,8 +83,14 @@ know where I stand on the trip as a whole**.
 ### Inside a group
 
 - A group shows its name, its members, and — for a standard group — its own **sub-groups**.
-- Any member can **add friends of theirs** to the group, **share an invitation link**,
-  **rename** the group, **archive** it, and **create a sub-group** under it.
+- A group's page is split into four tabs — **Transactions** (its sub-groups and its
+  transactions, the default), **Balances** (the viewer's own balance, the plan to
+  reimburse, and where every member stands), **Statistics**, and **Manage** (the member
+  list and the actions on the group itself).
+- Any member can **add friends of theirs** to the group, **share an invitation link**
+  (both from the "+ Invite" action heading the Manage tab's member list, which opens one
+  page offering the two), **rename** the group, **archive** it, and **create a sub-group**
+  under it.
 - Only the **owner** can **delete** it.
 - A member can **leave** a group. The owner cannot leave while others remain — they
   archive, delete, or remove themselves once alone (which deletes the group). The same
@@ -472,9 +478,13 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   friends selected is allowed. Creating a sub-group reuses the same screen, opened from
   inside the parent, with the parent implicit rather than a field to fill in.
 - **Group detail** is one screen used for every standard group at any depth, and for a
-  pair group. It shows, above the transaction list: the group's own name, a breadcrumb of
-  its ancestors when it is a sub-group (so a member always knows where in the tree they
-  are), and a **sub-groups section** — shown for a pair group too — listing its direct
+  pair group. Its **top banner** — the same wash-and-two-lines style as the app's other
+  pages — carries the group's name on the first line and its member count on the second,
+  with a breadcrumb of its ancestors above the name when it is a sub-group (so a member
+  always knows where in the tree they are), the favorite star, and the way back. Under it
+  are four **tabs**: **Transactions** (the default), **Balances**, **Statistics** and
+  **Manage**, described below. The Transactions tab shows a **sub-groups section** — shown
+  for a pair group too — above the transaction list, listing its direct
   sub-groups with their member counts and, for a joined one, its own balance;
   sub-groups the viewer has not joined are hidden by default behind a
   "Show sub-groups I'm not in (n)" toggle, mirroring the archived-groups pattern, and open
@@ -482,7 +492,7 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   member actions, the invitation action and the rename/archive/delete actions are absent —
   not disabled-looking, absent — because they can never apply; **for any group whose tree
   is capped at a friendship's two people** (the pair group itself, or a sub-group nested
-  under it at any depth), "Add friends" and "share an invitation link" are likewise absent
+  under it at any depth), "+ Invite" (and so "Add friends" and "share an invitation link") is likewise absent
   and creating a further sub-group there skips the friend picker, since there is never
   anyone left to offer — the other person is already a member of it from the moment it is
   created, so it never shows up behind the "not in" toggle above in the first place.

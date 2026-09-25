@@ -32,7 +32,9 @@ adaptive layers are exports of that same mark.
 Every tab screen opens with the mark and the "SplitCount" wordmark **before** the name of
 the page — the app introduces itself first, the section second — via `ScreenHeader`. A
 page title is never the largest, boldest text at the top of a tab screen; it sits smaller
-and in `textSecondary` beneath the wordmark.
+and in `textSecondary` beneath the wordmark. The one page pushed above the tabs, a
+group's, keeps the same banner and the same two lines — the group's name, then its member
+count — in the place of the app's.
 
 ## Tokens
 
@@ -117,7 +119,7 @@ or box**; a screen that styles its own is a bug in this document.
   the subject owns one (a category), a seed otherwise.
 - **`BrandMark`** — the logo, drawn from the tokens.
 - **`Icon`** — the app's small glyph set (`plus`, `key`, `close`, `star`, `more`, `manage`,
-  `archive`, `leave`, `trash`), drawn as strokes on a 24×24 grid rather than an icon font,
+  `archive`, `leave`, `trash`, `back`), drawn as strokes on a 24×24 grid rather than an icon font,
   coloured through `theme` like everything else; `filled` swaps the hollow outline for a
   solid fill of the same colour — used for `more`'s three dots, always solid.
 - **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
@@ -135,9 +137,13 @@ or box**; a screen that styles its own is a bug in this document.
   type, with an optional trailing caption and room for one screen-level action. Every tab
   opens the same way, and reads as SplitCount before it reads as "Groups" or "Friends".
   `wash` wraps the header in `PageHero` — used on the Groups list, Friends and Account.
-  Group detail keeps a plain header: it sits under its own Stack header already, and the
-  wash is a top-of-app identity cue for the tab screens, not something every nested page
-  repeats.
+  Group detail wears the same wash in the same two-line shape (see below), but with the
+  group in the place of the app, so it does not use `ScreenHeader` itself.
+- **`TabBar`** — the tabs *within* one screen (as opposed to the app's bottom tabs, which
+  switch between screens): an underlined row of text labels, the selected one in the brand
+  colour with a brand underline, on a hairline rule. Each tab grows to share the width and
+  the row scrolls sideways if the labels ever do not fit. Each is `accessibilityRole="tab"`
+  with its `selected` state. Used by the group screen.
 - **`PageHero`** — the one place the app's decorative wash is bled to a screen's edges and
   given its own top safe-area inset, so every header that carries it behaves identically
   instead of each screen re-deriving its own margins. Takes whatever header content a
@@ -160,7 +166,7 @@ or box**; a screen that styles its own is a bug in this document.
 - **`GroupActionsMenu`** — the business logic behind a group's own `IconMenuButton`: given
   its `kind`, `viewerRole`, `memberCount` and archived state, decides which of Manage /
   Archive (or Reopen) / Leave / Delete actually apply, mirroring the group page's own
-  Details sheet exactly (`docs/specs/groups.md`) — a row's menu never offers something
+  Manage tab exactly (`docs/specs/groups.md`) — a row's menu never offers something
   opening the group would refuse. A pair group only ever gets Manage and a Delete labelled
   "Remove friend", since that is exactly what it does. Sits next to `FavoriteStar` on
   `GroupRow` and on a group's own joined `SubgroupRow`.
@@ -177,6 +183,16 @@ or box**; a screen that styles its own is a bug in this document.
 - A destructive action is a **red text button**, never a filled red one, and always
   confirms through an `Alert` that states what is lost.
 - A section heading inside a screen or sheet is an **`overline`**, not a bold sentence.
+- **Every screen has a banner** — the `PageHero` wash with two lines (the app then the
+  page for a tab screen, the group's name then its member count for a group), never a
+  bare or plain header. A new screen starts from that, and a pushed one draws its own
+  back arrow in it.
+- **Adding to a list is a "+ Verb" text action at the end of that list's own heading
+  line** — brand-coloured `smallBold`, opposite the `overline` title: "+ Create" for
+  sub-groups, "+ Add" for transactions, "+ Invite" for members. Not a full-width button
+  below the list. (`AddMenuButton` remains for a *tab screen's* own top-level add, which
+  branches into several choices.) Give it an `accessibilityLabel` that names what is
+  added when the visible word is not enough ("Add a transaction").
 - A spinner is `theme.primary`, never `theme.text`.
 - Colour never carries meaning alone: a balance is said in words ("You owe 8.00"), a
   chart slice is repeated in a legend with its emoji and label.
@@ -271,28 +287,39 @@ shows the toggle, not the empty state.
 
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
-Pushed above the tabs, so it has a back button. **Transactions are the primary content.**
+Pushed above the tabs. **Transactions are the default content**, one of four tabs.
 
-The header is plain — no wash: the screen already sits under its own native Stack header,
-and the decorative identity cue belongs to the tabs it was pushed from, not to a page
-nested under one of them. It is: a **breadcrumb** of ancestors (brand-coloured, tappable, only on a
-sub-group), the group's name with a **`FavoriteStar`** at the right of the same line
-(`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
+**Top banner.** The same `PageHero` wash as the tab screens, in the same two-line shape as
+`ScreenHeader` — but with the group in the place of the app: the group's **name** on the
+first line (`sectionTitle`) and its **member count** on the second (`smallBold`, secondary).
+The route has no native Stack header (`headerShown: false` on the stack), so the banner
+draws its own **back arrow** at its start; a **breadcrumb** of ancestors (brand-coloured,
+tappable, only on a sub-group) sits above the name, and a **`FavoriteStar`** at the far
+end (`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
 group's own page is one of the two places its star shows, the other being its row on the
-Friends tab (`docs/specs/friends-and-invitations.md`) — a row of three **header chips** — "Settle" (the
-reimbursement plan), "Stats" (the per-category breakdown), "Details" — all soft brand,
-all present on every kind of group, archived or pair included, since the first two are
-read-only views and the plan's one action is refused with a reason rather than hidden. An
-"Archived — read-only" note when the group is *effectively* archived (itself or any
-ancestor, `readOnly` on `GroupDetail`). Then **the viewer's own balance in a brand card**
-— "Your balance here" over the figure, said in words so it never rests on spotting a minus
-sign, read straight off `group.viewerBalanceCents` rather than a separate fetch.
+Friends tab (`docs/specs/friends-and-invitations.md`). An "Archived — read-only" note under
+the count when the group is *effectively* archived (itself or any ancestor, `readOnly` on
+`GroupDetail`). The loading / gone / error states have no banner but keep the same back
+arrow.
 
-Below: the sub-groups section, then a "Transactions" section of the same shape (overline
-title, "+ Add" text action at the end — absent when effectively archived) over the
-transaction list (`TransactionRow` cards). A row opens the same
+**Tabs** (`TabBar`, under the banner, all four on every kind of group, archived or pair
+included): **Transactions** (default), **Balances**, **Statistics**, **Manage**. Only the
+selected tab's content is mounted, so Statistics re-reads its data each time it is
+opened; the group's balances and transactions are read once by the screen. A row's own
+"Manage" action opens the group on the Manage tab (route param `tab=manage`).
+
+**Transactions tab** — the sub-groups section, then a "Transactions" section of the same
+shape (overline title, "+ Add" text action at the end — absent when effectively archived)
+over the transaction list (`TransactionRow` cards). A row opens the same
 add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
 state: a brand card with a glyph and an explanation.
+
+**Balances tab** — **the viewer's own balance in a brand card** — "Your balance here"
+over the figure, said in words so it never rests on spotting a minus sign, read straight
+off `group.viewerBalanceCents` rather than a separate fetch — then the reimbursement plan
+and everyone's standings (see "Reimbursements" below).
+
+**Statistics tab** — the breakdown, see "Group statistics" below.
 
 **Sub-groups section** (shown on **both kinds of group** — a friendship can have
 sub-groups too): an `overline` "Sub-groups" heading with a brand "+ Create" link, then
@@ -308,14 +335,17 @@ membership row to favorite on, or manage — and tapping one opens a "Join this 
 nothing when there are no sub-groups and the group is read-only, so it never becomes a
 permanent empty box.
 
-**Details sheet** — the member list (avatar + name, an accent "Owner" tag on the owner) in
-one card, **balances** (`GroupBalances`) in another, then the management actions. The
-per-member balance list is read **once, by the group screen**, and handed to the sheet.
+**Manage tab** — the member list (avatar + name, an accent "Owner" tag on the owner) in
+one card, headed by an overline member count with a brand **"+ Invite"** text action at
+its end (the same shape as "+ Create" and "+ Add"), then the management actions.
+"+ Invite" opens an **Invite sheet** grouping the two ways in: "Add friends" (the friend
+picker) and "Share an invitation link" (the group's link); each returns to the sheet it
+came from, and adding friends closes it.
 
 **One screen for both kinds of group.** Transactions and sub-groups behave identically on
 a pair group. Every other management action is **absent**, not disabled, there, and the
-sheet's closing line explains that it is just the two of them. For a standard group: "Add
-friends" and "Share an invitation link" (gone when effectively archived, or when the group
+tab's closing line explains that it is just the two of them. For a standard group:
+"+ Invite" (gone when effectively archived, or when the group
 is `pairRooted`), "Rename" (gone only when the group's **own** flag is archived), "Archive
 group" / "Reopen group" (always available, always the group's own flag), "Leave group"
 (hidden for an owner who still has company or who solely owns a populated sub-group), and
@@ -332,10 +362,10 @@ emoji is the badge — it is *not* prefixed to the title text.
 
 ### Reimbursements (`src/features/reimbursements/reimbursements-screen.tsx`)
 
-A sheet from "Settle". **Answer first, justification second**: "Suggested reimbursements"
+The lower part of the group's Balances tab, under the viewer's own balance card. **Answer first, justification second**: "Suggested reimbursements"
 — one card per payment, a sentence ("You pay Alan Turing") with the amount at the end as
 an `amount`, the viewer's own rows first — then a one-line count, then "Where everyone
-stands", the group's balances in one card, same colours and wording as `GroupBalances`.
+stands", the group's balances in one card, the same colours and wording as the viewer's own figure above.
 
 A payment card is **pressable and opens the pre-filled transfer form**; when it cannot be
 recorded (archived group, or a party who has left) it is `muted`, disabled, and carries
@@ -343,11 +373,11 @@ the reason underneath — never a silent dead tap. When nobody owes anybody, bot
 replaced by a single settled line.
 
 The plan is **derived from the balances the group screen already loaded**
-(`planReimbursements`), so the sheet has no fetch of its own.
+(`planReimbursements`), so it has no fetch of its own.
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
-A sheet from "Stats". A **Spending / Income** pill row — with an **"Include sub-groups"**
+The group's Statistics tab. A **Spending / Income** pill row — with an **"Include sub-groups"**
 pill for a group that has any, active by default — then a wrapped row of **one pill per
 member** (the viewer's reads "You"), all active by default, each independently tappable.
 When sub-groups are included and some are left out because the viewer has not joined them,
@@ -427,7 +457,7 @@ shared groups who are not friends are absent from it, so a sum of the rows would
 the viewer's overall position. **Tapping a card opens the group shared with that
 friend**, directly by its already-known id — no request first, the group exists from the
 moment the friendship does (`docs/specs/friends-and-invitations.md`); a "⋮" `IconMenuButton` ("Manage" → the shared
-group's details sheet, "Delete friend") stays a separate hit area after the star. Empty state: a brand card. A footer holds the same
+group's Manage tab, "Delete friend") stays a separate hit area after the star. Empty state: a brand card. A footer holds the same
 **`AddMenuButton`** pattern as Groups ("Add a friend"): "Invite a friend" (`plus` icon)
 opens the invite sheet, "Enter a code" (`key` icon) opens a sheet holding the
 invitation-code entry.

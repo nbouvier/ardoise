@@ -214,10 +214,10 @@ See `docs/API.md` for the authoritative surface.
 
 ## UX / UI considerations
 
-- Reached from the **group screen's header**, alongside "Stats" and "Details" — it is a
-  read-and-act view of its own, and folding it into the details sheet would bury it under
-  group management.
-- The sheet reads top to bottom as **answer, then justification**:
+- Shown on the group screen's **Balances tab**, under the viewer's own balance — it is a
+  read-and-act view of its own, and folding it into Manage would bury it under group
+  management.
+- The tab reads top to bottom as **answer, then justification**:
   1. **"Suggested reimbursements"** — the plan, one row per payment, worded as a
      sentence ("Alice pays Bob 30.00") rather than a signed figure, with the viewer's own
      payments first so the first thing they see is what *they* have to do;
@@ -250,7 +250,7 @@ See `docs/API.md` for the authoritative surface.
 - It therefore **cannot disclose anything about a sub-group**, joined or not: the figures
   it works from are the group's own, and a sub-group has no way into them.
 - It cannot name a person the viewer could not already see — the parties come from the
-  group's own balance list, which they can open in the details sheet.
+  group's own balance list, which they can see on the same Balances tab.
 - Acting on a plan goes through the transaction create path, which enforces membership,
   the archived check, and that both parties are members of the group being written to.
 

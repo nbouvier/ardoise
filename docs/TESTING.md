@@ -130,8 +130,8 @@ interaction is a device concern.
   favorited friends first, and not reordering the instant a friend is favorited (only once
   something else refreshes the list afterwards) — the groups feature
   (`src/features/groups/`): list with the archived toggle, creation with friend selection,
-  the detail screen — now transaction-first, with group management behind the "Details"
-  sheet, including the pair-group variant where every management action is absent **but
+  the detail screen — four tabs (Transactions by default, Balances, Statistics, Manage),
+  with group management on Manage, including the pair-group variant where every management action is absent **but
   "Add a transaction" is present** — plus the favorite star (`docs/specs/favorites.md`) on
   the group list row, the group screen's header (including on a pair group's own page),
   and a joined sub-group's own row, including the notify-then-refetch path a sub-group's

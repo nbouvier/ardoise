@@ -41,7 +41,7 @@ export function HomeScreen() {
     router.push({ pathname: '/groups/[id]', params: { id: groupId } });
 
   const manageGroup = (groupId: string) =>
-    router.push({ pathname: '/groups/[id]', params: { id: groupId, openSheet: 'details' } });
+    router.push({ pathname: '/groups/[id]', params: { id: groupId, tab: 'manage' } });
 
   async function refreshAll() {
     setRefreshing(true);

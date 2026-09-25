@@ -6,8 +6,7 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { balanceTone } from '@/features/transactions/balance-display';
 import type { UseBalancesResult } from '@/features/transactions/use-balances';
@@ -34,7 +33,6 @@ export interface ReimbursementsScreenProps {
   readOnly: boolean;
   /** Record the suggested payment — opens the transfer form, pre-filled. */
   onRecord: (suggestion: Suggestion) => void;
-  onClose: () => void;
 }
 
 /** A balance's party, named from the group's members where it still can be. */
@@ -109,7 +107,6 @@ export function ReimbursementsScreen({
   viewerId,
   readOnly,
   onRecord,
-  onClose,
 }: ReimbursementsScreenProps) {
   const theme = useTheme();
   const { status, balances: loaded, refresh } = balances;
@@ -133,9 +130,7 @@ export function ReimbursementsScreen({
   const settled = loaded.every((balance) => balance.amountCents === 0);
 
   return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">Reimbursements</ThemedText>
-
+    <View style={styles.panel}>
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
           <ActivityIndicator testID="reimbursements-loading" color={theme.primary} />
@@ -195,11 +190,7 @@ export function ReimbursementsScreen({
           </View>
         </ScrollView>
       )}
-
-      <View style={styles.footer}>
-        <Button label="Close" variant="ghost" onPress={onClose} />
-      </View>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -279,12 +270,8 @@ function BalanceRow({
 }
 
 const styles = StyleSheet.create({
-  sheet: {
+  panel: {
     flex: 1,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    padding: Spacing.four,
     gap: Spacing.three,
   },
   body: {
@@ -328,8 +315,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
-  },
-  footer: {
-    paddingTop: Spacing.two,
   },
 });

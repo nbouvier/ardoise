@@ -117,7 +117,7 @@ describe('GroupsScreen', () => {
       expect(screen.queryByText('Delete group')).toBeNull();
     });
 
-    it('opens the group straight onto its Details sheet from Manage', async () => {
+    it('opens the group straight onto its Manage tab from Manage', async () => {
       mockFetchGroups.mockResolvedValue([trip]);
 
       await render(<GroupsScreen />);
@@ -127,7 +127,7 @@ describe('GroupsScreen', () => {
 
       expect(mockPush).toHaveBeenCalledWith({
         pathname: '/groups/[id]',
-        params: { id: trip.id, openSheet: 'details' },
+        params: { id: trip.id, tab: 'manage' },
       });
     });
 

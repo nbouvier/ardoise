@@ -12,6 +12,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -22,7 +23,10 @@ import { Breadcrumb } from '@/components/breadcrumb';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { FavoriteStar } from '@/components/favorite-star';
+import { Icon } from '@/components/icon';
 import { MedallionBadge } from '@/components/medallion-badge';
+import { PageHero } from '@/components/page-hero';
+import { TabBar } from '@/components/tab-bar';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,14 +39,14 @@ import {
 } from '@/features/reimbursements/reimbursements-screen';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
 import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
-import { GroupBalances, ViewerBalance } from '@/features/transactions/group-balances';
+import { ViewerBalance } from '@/features/transactions/group-balances';
 import {
   TransactionFormScreen,
   type TransactionPrefill,
 } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { transactionsChanged } from '@/features/transactions/transactions-changed';
-import { useBalances, type UseBalancesResult } from '@/features/transactions/use-balances';
+import { useBalances } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -64,40 +68,56 @@ import { useGroup } from './use-group';
 import { useGroupRowActions } from './use-group-row-actions';
 
 /**
- * `details` is the group-management sheet (members, balances, rename,
- * archive, invite, leave, delete) — everything that used to sit directly on
- * this screen before transactions became its primary content. `invite`,
- * `members` and `rename` are launched from inside it and return to it.
- * `statistics` is its read-only counterpart, opened from the same header, as
- * is `reimbursements` — which is read-only too until a suggested payment is
- * tapped, at which point it hands over to `transaction` pre-filled and gets
- * it back, one payment shorter. `createSubgroup` is launched from the
- * sub-groups section.
+ * The parts of a group's page, one tab each: what happened (transactions and
+ * sub-groups, the default), who stands where (balances and the plan to settle
+ * them), what it adds up to (statistics), and who is in it and what can be
+ * done to it (manage).
  */
-export type Sheet =
-  | 'details'
+export const GROUP_TABS = [
+  { key: 'transactions', label: 'Transactions' },
+  { key: 'balances', label: 'Balances' },
+  { key: 'statistics', label: 'Statistics' },
+  { key: 'manage', label: 'Manage' },
+] as const;
+
+export type GroupTab = (typeof GROUP_TABS)[number]['key'];
+
+/** Reads a route param back into a tab, or `undefined` for anything else. */
+export function parseGroupTab(value: string | undefined): GroupTab | undefined {
+  return GROUP_TABS.find((tab) => tab.key === value)?.key;
+}
+
+/**
+ * What can be open above the page. `invite` is the hub reached from the
+ * Manage tab's "+ Invite"; `friends` (add friends) and `link` (the invitation
+ * link) are launched from it and return to it. `transaction` is the
+ * add/edit form, also reached from a suggested reimbursement — pre-filled.
+ * `createSubgroup` is launched from the sub-groups section, and `rename`
+ * from Manage.
+ */
+type Sheet =
   | 'invite'
-  | 'members'
+  | 'friends'
+  | 'link'
   | 'rename'
   | 'transaction'
-  | 'statistics'
-  | 'reimbursements'
   | 'createSubgroup'
   | null;
 
 export interface GroupScreenProps {
   groupId: string;
-  /** Opens straight onto a sheet — a row's own "Manage" action, elsewhere in the app. */
-  initialSheet?: Sheet;
+  /** Opens straight onto a tab — a row's own "Manage" action, elsewhere in the app. */
+  initialTab?: GroupTab;
 }
 
-export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) {
+export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScreenProps) {
   const { status, group, refresh, set } = useGroup(groupId);
   const { authorizedFetch, state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const router = useRouter();
   const theme = useTheme();
-  const [sheet, setSheet] = useState<Sheet>(initialSheet);
+  const [tab, setTab] = useState<GroupTab>(initialTab);
+  const [sheet, setSheet] = useState<Sheet>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   // Set only when the transaction sheet was opened from the reimbursement
   // plan — it is both the form's starting values and how the sheet knows to
@@ -110,8 +130,9 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
   const [favoriteBusySubgroupId, setFavoriteBusySubgroupId] = useState<string | null>(null);
   const subgroupActions = useGroupRowActions();
   const transactionsResult = useTransactions(groupId);
-  // Read once here rather than inside the details sheet: the summary above the
-  // transaction list and the per-member list in the sheet are the same figures.
+  // Read once here rather than inside the Balances tab: a recorded transaction
+  // refreshes it from wherever the form was opened, and the tab is not
+  // mounted while another one is showing.
   const balancesResult = useBalances(groupId);
 
   /**
@@ -218,7 +239,7 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
   }
 
   function manageSubgroup(id: string) {
-    router.push({ pathname: '/groups/[id]', params: { id, openSheet: 'details' } });
+    router.push({ pathname: '/groups/[id]', params: { id, tab: 'manage' } });
   }
 
   function confirmArchive() {
@@ -347,99 +368,138 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
-          <View style={styles.headerRow}>
-            <ThemedText type="subtitle" style={styles.headerTitle} numberOfLines={1}>
+      {/* The same wash-and-two-lines top as the tab screens, with the group
+          in the place of the app: its name first, how many are in it
+          underneath. The route has no native header of its own, so the way
+          back is drawn here. */}
+      <PageHero>
+        <View style={styles.headerRow}>
+          <BackButton onPress={() => router.back()} />
+          <View style={styles.headerText}>
+            <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
+            <ThemedText type="sectionTitle" numberOfLines={1}>
               {group.name}
             </ThemedText>
-            {/* A pair group can be favorited too, even though it is never
-                listed anywhere that reorders — its own page is the only
-                place the star (and its state) is ever seen
-                (`docs/specs/favorites.md`). */}
-            <FavoriteStar
-              favorite={group.favorite}
-              label={group.name}
-              disabled={busy}
-              onToggle={toggleFavorite}
-            />
-          </View>
-          <View style={styles.headerActions}>
-            <HeaderChip
-              label="Settle"
-              accessibilityLabel="Reimbursements"
-              onPress={() => setSheet('reimbursements')}
-            />
-            <HeaderChip
-              label="Stats"
-              accessibilityLabel="Group statistics"
-              onPress={() => setSheet('statistics')}
-            />
-            <HeaderChip
-              label="Details"
-              accessibilityLabel="Group details"
-              onPress={() => setSheet('details')}
-            />
-          </View>
-          {readOnly ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Archived — read-only until it’s reopened.
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
             </ThemedText>
-          ) : null}
-          {/* The one figure this screen exists to answer, given its own card. */}
-          <Card tone="brand" style={styles.balanceCard}>
-            <ThemedText type="overline" themeColor="onPrimarySoft">
-              Your balance here
-            </ThemedText>
-            <ViewerBalance amountCents={group.viewerBalanceCents} />
-          </Card>
-        </View>
-
-        {/* Standard and pair groups can both have sub-groups — the pair
-            group's own DetailsSheet message covers the "no one new here"
-            part; this section is the same for both kinds. */}
-        <SubgroupsSection
-          subgroups={group.subgroups}
-          readOnly={readOnly}
-          busy={busy}
-          favoriteBusyId={favoriteBusySubgroupId}
-          actionsBusyId={subgroupActions.busyId}
-          onOpen={openGroup}
-          onJoin={confirmJoin}
-          onCreate={() => setSheet('createSubgroup')}
-          onToggleFavorite={toggleSubgroupFavorite}
-          onManage={manageSubgroup}
-          // A sub-group is always a standard group (`groups_pair_no_parent`)
-          // and doesn't carry its own `subgroupCount` — it is shown one level
-          // deep only, so the leave/delete confirmations skip that clause.
-          onArchiveToggle={(subgroup) => subgroupActions.archiveToggle({ ...subgroup, kind: 'standard' })}
-          onLeave={(subgroup) => subgroupActions.confirmLeave({ ...subgroup, kind: 'standard' })}
-          onDelete={(subgroup) => subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })}
-        />
-
-        <View style={styles.subgroupsHeader}>
-          <ThemedText type="overline" themeColor="textSecondary">
-            Transactions
-          </ThemedText>
-          {readOnly ? null : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add a transaction"
-              onPress={openNewTransaction}>
-              <ThemedText type="smallBold" themeColor="primary">
-                + Add
+            {readOnly ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Archived — read-only until it’s reopened.
               </ThemedText>
-            </Pressable>
-          )}
+            ) : null}
+          </View>
+          {/* A pair group can be favorited too, even though it is never
+              listed anywhere that reorders — its own page is the only
+              place the star (and its state) is ever seen
+              (`docs/specs/favorites.md`). */}
+          <FavoriteStar
+            favorite={group.favorite}
+            label={group.name}
+            disabled={busy}
+            onToggle={toggleFavorite}
+          />
         </View>
+      </PageHero>
 
-        <TransactionList
-          result={transactionsResult}
-          viewerId={viewerId}
-          archived={readOnly}
-          onOpen={openTransaction}
-        />
+      <View style={styles.content}>
+        <TabBar tabs={GROUP_TABS} selected={tab} onSelect={setTab} />
+
+        {tab === 'transactions' ? (
+          <>
+            {/* Standard and pair groups can both have sub-groups — the pair
+                group's own Manage message covers the "no one new here"
+                part; this section is the same for both kinds. */}
+            <SubgroupsSection
+              subgroups={group.subgroups}
+              readOnly={readOnly}
+              busy={busy}
+              favoriteBusyId={favoriteBusySubgroupId}
+              actionsBusyId={subgroupActions.busyId}
+              onOpen={openGroup}
+              onJoin={confirmJoin}
+              onCreate={() => setSheet('createSubgroup')}
+              onToggleFavorite={toggleSubgroupFavorite}
+              onManage={manageSubgroup}
+              // A sub-group is always a standard group (`groups_pair_no_parent`)
+              // and doesn't carry its own `subgroupCount` — it is shown one level
+              // deep only, so the leave/delete confirmations skip that clause.
+              onArchiveToggle={(subgroup) => subgroupActions.archiveToggle({ ...subgroup, kind: 'standard' })}
+              onLeave={(subgroup) => subgroupActions.confirmLeave({ ...subgroup, kind: 'standard' })}
+              onDelete={(subgroup) => subgroupActions.confirmDelete({ ...subgroup, kind: 'standard' })}
+            />
+
+            <View style={styles.sectionHeader}>
+              <ThemedText type="overline" themeColor="textSecondary">
+                Transactions
+              </ThemedText>
+              {readOnly ? null : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add a transaction"
+                  onPress={openNewTransaction}>
+                  <ThemedText type="smallBold" themeColor="primary">
+                    + Add
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+
+            <TransactionList
+              result={transactionsResult}
+              viewerId={viewerId}
+              archived={readOnly}
+              onOpen={openTransaction}
+            />
+          </>
+        ) : null}
+
+        {tab === 'balances' ? (
+          <>
+            {/* The one figure the page exists to answer, given its own card. */}
+            <Card tone="brand" style={styles.balanceCard}>
+              <ThemedText type="overline" themeColor="onPrimarySoft">
+                Your balance here
+              </ThemedText>
+              <ViewerBalance amountCents={group.viewerBalanceCents} />
+            </Card>
+
+            <ReimbursementsScreen
+              balances={balancesResult}
+              members={group.members}
+              viewerId={viewerId}
+              readOnly={readOnly}
+              onRecord={recordReimbursement}
+            />
+          </>
+        ) : null}
+
+        {tab === 'statistics' ? (
+          <StatisticsScreen
+            groupId={groupId}
+            hasSubgroups={hasSubgroups}
+            members={group.members}
+            viewerId={viewerId}
+          />
+        ) : null}
+
+        {tab === 'manage' ? (
+          <ManageTab
+            group={group}
+            managed={managed}
+            readOnly={readOnly}
+            pairRooted={pairRooted}
+            ownArchived={ownArchived}
+            isOwner={isOwner}
+            alone={alone}
+            busy={busy}
+            onInvite={() => setSheet('invite')}
+            onRename={() => setSheet('rename')}
+            onArchiveToggle={confirmArchive}
+            onLeave={confirmLeave}
+            onDelete={confirmDelete}
+          />
+        ) : null}
       </View>
 
       <Modal
@@ -449,27 +509,6 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
         onRequestClose={() => setSheet(null)}>
         <ThemedView style={styles.container}>
           <SafeAreaView style={styles.container}>
-            {sheet === 'details' ? (
-              <DetailsSheet
-                group={group}
-                balances={balancesResult}
-                managed={managed}
-                readOnly={readOnly}
-                pairRooted={pairRooted}
-                ownArchived={ownArchived}
-                isOwner={isOwner}
-                alone={alone}
-                busy={busy}
-                onClose={() => setSheet(null)}
-                onAddFriends={() => setSheet('members')}
-                onInvite={() => setSheet('invite')}
-                onRename={() => setSheet('rename')}
-                onArchiveToggle={confirmArchive}
-                onLeave={confirmLeave}
-                onDelete={confirmDelete}
-              />
-            ) : null}
-
             {sheet === 'createSubgroup' ? (
               <CreateGroupScreen
                 parentId={groupId}
@@ -483,43 +522,30 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
               />
             ) : null}
 
-            {sheet === 'statistics' ? (
-              <StatisticsScreen
-                groupId={groupId}
-                hasSubgroups={hasSubgroups}
-                members={group.members}
-                viewerId={viewerId}
-                onClose={() => setSheet(null)}
-              />
-            ) : null}
-
-            {sheet === 'reimbursements' ? (
-              <ReimbursementsScreen
-                balances={balancesResult}
-                members={group.members}
-                viewerId={viewerId}
-                readOnly={readOnly}
-                onRecord={recordReimbursement}
-                onClose={() => setSheet(null)}
-              />
-            ) : null}
-
             {sheet === 'invite' ? (
+              <InviteSheet
+                onAddFriends={() => setSheet('friends')}
+                onShareLink={() => setSheet('link')}
+                onClose={() => setSheet(null)}
+              />
+            ) : null}
+
+            {sheet === 'link' ? (
               <>
                 <GroupInviteScreen groupId={groupId} groupName={group.name} />
                 <ThemedView style={styles.sheetFooter}>
-                  <Button label="Done" variant="secondary" onPress={() => setSheet('details')} />
+                  <Button label="Done" variant="secondary" onPress={() => setSheet('invite')} />
                 </ThemedView>
               </>
             ) : null}
 
-            {sheet === 'members' ? (
+            {sheet === 'friends' ? (
               <AddMembersSheet
                 group={group}
                 busy={busy}
-                onCancel={() => setSheet('details')}
+                onCancel={() => setSheet('invite')}
                 onAdd={(memberIds) => {
-                  setSheet('details');
+                  setSheet(null);
                   void run('members.add', () =>
                     addGroupMembers(authorizedFetch, groupId, memberIds),
                   );
@@ -531,9 +557,9 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
               <RenameSheet
                 current={group.name}
                 busy={busy}
-                onCancel={() => setSheet('details')}
+                onCancel={() => setSheet(null)}
                 onRename={(name) => {
-                  setSheet('details');
+                  setSheet(null);
                   void run('rename', () => updateGroup(authorizedFetch, groupId, { name }));
                 }}
               />
@@ -557,9 +583,10 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
                   // balance on its favorited row, and the transaction itself
                   // in the latest list (`docs/specs/home.md`).
                   announceTransactionChange();
-                  // Back to the plan it came from, remounted and re-read, so
-                  // the payment just recorded is gone from it.
-                  setSheet(prefill ? 'reimbursements' : null);
+                  // The Balances tab it may have come from is still under the
+                  // sheet, re-read above, so the payment just recorded is
+                  // already gone from its plan.
+                  setSheet(null);
                 }}
                 onDeleted={() => {
                   if (editingTransaction) {
@@ -570,7 +597,7 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
                   announceTransactionChange();
                   setSheet(null);
                 }}
-                onCancel={() => setSheet(prefill ? 'reimbursements' : null)}
+                onCancel={() => setSheet(null)}
               />
             ) : null}
           </SafeAreaView>
@@ -580,34 +607,18 @@ export function GroupScreen({ groupId, initialSheet = null }: GroupScreenProps) 
   );
 }
 
-/**
- * A read-only view of this group opened from its header: a soft brand chip,
- * quieter than a button but plainly tappable.
- */
-function HeaderChip({
-  label,
-  accessibilityLabel,
-  onPress,
-}: {
-  label: string;
-  accessibilityLabel: string;
-  onPress: () => void;
-}) {
+/** The way back, at the start of the header — this route has no native header. */
+function BackButton({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel="Back"
+      hitSlop={8}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.headerChip,
-        { backgroundColor: theme.primarySoft },
-        pressed && styles.pressed,
-      ]}>
-      <ThemedText type="smallBold" themeColor="onPrimarySoft">
-        {label}
-      </ThemedText>
+      style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+      <Icon name="back" size={26} color={theme.text} />
     </Pressable>
   );
 }
@@ -659,7 +670,7 @@ function SubgroupsSection({
 
   return (
     <View style={styles.subgroups}>
-      <View style={styles.subgroupsHeader}>
+      <View style={styles.sectionHeader}>
         <ThemedText type="overline" themeColor="textSecondary">
           Sub-groups
         </ThemedText>
@@ -866,9 +877,12 @@ function TransactionList({
   );
 }
 
-function DetailsSheet({
+/**
+ * Who is in the group and what can be done to it: the member list, with the
+ * way to bring more people in at its head, then the management actions.
+ */
+function ManageTab({
   group,
-  balances,
   managed,
   readOnly,
   pairRooted,
@@ -876,8 +890,6 @@ function DetailsSheet({
   isOwner,
   alone,
   busy,
-  onClose,
-  onAddFriends,
   onInvite,
   onRename,
   onArchiveToggle,
@@ -885,7 +897,6 @@ function DetailsSheet({
   onDelete,
 }: {
   group: GroupDetail;
-  balances: UseBalancesResult;
   managed: boolean;
   /** Itself or an ancestor archived — gates what the server actually blocks. */
   readOnly: boolean;
@@ -896,8 +907,6 @@ function DetailsSheet({
   isOwner: boolean;
   alone: boolean;
   busy: boolean;
-  onClose: () => void;
-  onAddFriends: () => void;
   onInvite: () => void;
   onRename: () => void;
   onArchiveToggle: () => void;
@@ -905,25 +914,29 @@ function DetailsSheet({
   onDelete: () => void;
 }) {
   return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">{group.name}</ThemedText>
-
-      <Card style={styles.sheetSection}>
-        <ThemedText type="overline" themeColor="textSecondary">
-          {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-        </ThemedText>
+    <ScrollView contentContainerStyle={styles.manage}>
+      <Card style={styles.manageSection}>
+        <View style={styles.sectionHeader}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
+          </ThemedText>
+          {managed && !readOnly && !pairRooted ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Invite"
+              disabled={busy}
+              onPress={onInvite}>
+              <ThemedText type="smallBold" themeColor="primary">
+                + Invite
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
         <View style={styles.members}>
           {group.members.map((member) => (
             <MemberRow key={member.id} member={member} />
           ))}
         </View>
-      </Card>
-
-      <Card style={styles.sheetSection}>
-        <ThemedText type="overline" themeColor="textSecondary">
-          Balances
-        </ThemedText>
-        <GroupBalances result={balances} members={group.members} />
       </Card>
 
       {managed ? (
@@ -934,17 +947,6 @@ function DetailsSheet({
             </ThemedText>
           ) : null}
 
-          {readOnly || pairRooted ? null : (
-            <>
-              <Button label="Add friends" variant="secondary" disabled={busy} onPress={onAddFriends} />
-              <Button
-                label="Share an invitation link"
-                variant="secondary"
-                disabled={busy}
-                onPress={onInvite}
-              />
-            </>
-          )}
           {readOnly ? null : (
             <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
           )}
@@ -979,6 +981,34 @@ function DetailsSheet({
           include other people, create a group.
         </ThemedText>
       )}
+    </ScrollView>
+  );
+}
+
+/**
+ * Where "+ Invite" leads: the two ways to bring someone into the group, side
+ * by side — pick from your friends, or hand out a link for anyone else.
+ */
+function InviteSheet({
+  onAddFriends,
+  onShareLink,
+  onClose,
+}: {
+  onAddFriends: () => void;
+  onShareLink: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <ThemedView style={styles.sheet}>
+      <ThemedText type="subtitle">Invite</ThemedText>
+      <ThemedText themeColor="textSecondary">
+        Add people you’re already friends with, or share a link with anyone else.
+      </ThemedText>
+
+      <View style={styles.actions}>
+        <Button label="Add friends" variant="secondary" onPress={onAddFriends} />
+        <Button label="Share an invitation link" variant="secondary" onPress={onShareLink} />
+      </View>
 
       <View style={styles.sheetFooter}>
         <Button label="Close" variant="ghost" onPress={onClose} />
@@ -1085,9 +1115,17 @@ function RenameSheet({
   );
 }
 
+/** A state with no group to show yet, still with a way back — there is no native header. */
 function Centered({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
   return (
     <ThemedView style={styles.container}>
+      <SafeAreaView edges={['top']}>
+        <View style={styles.centeredBack}>
+          <BackButton onPress={() => router.back()} />
+        </View>
+      </SafeAreaView>
       <View style={styles.centered}>{children}</View>
     </ThemedView>
   );
@@ -1103,43 +1141,49 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
+    paddingTop: Spacing.two,
     gap: Spacing.three,
   },
-  header: {
-    gap: Spacing.one,
-  },
+  // The hero's own row: the back arrow, the name block, the star.
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.two,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    marginTop: Spacing.one,
-  },
-  headerTitle: {
+  headerText: {
     flex: 1,
+    gap: Spacing.half,
   },
-  headerChip: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
+  back: {
+    width: 32,
+    height: 40,
+    marginLeft: -Spacing.one,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centeredBack: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
+    alignItems: 'flex-start',
   },
   balanceCard: {
-    marginTop: Spacing.two,
     gap: Spacing.one,
   },
   subgroups: {
     gap: Spacing.two,
   },
-  subgroupsHeader: {
+  // A section's own line: its overline title, and its "+" action at the end.
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  manage: {
+    gap: Spacing.three,
+    paddingBottom: Spacing.four,
+  },
+  manageSection: {
+    gap: Spacing.three,
   },
   subgroupRow: {
     flexDirection: 'row',
@@ -1194,9 +1238,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     borderRadius: Radius.pill,
-  },
-  sheetSection: {
-    gap: Spacing.three,
   },
   actions: {
     gap: Spacing.two,

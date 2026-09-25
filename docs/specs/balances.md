@@ -43,9 +43,10 @@ going group by group**.
 - The rule, unchanged: the payer is credited the amount, each concerned member is debited
   their share; an `income` reverses both signs. See `docs/specs/transactions.md`.
 
-**What changes here is visibility only.** The viewer's own balance moves out of the
-"Group details" sheet and onto the group screen itself. The full per-member list stays in
-the sheet.
+**What changes here is visibility only.** The viewer's own balance and the per-member list
+both live on the group screen's **Balances** tab: the viewer's own figure in a card at its
+head, then the plan to reimburse and "Where everyone stands"
+(`docs/specs/reimbursements.md`).
 
 ### One group, one figure
 

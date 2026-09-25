@@ -280,11 +280,11 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 
 - The group screen's current "expenses are coming" placeholder is replaced by the
   transaction list, becoming the primary content of a group; group management (rename,
-  archive, invite, members, delete) moves behind a secondary "Group details" sheet,
-  reachable from the header.
-- **Balances** show in that "Group details" sheet, alongside the member list: each
-  member's name next to their balance, coloured (owed to them / owing) rather than just
-  signed, zero shown neutrally.
+  archive, invite, members, delete) lives on the group screen's **Manage** tab, beside the
+  default **Transactions** tab.
+- **Balances** show on the **Balances** tab: each member's name next to their balance,
+  coloured (owed to them / owing) rather than just signed, zero shown neutrally, under
+  the reimbursement plan (`docs/specs/reimbursements.md`).
 - **Add transaction** is a sheet: kind, then a title row with a small square **category
   badge** to the left of the title field, showing just the emoji (`Other` by default);
   tapping it opens a small sheet with the category grid (emoji + label, single-select),

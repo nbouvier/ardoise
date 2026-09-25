@@ -161,7 +161,7 @@ describe('FriendsScreen', () => {
     expect(screen.getByText('Delete friend')).toBeTruthy();
   });
 
-  it('opens the shared group’s details from Manage', async () => {
+  it('opens the shared group’s Manage tab from Manage', async () => {
     mockFetchFriends.mockResolvedValue([ada]);
     await render(<FriendsScreen />);
     await screen.findByText('Ada Lovelace');
@@ -171,7 +171,7 @@ describe('FriendsScreen', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/groups/[id]',
-      params: { id: ada.groupId, openSheet: 'details' },
+      params: { id: ada.groupId, tab: 'manage' },
     });
   });
 
