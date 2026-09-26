@@ -131,8 +131,12 @@ or box**; a screen that styles its own is a bug in this document.
   Cancel and the confirming button — `danger` when `destructive`) centred over a `scrim`-dimmed
   screen, in place of the stock OS `Alert`. Tapping outside or the back gesture cancels.
   **It is the norm for every confirmation** — never reach for the OS `Alert` in new work.
-  Only used for generating a new invitation link so far; the existing `Alert`
-  confirmations (leave, delete, …) still have to be moved onto it.
+  Every confirmation (leave, delete, join, regenerate…) and every failure notice goes
+  through it — no OS `Alert` is left. Screens use the **`useDialog()`** hook
+  (`components/use-dialog.tsx`): `confirm({ title, message, confirmLabel, destructive,
+  onConfirm })` asks, `inform(title, message)` tells with a single "OK" (`confirmOnly`,
+  no Cancel), and the screen renders the hook's `dialog` once. `useGroupRowActions`
+  exposes its own `dialog` for the screens that use it.
 - **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
   `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
   no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
@@ -192,7 +196,7 @@ or box**; a screen that styles its own is a bug in this document.
 
 - One **primary** button per screen. Everything else is `secondary` or `ghost`.
 - A destructive action is a **red text button**, never a filled red one, and always
-  confirms through an `Alert` that states what is lost.
+  confirms through a `ConfirmDialog` that states what is lost.
 - A section heading inside a screen or sheet is an **`overline`**, not a bold sentence.
 - **Every screen has a banner** — the `PageHero` wash with two lines (the app then the
   page for a tab screen, the group's name then its member count for a group), never a
@@ -342,7 +346,7 @@ joined hide behind a "Show sub-groups I'm not in (n)" toggle, mirroring the arch
 pattern; revealed, they render `muted` with "n members · not joined" and no balance line
 (never being a member, it is always exactly zero) and **no star or menu** — there is no
 membership row to favorite on, or manage — and tapping one opens a "Join this group?"
-`Alert` instead of navigating. The section renders
+`ConfirmDialog` instead of navigating. The section renders
 nothing when there are no sub-groups and the group is read-only, so it never becomes a
 permanent empty box.
 

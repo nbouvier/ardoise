@@ -13,6 +13,8 @@ export interface ConfirmDialogProps {
   confirmLabel: string;
   /** Draws the confirming button as the red destructive one. */
   destructive?: boolean;
+  /** A notice rather than a question: no Cancel, just the one button. */
+  confirmOnly?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   destructive = false,
+  confirmOnly = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -46,7 +49,7 @@ export function ConfirmDialog({
               <ThemedText type="sectionTitle">{title}</ThemedText>
               <ThemedText themeColor="textSecondary">{message}</ThemedText>
               <View style={styles.actions}>
-                <Button label="Cancel" variant="ghost" onPress={onCancel} />
+                {confirmOnly ? null : <Button label="Cancel" variant="ghost" onPress={onCancel} />}
                 <Button
                   label={confirmLabel}
                   variant={destructive ? 'danger' : 'primary'}

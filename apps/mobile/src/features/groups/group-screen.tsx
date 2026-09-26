@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -59,6 +58,7 @@ import { GroupActionsMenu } from './group-actions-menu';
 import { InvitePanel } from './invite-panel';
 import { groupsChanged } from './groups-changed';
 import { useGroup } from './use-group';
+import { useDialog } from '@/components/use-dialog';
 import { useGroupRowActions } from './use-group-row-actions';
 
 /**
@@ -118,6 +118,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   // just the one row mid-request.
   const [favoriteBusySubgroupId, setFavoriteBusySubgroupId] = useState<string | null>(null);
   const subgroupActions = useGroupRowActions();
+  const { dialog, confirm, inform } = useDialog();
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the Balances tab: a recorded transaction
   // refreshes it from wherever the form was opened, and the tab is not
@@ -140,7 +141,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       return true;
     } catch (error: unknown) {
       logger.warn(`groups.${what}.failed`, errorFields(error));
-      Alert.alert('That didn’t work', 'Check your connection and try again.');
+      inform('That didn’t work', 'Check your connection and try again.');
       return false;
     } finally {
       setBusy(false);
@@ -248,7 +249,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       .then(() => groupsChanged.notify())
       .catch((error: unknown) => {
         logger.warn('groups.favorite.failed', errorFields(error));
-        Alert.alert('That didn’t work', 'Check your connection and try again.');
+        inform('That didn’t work', 'Check your connection and try again.');
       })
       .finally(() => setFavoriteBusySubgroupId(null));
   }
@@ -264,62 +265,55 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       ? `Leave “${group!.name}”? You’re the only member, so the group${scope} is deleted.`
       : `Leave “${group!.name}”?${hasSubgroups ? ' This also removes you from its sub-groups.' : ''}`;
 
-    Alert.alert('Leave group', warning, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: () => {
-          void run('leave', async () => {
-            await removeGroupMember(authorizedFetch, groupId, viewerId);
-            return null;
-          }).then((ok) => ok && leaveScreen());
-        },
+    confirm({
+      title: 'Leave group',
+      message: warning,
+      confirmLabel: 'Leave',
+      destructive: true,
+      onConfirm: () => {
+        void run('leave', async () => {
+          await removeGroupMember(authorizedFetch, groupId, viewerId);
+          return null;
+        }).then((ok) => ok && leaveScreen());
       },
-    ]);
+    });
   }
 
   function confirmDelete() {
     const scope = hasSubgroups ? ', and every sub-group nested inside it,' : '';
-    Alert.alert(
-      'Delete group',
-      `Delete “${group!.name}” permanently? Everything in it${scope} is lost, for everyone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void run('delete', async () => {
-              await deleteGroup(authorizedFetch, groupId);
-              return null;
-            }).then((ok) => ok && leaveScreen());
-          },
-        },
-      ],
-    );
+    confirm({
+      title: 'Delete group',
+      message: `Delete “${group!.name}” permanently? Everything in it${scope} is lost, for everyone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => {
+        void run('delete', async () => {
+          await deleteGroup(authorizedFetch, groupId);
+          return null;
+        }).then((ok) => ok && leaveScreen());
+      },
+    });
   }
 
   function confirmJoin(subgroup: SubgroupSummary) {
-    Alert.alert('Join this group?', `Join “${subgroup.name}”?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Join',
-        onPress: () => {
-          setBusy(true);
-          joinGroup(authorizedFetch, subgroup.id)
-            .then(() => {
-              groupsChanged.notify();
-              openGroup(subgroup.id);
-            })
-            .catch((error: unknown) => {
-              logger.warn('groups.join.failed', errorFields(error));
-              Alert.alert('That didn’t work', 'Check your connection and try again.');
-            })
-            .finally(() => setBusy(false));
-        },
+    confirm({
+      title: 'Join this group?',
+      message: `Join “${subgroup.name}”?`,
+      confirmLabel: 'Join',
+      onConfirm: () => {
+        setBusy(true);
+        joinGroup(authorizedFetch, subgroup.id)
+          .then(() => {
+            groupsChanged.notify();
+            openGroup(subgroup.id);
+          })
+          .catch((error: unknown) => {
+            logger.warn('groups.join.failed', errorFields(error));
+            inform('That didn’t work', 'Check your connection and try again.');
+          })
+          .finally(() => setBusy(false));
       },
-    ]);
+    });
   }
 
   function openNewTransaction() {
@@ -583,6 +577,9 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {dialog}
+      {subgroupActions.dialog}
     </ThemedView>
   );
 }

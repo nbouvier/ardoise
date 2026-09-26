@@ -9,7 +9,6 @@ import type {
 } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
@@ -674,37 +673,24 @@ describe('GroupScreen', () => {
     });
 
     it('asks for confirmation before joining an unjoined sub-group', async () => {
-      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
-
-      await render(<GroupScreen groupId={trip.id} />);
-      await fireEvent.press(
-        screen.getByText('Show sub-groups I’m not in (1)'),
-      );
-      await fireEvent.press(await screen.findByText('Bastia weekend'));
-
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Join this group?',
-        expect.stringContaining('Bastia weekend'),
-        expect.anything(),
-      );
-      expect(mockJoinGroup).not.toHaveBeenCalled();
-
-      alertSpy.mockRestore();
-    });
-
-    it('joins and navigates once confirmed', async () => {
-      const alertSpy = jest
-        .spyOn(Alert, 'alert')
-        .mockImplementation((_title, _message, buttons) => {
-          const confirm = buttons?.find((button) => button.text === 'Join');
-          confirm?.onPress?.();
-        });
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);
       await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
       await fireEvent.press(await screen.findByText('Bastia weekend'));
+
+      expect(await screen.findByText('Join this group?')).toBeTruthy();
+      expect(screen.getByText(/Join “Bastia weekend”/)).toBeTruthy();
+      expect(mockJoinGroup).not.toHaveBeenCalled();
+    });
+
+    it('joins and navigates once confirmed', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+      await fireEvent.press(await screen.findByText('Bastia weekend'));
+      await fireEvent.press(await screen.findByRole('button', { name: 'Join' }));
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith({
@@ -713,8 +699,6 @@ describe('GroupScreen', () => {
         });
       });
       expect(mockJoinGroup).toHaveBeenCalled();
-
-      alertSpy.mockRestore();
     });
 
     it('offers sub-groups on a pair group too, just like a standard one', async () => {

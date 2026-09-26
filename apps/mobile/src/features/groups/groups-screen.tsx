@@ -179,6 +179,8 @@ export function GroupsScreen() {
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {rowActions.dialog}
     </ThemedView>
   );
 }

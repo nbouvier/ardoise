@@ -1,7 +1,6 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
 
@@ -146,8 +145,23 @@ describe('GroupsScreen', () => {
       });
     });
 
+    it('tells them in the app’s own dialog when an action fails, and OK dismisses it', async () => {
+      mockFetchGroups.mockResolvedValue([trip]);
+      mockUpdateGroup.mockRejectedValueOnce(new Error('offline'));
+
+      await render(<GroupsScreen />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
+      await fireEvent.press(screen.getByText('Archive group'));
+
+      expect(await screen.findByText('That didn’t work')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'OK' }));
+      await waitFor(() => expect(screen.queryByText('That didn’t work')).toBeNull());
+    });
+
     it('deletes only once the confirmation is accepted', async () => {
-      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
       mockFetchGroups.mockResolvedValue([trip]);
 
       await render(<GroupsScreen />);
@@ -155,35 +169,25 @@ describe('GroupsScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
       await fireEvent.press(screen.getByText('Delete group'));
 
-      expect(alertSpy).toHaveBeenCalledWith(
-        'Delete group',
-        expect.stringContaining('Corsica 2026'),
-        expect.anything(),
-      );
+      expect(await screen.findByText(/Delete “Corsica 2026” permanently/)).toBeTruthy();
       expect(mockDeleteGroup).not.toHaveBeenCalled();
 
-      alertSpy.mockRestore();
+      await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+      expect(mockDeleteGroup).not.toHaveBeenCalled();
     });
 
     it('deletes the group once confirmed', async () => {
-      const alertSpy = jest
-        .spyOn(Alert, 'alert')
-        .mockImplementation((_title, _message, buttons) => {
-          const confirm = buttons?.find((button) => button.text === 'Delete');
-          confirm?.onPress?.();
-        });
       mockFetchGroups.mockResolvedValue([trip]);
 
       await render(<GroupsScreen />);
       await screen.findByText('Corsica 2026');
       await fireEvent.press(screen.getByRole('button', { name: 'Actions for Corsica 2026' }));
       await fireEvent.press(screen.getByText('Delete group'));
+      await fireEvent.press(await screen.findByRole('button', { name: 'Delete' }));
 
       await waitFor(() => {
         expect(mockDeleteGroup).toHaveBeenCalledWith(expect.anything(), trip.id);
       });
-
-      alertSpy.mockRestore();
     });
   });
 

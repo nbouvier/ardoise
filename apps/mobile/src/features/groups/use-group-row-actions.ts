@@ -1,7 +1,7 @@
 import type { GroupKind } from '@splitcount/shared';
-import { useState } from 'react';
-import { Alert } from 'react-native';
+import { useState, type ReactNode } from 'react';
 
+import { useDialog } from '@/components/use-dialog';
 import { useAuth } from '@/features/auth/use-auth';
 import { deleteGroup, removeGroupMember, updateGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
@@ -22,6 +22,8 @@ export interface ActionableGroup {
 export interface UseGroupRowActionsResult {
   /** The one group whose action is mid-request, if any — disables its own menu. */
   busyId: string | null;
+  /** The confirmation and error dialogs — the screen renders it once. */
+  dialog: ReactNode;
   archiveToggle: (group: ActionableGroup) => void;
   confirmLeave: (group: ActionableGroup) => void;
   confirmDelete: (group: ActionableGroup) => void;
@@ -38,6 +40,7 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
   const { authorizedFetch, state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { dialog, confirm, inform } = useDialog();
 
   function run(group: ActionableGroup, what: string, action: () => Promise<unknown>) {
     setBusyId(group.id);
@@ -45,7 +48,7 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
       .then(() => groupsChanged.notify())
       .catch((error: unknown) => {
         logger.warn(`groups.${what}.failed`, errorFields(error));
-        Alert.alert('That didn’t work', 'Check your connection and try again.');
+        inform('That didn’t work', 'Check your connection and try again.');
       })
       .finally(() => setBusyId(null));
   }
@@ -66,15 +69,14 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
       ? `Leave “${group.name}”? You’re the only member, so the group${hasSubgroups ? ' and every sub-group nested inside it' : ''} is deleted.`
       : `Leave “${group.name}”?${hasSubgroups ? ' This also removes you from its sub-groups.' : ''}`;
 
-    Alert.alert('Leave group', warning, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: () =>
-          run(group, 'leave', () => removeGroupMember(authorizedFetch, group.id, viewerId)),
-      },
-    ]);
+    confirm({
+      title: 'Leave group',
+      message: warning,
+      confirmLabel: 'Leave',
+      destructive: true,
+      onConfirm: () =>
+        run(group, 'leave', () => removeGroupMember(authorizedFetch, group.id, viewerId)),
+    });
   }
 
   function confirmDelete(group: ActionableGroup) {
@@ -82,35 +84,25 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
       // Deleting an implicit group works like removing the friend it belongs
       // to — the server treats it exactly that way (`docs/specs/groups.md`) —
       // so the confirmation reads as a friend removal, not a group deletion.
-      Alert.alert(
-        'Remove friend',
-        `Remove ${group.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: () => run(group, 'delete', () => deleteGroup(authorizedFetch, group.id)),
-          },
-        ],
-      );
+      confirm({
+        title: 'Remove friend',
+        message: `Remove ${group.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
+        confirmLabel: 'Remove',
+        destructive: true,
+        onConfirm: () => run(group, 'delete', () => deleteGroup(authorizedFetch, group.id)),
+      });
       return;
     }
 
     const hasSubgroups = (group.subgroupCount ?? 0) > 0;
-    Alert.alert(
-      'Delete group',
-      `Delete “${group.name}” permanently? Everything in it${hasSubgroups ? ', and every sub-group nested inside it,' : ''} is lost, for everyone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => run(group, 'delete', () => deleteGroup(authorizedFetch, group.id)),
-        },
-      ],
-    );
+    confirm({
+      title: 'Delete group',
+      message: `Delete “${group.name}” permanently? Everything in it${hasSubgroups ? ', and every sub-group nested inside it,' : ''} is lost, for everyone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => run(group, 'delete', () => deleteGroup(authorizedFetch, group.id)),
+    });
   }
 
-  return { busyId, archiveToggle, confirmLeave, confirmDelete };
+  return { busyId, dialog, archiveToggle, confirmLeave, confirmDelete };
 }

@@ -118,6 +118,7 @@ export function HomeScreen() {
           </Section>
         </View>
       </ScrollView>
+      {rowActions.dialog}
     </ThemedView>
   );
 }

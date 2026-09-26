@@ -1,7 +1,7 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddMenuButton } from '@/components/add-menu-button';
@@ -12,6 +12,7 @@ import { FavoriteStar } from '@/components/favorite-star';
 import { IconMenuButton } from '@/components/icon-menu-button';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
+import { useDialog } from '@/components/use-dialog';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { groupsChanged } from '@/features/groups/groups-changed';
@@ -88,6 +89,7 @@ export function FriendsScreen() {
   const theme = useTheme();
   const [inviting, setInviting] = useState(false);
   const [joining, setJoining] = useState(false);
+  const { dialog, confirm, inform } = useDialog();
 
   /** Open the group shared with a friend — it always exists by now. */
   function handleOpen(friend: FriendEntry) {
@@ -103,26 +105,21 @@ export function FriendsScreen() {
   }
 
   function handleRemove(friend: FriendEntry) {
-    Alert.alert(
-      'Delete friend',
-      `Delete ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            remove(friend.id)
-              // The pair group went with the friendship.
-              .then(() => groupsChanged.notify())
-              .catch((error: unknown) => {
-                logger.warn('friends.remove.failed', errorFields(error));
-                Alert.alert('Could not remove', 'Please try again.');
-              });
-          },
-        },
-      ],
-    );
+    confirm({
+      title: 'Delete friend',
+      message: `Delete ${friend.name} from your friends? The group you share with them, and everything in it, is deleted for you both.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => {
+        remove(friend.id)
+          // The pair group went with the friendship.
+          .then(() => groupsChanged.notify())
+          .catch((error: unknown) => {
+            logger.warn('friends.remove.failed', errorFields(error));
+            inform('Could not remove', 'Please try again.');
+          });
+      },
+    });
   }
 
   const friendCount =
@@ -217,6 +214,8 @@ export function FriendsScreen() {
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {dialog}
     </ThemedView>
   );
 }

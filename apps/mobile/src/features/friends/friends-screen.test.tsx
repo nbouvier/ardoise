@@ -1,6 +1,5 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { groupsChanged } from '@/features/groups/groups-changed';
@@ -175,10 +174,7 @@ describe('FriendsScreen', () => {
     });
   });
 
-  it('removes the friend once Delete friend is confirmed', async () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-      buttons?.find((button) => button.style === 'destructive')?.onPress?.();
-    });
+  it('removes the friend once Delete friend is confirmed in the dialog', async () => {
     mockFetchFriends.mockResolvedValue([ada]);
     await render(<FriendsScreen />);
     await screen.findByText('Ada Lovelace');
@@ -186,9 +182,11 @@ describe('FriendsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ada Lovelace' }));
     await fireEvent.press(screen.getByText('Delete friend'));
 
-    expect(alert).toHaveBeenCalledWith('Delete friend', expect.any(String), expect.any(Array));
+    expect(await screen.findByText(/Delete Ada Lovelace from your friends/)).toBeTruthy();
+    expect(mockRemoveFriend).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(mockRemoveFriend).toHaveBeenCalledTimes(1));
-    alert.mockRestore();
   });
 
   it('toggles a friend’s favorite from their row', async () => {

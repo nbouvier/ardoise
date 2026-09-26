@@ -9,7 +9,7 @@ import {
   type TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -18,6 +18,7 @@ import { Pill } from '@/components/pill';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useDialog } from '@/components/use-dialog';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -118,6 +119,7 @@ export function TransactionFormScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const { dialog, confirm } = useDialog();
   const selectedCategory = categoryDefinition(category);
 
   const amountValid = amountCents !== null && amountCents > 0;
@@ -155,7 +157,10 @@ export function TransactionFormScreen({
         : await createTransaction(authorizedFetch, group.id, request);
       onSaved(saved);
     } catch (cause: unknown) {
-      logger.warn(initial ? 'transactions.update.failed' : 'transactions.create.failed', errorFields(cause));
+      logger.warn(
+        initial ? 'transactions.update.failed' : 'transactions.create.failed',
+        errorFields(cause),
+      );
       setError('We couldn’t save this transaction. Check your connection and try again.');
     } finally {
       setBusy(false);
@@ -166,23 +171,22 @@ export function TransactionFormScreen({
     if (!initial) {
       return;
     }
-    Alert.alert('Delete transaction', `Delete “${initial.title}” permanently?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          setBusy(true);
-          deleteTransaction(authorizedFetch, group.id, initial.id)
-            .then(onDeleted)
-            .catch((cause: unknown) => {
-              logger.warn('transactions.delete.failed', errorFields(cause));
-              setError('We couldn’t delete this transaction. Check your connection and try again.');
-              setBusy(false);
-            });
-        },
+    confirm({
+      title: 'Delete transaction',
+      message: `Delete “${initial.title}” permanently?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => {
+        setBusy(true);
+        deleteTransaction(authorizedFetch, group.id, initial.id)
+          .then(onDeleted)
+          .catch((cause: unknown) => {
+            logger.warn('transactions.delete.failed', errorFields(cause));
+            setError('We couldn’t delete this transaction. Check your connection and try again.');
+            setBusy(false);
+          });
       },
-    ]);
+    });
   }
 
   return (
@@ -318,15 +322,13 @@ export function TransactionFormScreen({
                   setCategoryPickerOpen(false);
                 }}
               />
-              <Button
-                label="Close"
-                variant="ghost"
-                onPress={() => setCategoryPickerOpen(false)}
-              />
+              <Button label="Close" variant="ghost" onPress={() => setCategoryPickerOpen(false)} />
             </View>
           </SafeAreaView>
         </ThemedView>
       </Modal>
+
+      {dialog}
     </ScrollView>
   );
 }
