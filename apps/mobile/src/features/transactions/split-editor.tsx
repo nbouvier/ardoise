@@ -1,4 +1,9 @@
-import type { AmountSplitParticipant, FriendSummary, SharesSplitParticipant, SplitInput } from '@splitcount/shared';
+import type {
+  AmountSplitParticipant,
+  FriendSummary,
+  SharesSplitParticipant,
+  SplitInput,
+} from '@splitcount/shared';
 import { splitByShares } from '@splitcount/shared';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -56,7 +61,8 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
       return;
     }
     if (mode === 'amount' && value.mode === 'shares') {
-      const shares = value.participants.length > 0 ? splitByShares(amountCents, value.participants) : [];
+      const shares =
+        value.participants.length > 0 ? splitByShares(amountCents, value.participants) : [];
       onChange({
         mode: 'amount',
         participants: shares.map((s) => ({ userId: s.userId, amount: s.shareCents })),
@@ -76,7 +82,9 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
     const clamped = Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, weight));
     onChange({
       mode: 'shares',
-      participants: value.participants.map((p) => (p.userId === userId ? { ...p, weight: clamped } : p)),
+      participants: value.participants.map((p) =>
+        p.userId === userId ? { ...p, weight: clamped } : p,
+      ),
     });
   }
 
@@ -117,8 +125,14 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
                   onToggle={() => toggleMember(member.id)}>
                   {participant ? (
                     <View style={styles.shareControl}>
-                      <Stepper value={participant.weight} onChange={(w) => setWeight(member.id, w)} />
-                      <ThemedText type="small" themeColor="textSecondary" style={styles.previewAmount}>
+                      <Stepper
+                        value={participant.weight}
+                        onChange={(w) => setWeight(member.id, w)}
+                      />
+                      <ThemedText
+                        type="small"
+                        themeColor="textSecondary"
+                        style={styles.previewAmount}>
                         {preview ? `= ${centsToText(preview.get(member.id) ?? 0)}` : ''}
                       </ThemedText>
                     </View>
@@ -183,7 +197,7 @@ function MemberRow({
         accessibilityState={{ checked: selected }}
         accessibilityLabel={member.name}
         onPress={onToggle}
-        style={styles.memberPress}>
+        style={({ pressed }) => [styles.memberPress, pressed && styles.pressed]}>
         <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
         <ThemedText style={styles.name} numberOfLines={1}>
           {member.name}
@@ -216,9 +230,12 @@ function Stepper({ value, onChange }: { value: number; onChange: (value: number)
         accessibilityLabel="Decrease weight"
         disabled={value <= MIN_WEIGHT}
         onPress={() => onChange(value - 1)}
-        style={[
+        style={({ pressed }) => [
           styles.stepperButton,
-          { backgroundColor: theme.surface, borderColor: theme.border },
+          {
+            backgroundColor: pressed ? theme.primarySoft : theme.surface,
+            borderColor: theme.border,
+          },
           value <= MIN_WEIGHT && styles.stepperDisabled,
         ]}>
         <ThemedText type="smallBold" themeColor="primary">
@@ -232,7 +249,13 @@ function Stepper({ value, onChange }: { value: number; onChange: (value: number)
         accessibilityRole="button"
         accessibilityLabel="Increase weight"
         onPress={() => onChange(value + 1)}
-        style={[styles.stepperButton, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        style={({ pressed }) => [
+          styles.stepperButton,
+          {
+            backgroundColor: pressed ? theme.primarySoft : theme.surface,
+            borderColor: theme.border,
+          },
+        ]}>
         <ThemedText type="smallBold" themeColor="primary">
           +
         </ThemedText>
@@ -290,6 +313,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  pressed: {
+    opacity: 0.6,
   },
   stepperButton: {
     width: 30,

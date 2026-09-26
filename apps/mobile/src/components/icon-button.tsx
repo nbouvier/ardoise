@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, type GestureResponderEvent } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
+import { Radius } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export interface IconButtonProps {
   icon: IconName;
@@ -14,7 +16,8 @@ export interface IconButtonProps {
 /**
  * A bare, tappable glyph for an action that belongs to the block it sits in
  * (a card's own share / copy / refresh), too small a thing for a `Button`.
- * The hit area is padded out past the 32pt glyph box.
+ * The hit area is padded out past the 32pt glyph box; pressed, a round brand
+ * wash appears behind the glyph.
  */
 export function IconButton({
   icon,
@@ -23,6 +26,8 @@ export function IconButton({
   onPress,
   disabled = false,
 }: IconButtonProps) {
+  const theme = useTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -31,7 +36,11 @@ export function IconButton({
       disabled={disabled}
       hitSlop={6}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, (pressed || disabled) && styles.dimmed]}>
+      style={({ pressed }) => [
+        styles.button,
+        pressed && { backgroundColor: theme.primarySoft },
+        disabled && styles.dimmed,
+      ]}>
       <Icon name={icon} size={20} color={color} />
     </Pressable>
   );
@@ -41,6 +50,7 @@ const styles = StyleSheet.create({
   button: {
     width: 32,
     height: 32,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

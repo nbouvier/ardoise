@@ -38,7 +38,8 @@ export function Breadcrumb({ ancestors, onOpen }: BreadcrumbProps) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={ancestor.name}
-              onPress={() => onOpen(ancestor.id)}>
+              onPress={() => onOpen(ancestor.id)}
+              style={({ pressed }) => pressed && styles.pressed}>
               <ThemedText type="smallBold" themeColor="primary" numberOfLines={1}>
                 {ancestor.name}
               </ThemedText>
@@ -62,5 +63,8 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  pressed: {
+    opacity: 0.5,
   },
 });

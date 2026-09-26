@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '@/components/card';
 import { Icon, type IconName } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface IconMenuOption {
@@ -30,7 +30,7 @@ function MenuRow({ icon, label, destructive = false, onPress }: IconMenuOption) 
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: theme.primarySoft }]}>
       <Icon name={icon} size={18} color={color} />
       <ThemedText type="smallBold" themeColor={destructive ? 'danger' : undefined}>
         {label}
@@ -40,11 +40,14 @@ function MenuRow({ icon, label, destructive = false, onPress }: IconMenuOption) 
 }
 
 /**
- * One item's own "⋮" action menu — the same bottom-sheet-of-rows language as
- * `AddMenuButton`, anchored to a small icon instead of a full-width footer
- * button, for actions that belong to a single row rather than the screen.
+ * One item's own "⋮" action menu: a sheet of icon + label rows, anchored to a
+ * small icon, for actions that belong to a single row rather than the screen.
  */
-export function IconMenuButton({ accessibilityLabel, options, disabled = false }: IconMenuButtonProps) {
+export function IconMenuButton({
+  accessibilityLabel,
+  options,
+  disabled = false,
+}: IconMenuButtonProps) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
 
@@ -56,7 +59,10 @@ export function IconMenuButton({ accessibilityLabel, options, disabled = false }
         disabled={disabled}
         hitSlop={8}
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.trigger, pressed && styles.pressed]}>
+        style={({ pressed }) => [
+          styles.trigger,
+          pressed && { backgroundColor: theme.primarySoft },
+        ]}>
         <Icon name="more" size={18} color={theme.textSecondary} filled />
       </Pressable>
 
@@ -90,6 +96,7 @@ const styles = StyleSheet.create({
   trigger: {
     width: 32,
     height: 32,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -114,11 +121,9 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
   },
   menuDivider: {
     height: 1,
-  },
-  pressed: {
-    opacity: 0.6,
   },
 });

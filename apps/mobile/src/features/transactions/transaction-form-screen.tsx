@@ -212,7 +212,10 @@ export function TransactionFormScreen({
             accessibilityRole="button"
             accessibilityLabel={`Category: ${selectedCategory?.label ?? 'Other'}`}
             onPress={() => setCategoryPickerOpen(true)}
-            style={[styles.categoryBadge, { backgroundColor: theme.primarySoft }]}>
+            style={({ pressed }) => [
+              styles.categoryBadge,
+              { backgroundColor: pressed ? theme.backgroundSelected : theme.primarySoft },
+            ]}>
             <ThemedText style={styles.categoryEmoji}>{selectedCategory?.emoji ?? '🧾'}</ThemedText>
           </Pressable>
           <TextField

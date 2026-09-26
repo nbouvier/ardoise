@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Icon } from '@/components/icon';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface FavoriteStarProps {
@@ -36,7 +37,7 @@ export function FavoriteStar({
       disabled={disabled}
       hitSlop={8}
       onPress={onToggle}
-      style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.hit, pressed && { backgroundColor: theme.primarySoft }]}>
       <Icon
         name="star"
         size={size}
@@ -50,8 +51,6 @@ export function FavoriteStar({
 const styles = StyleSheet.create({
   hit: {
     padding: 4,
-  },
-  pressed: {
-    opacity: 0.6,
+    borderRadius: Radius.pill,
   },
 });

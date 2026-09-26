@@ -6,7 +6,12 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-import { formatOccurredOn, parseOccurredOn, toOccurredOn, type DatePickerFieldProps } from './date-picker-props';
+import {
+  formatOccurredOn,
+  parseOccurredOn,
+  toOccurredOn,
+  type DatePickerFieldProps,
+} from './date-picker-props';
 
 export type { DatePickerFieldProps } from './date-picker-props';
 
@@ -36,7 +41,10 @@ export function DatePickerField({ value, onChange }: DatePickerFieldProps) {
           accessibilityRole="button"
           accessibilityLabel="Date"
           onPress={() => setDialogOpen(true)}
-          style={[styles.field, { backgroundColor: theme.backgroundElement }]}>
+          style={({ pressed }) => [
+            styles.field,
+            { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+          ]}>
           <ThemedText>{formatOccurredOn(value)}</ThemedText>
         </Pressable>
         {dialogOpen ? (
