@@ -84,7 +84,8 @@ own.
 - **`cardShadow(dark)`** — a soft violet-tinted lift on light; **flat on dark**, where a
   shadow only muddies the canvas and `border` carries the separation instead.
 - **`Fonts`** per platform: `sans`, `serif`, `rounded`, `mono`.
-- **Layout** — `MaxContentWidth` (800), `BottomTabInset` per platform.
+- **Layout** — `MaxContentWidth` (800). The bottom tab bar takes its own room below the
+  pages (it does not float over them), so a tab's content needs no bottom inset for it.
 
 ## Theming
 
@@ -167,12 +168,51 @@ or box**; a screen that styles its own is a bug in this document.
   home screen's own hero: three overlapping radial gradients (brand, accent, a third
   medallion hue) fading to transparent over a `primarySoft` ground, filling whatever it is
   placed behind. Drawn, not blurred — see Home below.
-- **`AddMenuButton`** — a list screen's single, full-width footer `Button` (e.g. "New
-  group"). Tapping it opens a bottom sheet of icon + label rows for the couple of related
-  choices behind it (create or join) — the sheet replaces the button in place rather than
-  popping out from beside it, so there is no separate position to get wrong.
-- **`IconMenuButton`** — the same icon-+-label-rows sheet as `AddMenuButton`, anchored to a
-  small "⋮" icon (the `more` glyph, filled) instead of a full-width footer button, centred
+- **`TextAction`** — every quiet text action in the brand colour: a page's "+ Verb" ("+ Join
+  or Create", "+ Add or Invite", at the top of the page's content, right-aligned, *not* in
+  the banner — it opens one page that holds every way of doing the thing), a list's own
+  "+ Add" / "+ Create" / "+ Invite", and the "Show archived" style toggles. Pressed, a soft
+  `primarySoft` pill appears behind the words; its padding is taken back with a negative
+  margin, so the words sit exactly where plain text would.
+- **`DismissiblePage`** — a page that opened from the bottom (a group, a friend's, a
+  sub-group's, "New group", "New friend"): its banner is a drag handle. Pulled down, the
+  whole page follows the finger; past 120 pt (or flicked) it slides away and closes,
+  otherwise it springs back. Off on iOS, where these pages are native sheets that already
+  do this.
+- **`SheetModal`** — how a page opens *over* another from inside a screen ("New group",
+  "New friend", the transaction form): sliding up; a native page sheet on iOS, a
+  see-through window elsewhere so a `DismissiblePage` pulled down reveals what is under
+  it; with its own gesture root.
+- **`Pager`** — sibling pages side by side, swiped between: a group's own tabs, and the
+  app's bottom tabs (through `PagerTabs`). The pages follow the finger one to one, so the
+  next one is seen coming in; 40 % of the width, or a flick (800 pt/s) past 12 %, turns
+  the page, one at most, and a long drag ended by a flick back stays. Its `position` (in
+  pages, fractional mid-swipe) is shared with the bar above or below, whose indicator
+  travels with it. A page is drawn once it is shown or next to the one shown, then kept;
+  only the page shown is visible to a screen reader.
+- **`PagerTabs`** — the navigator of `app/(tabs)` on iOS and Android: a `Pager` of the
+  four tab screens over a Material-style bar (icon over label, `surface`, a hairline on
+  top) whose `primarySoft` pill slides from tab to tab with the pages. It replaces the
+  native tab bar, whose pages cannot be dragged in and whose indicator cannot follow a
+  finger. The web keeps its floating pill bar (`app-tabs.web.tsx`).
+- **`TabBar`** — a screen's own tabs (a group's): an underlined row whose underline slides
+  from tab to tab, following the `Pager`'s `position` when given it.
+- **`RefreshableScrollView`** — a scroll view with pull to refresh. A deliberate pull:
+  on Android a drawn indicator that asks for 192 pt of finger travel (the pull resists,
+  at half the finger), only when the pull *starts* at the top — a scroll up that runs
+  into the top does not count — with an arrow that winds up and brightens once letting
+  go would refresh. iOS keeps its native `RefreshControl`, which already asks for a
+  long pull.
+- **`BackButton`** — the way out of a page with no native header: an arrow, or — in a
+  banner, at its far end — the downward chevron (`collapse` icon) that folds the page
+  away. Takes the place of a Cancel button.
+- **`OrDivider`** — a padded rule with "OR" in the middle, between two alternative ways of
+  doing the same thing (creating a group / joining one; inviting a friend / entering a
+  code).
+- **`ListDivider`** — the padded hairline between the Groups and Friends lists' favorites
+  and the rest.
+- **`IconMenuButton`** — a sheet of icon + label rows anchored to a
+  small "⋮" icon (the `more` glyph, filled), centred
   on screen rather than docked to the bottom — for actions that belong to one row in a
   list, not to the screen as a whole. An option can be marked `destructive`, rendering its
   icon and label in `danger`.
@@ -192,6 +232,15 @@ or box**; a screen that styles its own is a bug in this document.
 
 ### Rules of thumb
 
+- **Everything tappable answers the touch** (a design rule, not a nicety). A text action
+  or a tab shows a `primarySoft` wash behind it; an icon (`IconButton`, `BackButton`,
+  `FavoriteStar`, a "⋮") a round `primarySoft` wash; a menu row a rounded one; a `Button`
+  or a `Card` dims and shrinks a hair; a filled field darkens to `backgroundSelected`.
+  A new pressable picks one of these — never nothing.
+- **Motion follows the finger** (see Motion below): a page that opened from the bottom
+  closes back down, a banner can be pulled down to close its page, and siblings side by
+  side (bottom tabs, a group's tabs) are one swipe apart.
+
 - One **primary** button per screen. Everything else is `secondary` or `ghost`.
 - A destructive action is a **red text button**, never a filled red one, and always
   confirms through a `ConfirmDialog` that states what is lost.
@@ -202,17 +251,17 @@ or box**; a screen that styles its own is a bug in this document.
 - **Adding to a list is a "+ Verb" text action at the end of that list's own heading
   line** — brand-coloured `smallBold`, opposite the `overline` title: "+ Create" for
   sub-groups, "+ Add" for transactions, "+ Invite" for members. Not a full-width button
-  below the list. (`AddMenuButton` remains for a *tab screen's* own top-level add, which
-  branches into several choices.) Give it an `accessibilityLabel` that names what is
+  below the list. (A *tab screen's* own top-level add, which branches into several choices, is a
+  `TextAction` at the top of its content, worded the same way, that opens one page holding
+  all the choices, separated by an `OrDivider`.) Give it an `accessibilityLabel` that names what is
   added when the visible word is not enough ("Add a transaction").
 - A spinner is `theme.primary`, never `theme.text`.
 - Colour never carries meaning alone: a balance is said in words ("You owe 8.00"), a
   chart slice is repeated in a legend with its emoji and label.
 - An action that branches into a couple of related choices (add → create or join) is a
-  single full-width **`AddMenuButton`** opening a bottom sheet of icon + label rows,
-  rather than a text button per choice or an icon whose single meaning has to be guessed.
-- A list screen's footer action sits **pinned to the bottom of the screen** (the body
-  above it takes `flex: 1`), not just after whatever content happens to be there.
+  single **`TextAction`** opening one page with each choice as a section, an `OrDivider`
+  between them and a chevron in the banner to close it — rather than a text button per
+  choice, a menu, or an icon whose single meaning has to be guessed.
 - A group named anywhere other than under its own parent carries a **`Breadcrumb`** above
   its name — the group list, the home's favorites, a group's own header. "Beach day" on
   its own is ambiguous between two trips; "Corsica 2026 › Beach day" is not.
@@ -276,21 +325,17 @@ card**: a medallion carrying the group's initials, the name, the member count, a
 viewer's balance **in that group alone** (`groupBalanceLabel` / `balanceTone`,
 `docs/specs/balances.md`), with a **`FavoriteStar`**, and next to it a **`GroupActionsMenu`**, both at the far right
 of the row, aligned with the name line specifically (`docs/specs/favorites.md`) —
-favorited groups are pinned above non-favorited ones, alphabetical within each. The row
+favorites come first, then a padded `ListDivider`, then the rest — alphabetical
+within each, no headings; with no favorites there is one plain list and no rule. The row
 leads with a **`Breadcrumb`** of the group's ancestors when it has any — never here, where
 every group is a root one, but the same row is reused by the home's favorites section,
-which mixes depths. Tapping the star flips it in place without moving the row: the
-refetch that tap itself triggers (`groupsChanged`) keeps the row where it is, and only a
-*later*, unrelated refetch brings the pinned order into view — a visible list reordering
-under the viewer's own finger reads as disorienting, one caused by something else
-happening elsewhere does not. Empty state: a brand card with a glyph, "No groups yet" and
-what a group is for.
+which mixes depths. Tapping the star moves the group across the divider at once — the move is the
+feedback. Empty state: a brand card with a glyph and one sentence, in the manner of the
+transactions tab's ("No groups yet. Create one, or join one with a code, to start tracking
+what you share.").
 
-A full-width **`AddMenuButton`** ("New group", pinned to the bottom of the screen) opens
-a bottom sheet with "Create a group" (`plus` icon) and "Join a group" (`key` icon).
-"Create a group" opens the same creation sheet as before; "Join a group" opens a sheet
-holding the invitation-code entry — submitting a code closes the sheet and hands off to
-`InvitePrompt`, which is what actually confirms and joins.
+A **`TextAction`** ("+ Join or Create", right-aligned at the top of the content) opens the
+one "New group" page (below), which both creates a group and joins one.
 
 **Archived groups** sit under a "Show archived (n)" brand-coloured toggle at the bottom,
 rendered `muted` with "n members · archived" when revealed — hidden rather than greyed
@@ -299,7 +344,9 @@ shows the toggle, not the empty state.
 
 ### Group detail (`src/features/groups/group-screen.tsx`, route `app/groups/[id].tsx`)
 
-Pushed above the tabs. **Transactions are the default content**, one of four tabs.
+Opened above the tabs, from the bottom, and closed by its chevron or by pulling its banner
+down (see Motion). **Transactions are the default content**, one of four tabs — a sideways
+swipe on the content moves between them.
 
 **Top banner.** The same `PageHero` wash as the tab screens.
 The group's **name** (`sectionTitle`, one line, truncated first) followed by a "·" and its
@@ -456,40 +503,64 @@ A native picker via `@expo/ui`, platform split inside the one component: **iOS**
 (Compose has no inline equivalent); **web** the app's own `TextField` in `YYYY-MM-DD`
 (`@expo/ui` has no host views there).
 
-### Create a group (`src/features/groups/create-group-screen.tsx`)
+### New group (`src/features/groups/create-group-screen.tsx`)
 
-A sheet: a name field (autofocused, 60 chars), then the friend picker. Creating with
-nobody selected is allowed — a link can come later. The same screen creates a
-**sub-group** when opened with a `parentId`: the title reads "New sub-group", the button
-"Create sub-group", and the parent is implicit. When the parent is `pairRooted` the friend
-picker is **not shown at all**, replaced by a short note — the only other allowed person
-is added automatically.
+A sheet with the classic banner (`ScreenHeader` with `wash`): "New group", and a
+`BackButton` chevron at its far end in place of a Cancel button. Below it, on one page:
+
+- **Create a group**, on top: an `overline`, the name field (autofocused, 60 chars), a
+  hint, then the friends in a `Card` (`FriendPickerCard` — "N selected", the list scrolling
+  inside the room left) and the "Create group" button. Creating with nobody selected is
+  allowed — a link can come later.
+- an **`OrDivider`**;
+- **Join a group**, at the bottom: the invitation-code entry (below). Submitting a code
+  folds the page away and hands off to `InvitePrompt`, which is what actually confirms
+  and joins.
+
+The same screen creates a **sub-group** when opened with a `parentId`: the title still
+reads "New group", with the parent's **breadcrumb** (its ancestors, then the parent itself)
+on a quiet line above it (`ScreenHeader`'s `above`), the button reads "Create sub-group",
+the parent is implicit, and there is no Join part (nothing to join from inside a group). When the parent is `pairRooted` the
+friend picker is **not shown at all**, replaced by a short note — the only other allowed
+person is added automatically.
 
 ### Friends (`src/features/friends/friends-screen.tsx`)
 
 `ScreenHeader` with `wash` and the friend count. Each friend is a card: avatar, name, **where the
 two of them stand** — "owes you 12.50" / "you owe 12.50" / "settled up", coloured, netted
 across every group they share — and a **`FavoriteStar`** at the far right (`docs/specs/
-favorites.md`), favoriting the implicit pair group behind that row; favorited friends are
-pinned above the rest, alphabetical within that, the same rule and the same
-tap-does-not-jump behaviour the group list has. No grand total above the list: members of
+favorites.md`), favoriting the implicit pair group behind that row; favorites
+first, a `ListDivider`, then the rest, alphabetical within each — exactly like the group
+list (no rule when nobody is a favorite; a star moves the friend at once). No grand total above the list: members of
 shared groups who are not friends are absent from it, so a sum of the rows would not be
 the viewer's overall position. **Tapping a card opens the group shared with that
 friend**, directly by its already-known id — no request first, the group exists from the
 moment the friendship does (`docs/specs/friends-and-invitations.md`); a "⋮" `IconMenuButton` ("Manage" → the shared
-group's Manage tab, "Delete friend") stays a separate hit area after the star. Empty state: a brand card. A footer holds the same
-**`AddMenuButton`** pattern as Groups ("Add a friend"): "Invite a friend" (`plus` icon)
-opens the invite sheet, "Enter a code" (`key` icon) opens a sheet holding the
-invitation-code entry.
+group's Manage tab, "Delete friend") stays a separate hit area after the star. Empty state: the same kind of card ("No friends yet. Invite someone with a link
+and they’ll show up here."). The top of the content holds a
+**`TextAction`** ("+ Add or Invite") opening the "New friend" page (below).
+
+### New friend (`src/features/friends/new-friend-screen.tsx`)
+
+A sheet built like "New group": the classic banner ("New friend", a `BackButton` chevron at
+its far end, no Done/Cancel button), then on one page **Invite a friend** on top — an
+`overline`, a sentence saying what the link does, and the invitation link with its share,
+copy and regenerate icons and its expiry (`InviteShareScreen`, `embedded`) — an
+**`OrDivider`**, and **Enter a code** at the bottom (the invitation-code entry below).
+Submitting a code folds the page away and hands off to `InvitePrompt`. The content scrolls
+when the screen is short.
 
 ### Invitation code entry (`src/features/invites/invitation-code-entry.tsx`)
 
-An `overline` "Got an invitation code?", a `TextField` and a secondary "Open" (disabled
-until something is typed, submittable from the keyboard). **The same component on both
-the Friends and Groups tabs** — neither has to know which kind of code the visitor is
-holding — rendered inside the Friends tab's "Enter a code" sheet and the Groups tab's
-"Join a group" sheet. An optional `onSubmitted` callback lets the host sheet close itself
-once the code is handed off.
+An `overline` (default "Got an invitation code?", "Enter a code" on the New friend page,
+"Join a group" on the New group page), a
+`TextField` whose placeholder shows what a link looks like (`<API base URL>/i/…`) and a
+secondary "Join" (disabled until something is typed, submittable from the keyboard).
+**Pasting a whole invitation link keeps just its code** — the field shows the code, not
+the URL. **The same component on both the Friends and Groups tabs** — neither has to know
+which kind of code the visitor is holding — rendered inside the "New friend" and "New
+group" pages. An optional `onSubmitted` callback lets the host
+close itself once the code is handed off.
 
 ### Invitation sharing (`src/features/invites/invite-share-screen.tsx`)
 
@@ -514,11 +585,12 @@ link, and a retryable connection error.
 
 ## Navigation
 
-`app/_layout.tsx` is a `Stack` wrapping the `(tabs)` group, so a group detail pushes above
-the tab bar with a back button; the tabs live in `app/(tabs)/_layout.tsx`. Four tabs, in
-order: **Home**, **Groups**, **Friends**, **Account**. The tab bar is
-a **surface**, not the canvas, and the active tab carries the brand hue — the one place
-navigation says which app this is. On web the tab list is a floating pill bar with the
+`app/_layout.tsx` is a `Stack` wrapping the `(tabs)` group, so a group detail opens above
+the tab bar, from the bottom (see Motion); the tabs live in `app/(tabs)/_layout.tsx`
+(`PagerTabs`). Four tabs, in order: **Home**, **Groups**, **Friends**, **Account**. The tab
+bar is a **surface**, not the canvas, and the active tab carries the brand hue — its icon,
+its label and the pill behind the icon — the one place navigation says which app this
+is. On web the tab list is a floating pill bar with the
 "SplitCount" wordmark in brand violet.
 
 The home is the index of that group, so its URL is `/`; the groups list sits at
@@ -527,6 +599,41 @@ The home is the index of that group, so its URL is `/`; the groups list sits at
 Typed routes are generated into `.expo/types/router.d.ts` when the dev server runs. If
 `router.push` or an `href` is rejected for a route that plainly exists, the generated file
 is stale — restart the dev server rather than working around the type.
+
+## Motion
+
+The app should feel direct: things move the way the finger does, and every change of
+page says where it came from.
+
+- **Pages over pages open from the bottom and close back down.** A group's page (a
+  friend's and a sub-group's are group pages too) slides up over the tabs: a native sheet
+  on iOS (`presentation: 'modal'`), a slide from the bottom over a page that stays visible
+  underneath elsewhere (`transparentModal`, `slide_from_bottom`) — set once, on the
+  `groups/[id]` route in `app/_layout.tsx`. "New group", "New friend" and the other sheets
+  opened from inside a screen do the same through `SheetModal`. Their banner carries a
+  downward chevron, not a back arrow.
+- **Pull the banner down to close.** On those pages the banner is a `DismissiblePage` drag
+  handle: the page follows the finger, then closes or springs back. Only the banner — the
+  content below keeps its own vertical scrolling.
+- **Swipe sideways between siblings — and see the next one coming.** On Home, Groups,
+  Friends and Account, a sideways swipe drags the next or previous bottom tab's page in
+  beside the current one (`PagerTabs`); on a group's page, the next or previous tab of the
+  page (`Pager`). The pages follow the finger, then settle (280 ms, easing out); nothing
+  lies past either end, where the pages resist and come back. The swipe takes over only
+  after 24 pt sideways, and gives way to vertical scrolling after 12 pt up or down.
+- **The indicator travels with the pages.** The bottom bar's pill and a group's underline
+  follow the swipe frame by frame, and slide the same way when a tab is tapped — the
+  pages then slide there too, drawing any page they pass.
+- **Pull a list down to refresh it — on purpose** (Home, Groups, Friends): a long pull,
+  started at the top (`RefreshableScrollView`). The list stays on screen while it reloads
+  (`pullRefresh` / `refreshing` on `useGroups` / `useFriends`) — unlike "Try again", which
+  shows the loading state.
+- Performance: every drawn page stays mounted and the swipe only moves one row of pages
+  (a transform on the UI thread), so a swipe costs no React render until it settles.
+  Pages two or more away are not drawn until first approached.
+- Gestures come from `react-native-gesture-handler` (a `GestureHandlerRootView` at the
+  root, and inside each `SheetModal`), animation from Reanimated; gesture callbacks run as
+  worklets on the UI thread and hand results back with `scheduleOnRN`.
 
 ## Principles
 

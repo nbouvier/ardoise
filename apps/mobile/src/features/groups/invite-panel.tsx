@@ -3,12 +3,11 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-import { FriendPicker } from './friend-picker';
+import { FriendPickerCard } from './friend-picker';
 import { GroupInviteScreen } from './group-invite-screen';
 
 export interface InvitePanelProps {
@@ -35,26 +34,19 @@ export function InvitePanel({ group, busy, onAdd, onClose }: InvitePanelProps) {
         <ThemedText type="overline" themeColor="textSecondary">
           Add friends
         </ThemedText>
-        <Card style={styles.friendsCard}>
-          <ThemedText type="overline" themeColor="textSecondary">
-            {`${selected.size} selected`}
-          </ThemedText>
-          <View style={styles.friendList}>
-            <FriendPicker
-              selected={selected}
-              onToggle={(id) =>
-                setSelected((current) => {
-                  const next = new Set(current);
-                  if (!next.delete(id)) {
-                    next.add(id);
-                  }
-                  return next;
-                })
+        <FriendPickerCard
+          selected={selected}
+          onToggle={(id) =>
+            setSelected((current) => {
+              const next = new Set(current);
+              if (!next.delete(id)) {
+                next.add(id);
               }
-              lockedIds={members}
-            />
-          </View>
-        </Card>
+              return next;
+            })
+          }
+          lockedIds={members}
+        />
         <Button
           label="Add to group"
           busy={busy}
@@ -83,13 +75,6 @@ const styles = StyleSheet.create({
   friends: {
     flex: 1,
     gap: Spacing.two,
-  },
-  friendsCard: {
-    flex: 1,
-    gap: Spacing.two,
-  },
-  friendList: {
-    flex: 1,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

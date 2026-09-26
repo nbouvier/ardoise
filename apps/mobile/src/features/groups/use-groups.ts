@@ -18,6 +18,10 @@ export interface UseGroupsResult {
   archived: GroupSummary[];
   /** Reload the list — the retry action of the error state. */
   refresh: () => void;
+  /** Reload while the list stays up — a pull to refresh. */
+  pullRefresh: () => void;
+  /** A pull to refresh is under way. */
+  refreshing: boolean;
   /** Toggle a group's favorite for the viewer (`docs/specs/favorites.md`). */
   toggleFavorite: (group: GroupSummary) => void;
   /** The one group whose favorite star is mid-request, if any. */
@@ -36,6 +40,7 @@ export function useGroups(): UseGroupsResult {
     groups: [],
   });
   const [reloadToken, setReloadToken] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
   const externalVersion = useSyncExternalStore(
     groupsChanged.subscribe,
@@ -71,6 +76,7 @@ export function useGroups(): UseGroupsResult {
           : preserveOrder(displayedOrder.current, groups, (group) => group.id);
         displayedOrder.current = ordered.map((group) => group.id);
         setState({ status: 'ready', groups: ordered });
+        setRefreshing(false);
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -78,6 +84,7 @@ export function useGroups(): UseGroupsResult {
         }
         logger.warn('groups.list.failed', errorFields(error));
         setState((current) => ({ ...current, status: 'error' }));
+        setRefreshing(false);
       });
 
     return () => {
@@ -88,6 +95,12 @@ export function useGroups(): UseGroupsResult {
   const refresh = useCallback(() => {
     trustNextOrder.current = true;
     setState((current) => ({ ...current, status: 'loading' }));
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  const pullRefresh = useCallback(() => {
+    trustNextOrder.current = true;
+    setRefreshing(true);
     setReloadToken((token) => token + 1);
   }, []);
 
@@ -126,5 +139,14 @@ export function useGroups(): UseGroupsResult {
     [state.groups],
   );
 
-  return { status: state.status, active, archived, refresh, toggleFavorite, favoriteBusyId };
+  return {
+    status: state.status,
+    active,
+    archived,
+    refresh,
+    pullRefresh,
+    refreshing,
+    toggleFavorite,
+    favoriteBusyId,
+  };
 }

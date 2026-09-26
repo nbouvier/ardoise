@@ -33,22 +33,21 @@ that **the people I settle up with most stay near the top of my Friends list too
 - **Favorited groups are pinned above non-favorited ones** within each section a group
   list already has, without disturbing those sections' own boundaries or the ordering
   within each side of the split:
-  - the group list: favorited groups first among the active ones, and — independently —
-    favorited groups first among the archived ones when that section is revealed; active
-    still sorts before archived exactly as before.
+  - the group list: the active groups are favorites first, then a divider rule, then the
+    rest — no headings, and no rule while nothing is a favorite; the archived ones, when
+    revealed, keep favorited-first independently; active still sorts before archived
+    exactly as before.
   - a parent's sub-groups section: favorited sub-groups first among the ones the viewer
     has already joined. An unjoined sub-group is never favorited (see Edge cases) and its
     position among the "not in" toggle's own list is unaffected.
-  - the Friends list: favorited friends first, the same way — there is only the one
-    section, no archived/active split to keep separate.
+  - the Friends list: favorites, a divider rule, then the rest, the same way — no
+    archived/active split to keep separate.
   - within a favorited or non-favorited bucket, the existing alphabetical order still
     applies.
-  - the pinned order is not forced into view the instant a group is (un)favorited: an
-    already-visible list does not jump underneath the viewer's finger. The refetch that
-    toggle itself triggers (`groupsChanged`, `docs/DESIGN.md`) keeps the row where it is;
-    the pinned order takes over on whichever later refetch comes next — another change
-    elsewhere notifying the same signal, or the list's own retry action — not
-    synchronously with the tap that set the favorite.
+  - on the Groups and Friends lists a group or friend crosses the divider the instant its
+    star is tapped — the move is the feedback. (Sub-groups, which have no such sections,
+    keep the older rule: the pinned order is not forced into view until a later,
+    unrelated refetch.)
 - Favoriting or unfavoriting works the same whether the group is active, archived, or
   effectively read-only (an ancestor archived) — it changes nothing about the group
   itself, only the viewer's own marker on their membership in it.
@@ -95,9 +94,9 @@ that **the people I settle up with most stay near the top of my Friends list too
       (joined ones only).
 - [ ] Tapping an unfavorited star favorites the group immediately; tapping a favorited one
       unfavorites it; no confirmation is required either way.
-- [ ] A favorited group is listed above non-favorited ones within the active section of
-      the group list, and within the archived section independently; alphabetical order
-      still applies within each half.
+- [ ] A favorited group is listed above the divider, before the others, in the active part
+      of the group list, and above non-favorited ones within the archived section
+      independently; alphabetical order still applies within each half.
 - [ ] A favorited, already-joined sub-group is listed above non-favorited joined ones in
       its parent's sub-groups section, the same way.
 - [ ] Favoriting a group is personal: another member's view of the same group is
@@ -107,9 +106,9 @@ that **the people I settle up with most stay near the top of my Friends list too
 - [ ] An unjoined sub-group never shows the star.
 - [ ] Leaving or being removed from a group drops its favorite state along with the
       membership; nothing is left behind to reappear if the viewer rejoins later.
-- [ ] Favoriting a group from a currently-visible list flips its star immediately but does
-      not move its row in that same list; a later, unrelated refetch is what brings the
-      pinned position into view.
+- [ ] Favoriting a group or friend from the Groups or Friends list flips its star and
+      moves it above the divider immediately; a sub-group's row keeps its place until a
+      later, unrelated refetch.
 - [ ] The pair group's own page shows the star too, and it toggles the same way as any
       other group's — see `docs/specs/friends-and-invitations.md` for its star on the
       Friends list and that list's own pinning.

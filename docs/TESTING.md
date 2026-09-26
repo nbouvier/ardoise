@@ -69,6 +69,25 @@ since it's a deep subpath import): pressing the mock reports a fixed date, enoug
 the wiring around it without a real host view, which Jest cannot render. Real calendar
 interaction is a device concern.
 
+Gestures and animations run under Jest through `apps/mobile/jest.setup.js`:
+gesture-handler's own `jestSetup`, `react-native-worklets` mocked (worklets run as plain
+functions) and Reanimated's `setUpTests()`. A gesture is driven with
+`fireGestureHandler(getByGestureTestId('…'), [BEGAN, ACTIVE, END events])` from
+`react-native-gesture-handler/jest-utils` — the app's own gestures carry test ids
+(`pager`, `dismiss-page`, `pull-to-refresh`) — inside `act`, since the result reaches React
+through `scheduleOnRN`. The decisions themselves (`pageAfterSwipe`, `dragPosition`,
+`dismissesPage`, `refreshesOnRelease`) are pure and tested directly. Under Jest nothing is
+laid out, so a `Pager` page is as wide as the window: swipe by a fraction of
+`Dimensions.get('window').width`. The pages next to the one shown are drawn but hidden
+from accessibility, so default queries only see the page shown; pass
+`includeHiddenElements: true` to reach a neighbour. The bottom tabs' navigator
+(`PagerTabs`) is driven through `renderRouter` from `expo-router/testing-library`
+(its `toHavePathname` / `getPathname` do not survive RNTL v14's async render — assert on
+the selected tab and the page shown instead). The drawn pull-to-refresh is Android's;
+tests run as iOS, so the screens' own tests drive the native `RefreshControl` and
+`PullToRefreshScrollView` is tested directly. What a swipe *feels* like is a device
+concern.
+
 ## Current state
 
 - `apps/server`: `GET /health` integration test; database migration tests
@@ -124,21 +143,22 @@ interaction is a device concern.
   `src/test-utils/`), auth state machine (`src/features/auth/auth-client.test.ts`), auth
   screens, the invitation feature (`src/features/invites/`): pending-invite store and the
   confirmation flow for both kinds of invitation, the friends feature
-  (`src/features/friends/`): list, opening the group shared with a friend directly by its
-  already-known id (no request first), and the favorite star (`docs/specs/favorites.md`)
-  on a friend's row — toggling through the same `setGroupFavorite` a group uses, pinning
-  favorited friends first, and not reordering the instant a friend is favorited (only once
-  something else refreshes the list afterwards) — the groups feature
-  (`src/features/groups/`): list with the archived toggle, creation with friend selection,
+  (`src/features/friends/`): list, the one "New friend" page (invite link and code entry
+  together, a typed code handed off, the chevron that closes it), opening the group shared
+  with a friend directly by its already-known id (no request first), and the favorite star
+  (`docs/specs/favorites.md`) on a friend's row — toggling through the same
+  `setGroupFavorite` a group uses and pinning favorited friends first — the groups feature
+  (`src/features/groups/`): list with the archived toggle, the one "New group" page (creation with friend selection,
+  then joining by code — a pasted link cut down to its code — and the chevron that closes it),
   the detail screen — four tabs (Transactions by default, Balances, Statistics, Manage),
   with group management on Manage, including the pair-group variant where every management action is absent **but
   "Add a transaction" is present** — plus the favorite star (`docs/specs/favorites.md`) on
   the group list row, the group screen's header (including on a pair group's own page),
   and a joined sub-group's own row, including the notify-then-refetch path a sub-group's
-  own toggle relies on, and — on both the group list and the friend list — that favoriting
-  a row does not move it in the same tap: the refetch that toggle itself triggers keeps
-  the row put, and only a *later*, unrelated refresh (another change elsewhere notifying
-  the same `groupsChanged` signal) brings the pinned order into view — the home feature
+  own toggle relies on, and — on both the group list and the friend list — that starring a
+  row moves it across the divider rule at once (no rule while nothing is a
+  favorite), and a *later* refresh (another change elsewhere notifying the same
+  `groupsChanged` signal) brings the server's order into view — the home feature
   (`src/features/home/`): the identity block, both sections' empty states, favorites of
   every kind listed with a sub-group's breadcrumb, a star taking its row *out* of that
   section (rather than moving it, as everywhere else), the latest list naming the group

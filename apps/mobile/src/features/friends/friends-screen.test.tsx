@@ -59,7 +59,7 @@ describe('FriendsScreen', () => {
   it('explains the empty state', async () => {
     await render(<FriendsScreen />);
 
-    expect(await screen.findByText('No friends yet')).toBeTruthy();
+    expect(await screen.findByText(/No friends yet/)).toBeTruthy();
   });
 
   it('lists the friends returned by the server', async () => {
@@ -68,7 +68,7 @@ describe('FriendsScreen', () => {
     await render(<FriendsScreen />);
 
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
-    expect(screen.queryByText('No friends yet')).toBeNull();
+    expect(screen.queryByText(/No friends yet/)).toBeNull();
   });
 
   it('says what a friend owes the viewer', async () => {
@@ -108,30 +108,41 @@ describe('FriendsScreen', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
   });
 
-  it('hands a manually typed code to the pending-invite store', async () => {
+  it('opens the one "New friend" page — invite link and code entry together', async () => {
     await render(<FriendsScreen />);
-    await screen.findByText('No friends yet');
+    await screen.findByText(/No friends yet/);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Add a friend' }));
-    await fireEvent.press(screen.getByText('Enter a code'));
+    await fireEvent.press(screen.getByRole('button', { name: '+ Add or Invite' }));
 
-    await fireEvent.changeText(
-      screen.getByLabelText('Invitation code'),
-      'Zx3k9QpL2mN7vR1sT4uW8g',
-    );
-    await fireEvent.press(screen.getByRole('button', { name: /^open$/i }));
-
-    expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
+    expect(await screen.findByText('New friend')).toBeTruthy();
+    expect(await screen.findByText(/Send this link/)).toBeTruthy();
+    expect(screen.getByText('OR')).toBeTruthy();
+    expect(screen.getByLabelText('Invitation code')).toBeTruthy();
   });
 
-  it('opens the invite sheet from the add menu', async () => {
+  it('closes that page from the banner chevron', async () => {
     await render(<FriendsScreen />);
-    await screen.findByText('No friends yet');
+    await screen.findByText(/No friends yet/);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Add a friend' }));
-    await fireEvent.press(screen.getByText('Invite a friend'));
+    await fireEvent.press(screen.getByRole('button', { name: '+ Add or Invite' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Close' }));
 
-    expect(await screen.findByText(/Send this link/)).toBeTruthy();
+    expect(screen.queryByLabelText('Invitation code')).toBeNull();
+  });
+
+  it('hands a manually typed code to the pending-invite store, and closes the page', async () => {
+    await render(<FriendsScreen />);
+    await screen.findByText(/No friends yet/);
+
+    await fireEvent.press(screen.getByRole('button', { name: '+ Add or Invite' }));
+    await fireEvent.changeText(
+      await screen.findByLabelText('Invitation code'),
+      'Zx3k9QpL2mN7vR1sT4uW8g',
+    );
+    await fireEvent.press(screen.getByRole('button', { name: /^join$/i }));
+
+    expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
+    expect(screen.queryByLabelText('Invitation code')).toBeNull();
   });
 
   it('opens the group shared with a friend when their row is tapped', async () => {
@@ -197,9 +208,7 @@ describe('FriendsScreen', () => {
     await render(<FriendsScreen />);
     await screen.findByText('Ada Lovelace');
 
-    await fireEvent.press(
-      screen.getByRole('button', { name: 'Add Ada Lovelace to favorites' }),
-    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Ada Lovelace to favorites' }));
 
     expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), ada.groupId, true);
     expect(
@@ -207,25 +216,25 @@ describe('FriendsScreen', () => {
     ).toBeTruthy();
   });
 
-  it('does not reorder the list the instant a friend is favorited from their row', async () => {
+  it('sets favorites apart from the rest with a rule, and starring moves a friend at once', async () => {
     const alan = { ...ada, id: 'alan-id', name: 'Alan Turing', groupId: 'alan-group' };
     const grace = { ...ada, id: 'grace-id', name: 'Grace Hopper', groupId: 'grace-group' };
     mockFetchFriends
       .mockResolvedValueOnce([alan, grace])
-      .mockResolvedValue([alan, { ...grace, favorite: true }]);
+      .mockResolvedValue([{ ...grace, favorite: true }, alan]);
 
     await render(<FriendsScreen />);
     await screen.findByText('Alan Turing');
 
-    await fireEvent.press(
-      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
-    );
+    expect(screen.queryByTestId('list-divider')).toBeNull();
 
-    await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' });
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }));
+
+    expect(await screen.findByTestId('list-divider')).toBeTruthy();
     const names = screen
       .getAllByText(/^(Alan Turing|Grace Hopper)$/)
       .map((node) => node.props.children);
-    expect(names).toEqual(['Alan Turing', 'Grace Hopper']);
+    expect(names).toEqual(['Grace Hopper', 'Alan Turing']);
   });
 
   it('reorders once something else refreshes the list, after a friend is favorited', async () => {
@@ -242,9 +251,7 @@ describe('FriendsScreen', () => {
     await render(<FriendsScreen />);
     await screen.findByText('Alan Turing');
 
-    await fireEvent.press(
-      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
-    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }));
     await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' });
 
     await act(async () => {

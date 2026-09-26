@@ -9,6 +9,8 @@ import type {
 } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
@@ -201,9 +203,7 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={pair.id} />);
     await screen.findByText('Grace Hopper');
 
-    await fireEvent.press(
-      screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }),
-    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }));
 
     expect(mockSetGroupFavorite).toHaveBeenCalledWith(expect.anything(), pair.id, true);
     expect(
@@ -228,13 +228,40 @@ describe('GroupScreen', () => {
     for (const name of ['Transactions', 'Balances', 'Statistics', 'Manage']) {
       expect(screen.getByRole('tab', { name })).toBeTruthy();
     }
-    expect(screen.getByRole('tab', { name: 'Transactions' }).props.accessibilityState).toMatchObject(
-      { selected: true },
-    );
+    expect(
+      screen.getByRole('tab', { name: 'Transactions' }).props.accessibilityState,
+    ).toMatchObject({ selected: true });
     // Sub-groups and transactions share the default tab; nothing else's content is up.
     expect(screen.getByText('Sub-groups')).toBeTruthy();
     expect(screen.queryByText('Your balance here')).toBeNull();
     expect(screen.queryByText('Total spending')).toBeNull();
+  });
+
+  it('swipes sideways between its tabs, and not past the first one', async () => {
+    const swipe = async (translationX: number) => {
+      await act(async () => {
+        fireGestureHandler(getByGestureTestId('pager'), [
+          { state: State.BEGAN, translationX: 0 },
+          { state: State.ACTIVE, translationX: translationX / 2 },
+          { state: State.END, translationX },
+        ]);
+      });
+    };
+    const selected = (name: string) =>
+      screen.getByRole('tab', { name }).props.accessibilityState.selected;
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+
+    await swipe(-400);
+    await waitFor(() => expect(selected('Balances')).toBe(true));
+    expect(await screen.findByText('Your balance here')).toBeTruthy();
+
+    await swipe(400);
+    await waitFor(() => expect(selected('Transactions')).toBe(true));
+
+    await swipe(400);
+    expect(selected('Transactions')).toBe(true);
   });
 
   it('can open straight onto another tab', async () => {
@@ -291,9 +318,7 @@ describe('GroupScreen', () => {
 
     await openTab('Balances');
 
-    expect(
-      await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' })).toBeTruthy();
     expect(screen.getByText('Where everyone stands')).toBeTruthy();
   });
 
@@ -312,9 +337,9 @@ describe('GroupScreen', () => {
     // and Grace — not the viewer — as the payer.
     expect(await screen.findByLabelText('Title')).toHaveProp('value', 'Reimbursement');
     expect(screen.getByLabelText('Amount')).toHaveProp('value', '21.25');
-    expect(
-      screen.getByRole('button', { name: 'Transfer' }).props.accessibilityState,
-    ).toMatchObject({ selected: true });
+    expect(screen.getByRole('button', { name: 'Transfer' }).props.accessibilityState).toMatchObject(
+      { selected: true },
+    );
 
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
@@ -730,8 +755,10 @@ describe('GroupScreen', () => {
       await render(<GroupScreen groupId={trip.id} />);
       await fireEvent.press(await screen.findByText('+ Create'));
 
-      expect(await screen.findByText('New sub-group')).toBeTruthy();
-      expect(screen.getByText('Just the two of you here too — no one else can be added.')).toBeTruthy();
+      expect(await screen.findByText('New group')).toBeTruthy();
+      expect(
+        screen.getByText('Just the two of you here too — no one else can be added.'),
+      ).toBeTruthy();
       expect(screen.queryByText('Add friends now, or share a link later.')).toBeNull();
     });
 
@@ -755,7 +782,7 @@ describe('GroupScreen', () => {
       await render(<GroupScreen groupId={trip.id} />);
       await fireEvent.press(await screen.findByText('+ Create'));
 
-      expect(await screen.findByText('New sub-group')).toBeTruthy();
+      expect(await screen.findByText('New group')).toBeTruthy();
     });
 
     it('reloads its subgroups when notified — e.g. right after creating one', async () => {

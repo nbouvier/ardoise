@@ -1,28 +1,38 @@
-import type { GroupDetail } from '@splitcount/shared';
+import type { GroupAncestor, GroupDetail } from '@splitcount/shared';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
+import { DismissiblePage } from '@/components/dismissible-page';
+import { Breadcrumb } from '@/components/breadcrumb';
 import { Button } from '@/components/button';
+import { OrDivider } from '@/components/or-divider';
+import { ScreenHeader } from '@/components/screen-header';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
+import { useTheme } from '@/hooks/use-theme';
 import { createGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
-import { FriendPicker } from './friend-picker';
+import { FriendPickerCard } from './friend-picker';
 import { groupsChanged } from './groups-changed';
 
 export interface CreateGroupScreenProps {
   onCreated: (group: GroupDetail) => void;
-  onCancel: () => void;
+  /** Folds the page away — the banner’s chevron; also after a code is handed off. */
+  onClose: () => void;
   /**
    * Creates a sub-group under this group instead of a root group
    * (`docs/specs/groups.md`). The parent is implicit — there is no field for
    * it, since this screen is only ever opened from inside that parent.
    */
   parentId?: string;
+  /** Where the new sub-group will sit — the parent and its ancestors, root first — shown above the title. */
+  parentTrail?: readonly GroupAncestor[];
   /**
    * The parent is a pair group, or is itself nested under one — the new
    * sub-group can only ever contain that friendship's own two people, so
@@ -34,11 +44,13 @@ export interface CreateGroupScreenProps {
 
 export function CreateGroupScreen({
   onCreated,
-  onCancel,
+  onClose,
   parentId,
+  parentTrail = [],
   pairRooted = false,
 }: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
+  const theme = useTheme();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -78,60 +90,94 @@ export function CreateGroupScreen({
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="subtitle">{parentId ? 'New sub-group' : 'New group'}</ThemedText>
-
-      <TextField
-        accessibilityLabel="Group name"
-        placeholder="Trip, flatshare, night out…"
-        autoFocus
-        value={name}
-        onChangeText={setName}
-        maxLength={60}
-      />
-
-      {pairRooted ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          Just the two of you here too — no one else can be added.
-        </ThemedText>
-      ) : (
-        <>
-          <ThemedText type="small" themeColor="textSecondary">
-            Add friends now, or share a link later.
-          </ThemedText>
-          <FriendPicker selected={selected} onToggle={toggle} />
-        </>
-      )}
-
-      {error ? (
-        <ThemedText type="small" themeColor="danger">
-          {error}
-        </ThemedText>
-      ) : null}
-
-      <View style={styles.actions}>
-        <Button
-          label={parentId ? 'Create sub-group' : 'Create group'}
-          busy={busy}
-          disabled={name.trim().length === 0}
-          onPress={() => void handleCreate()}
+    <DismissiblePage
+      onClose={onClose}
+      style={{ backgroundColor: theme.background }}
+      header={
+        <ScreenHeader
+          title="New group"
+          above={<Breadcrumb ancestors={parentTrail} />}
+          wash
+          action={<BackButton icon="collapse" label="Close" onPress={onClose} />}
         />
-        <Button label="Cancel" variant="ghost" disabled={busy} onPress={onCancel} />
-      </View>
-    </ThemedView>
+      }>
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.page}>
+          <View style={styles.create}>
+            {parentId ? null : (
+              <ThemedText type="overline" themeColor="textSecondary">
+                Create a group
+              </ThemedText>
+            )}
+
+            <TextField
+              accessibilityLabel="Group name"
+              placeholder="Trip, flatshare, night out…"
+              autoFocus
+              value={name}
+              onChangeText={setName}
+              maxLength={60}
+            />
+
+            {pairRooted ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Just the two of you here too — no one else can be added.
+              </ThemedText>
+            ) : (
+              <>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Add friends now, or share a link later.
+                </ThemedText>
+                <FriendPickerCard selected={selected} onToggle={toggle} />
+              </>
+            )}
+
+            {error ? (
+              <ThemedText type="small" themeColor="danger">
+                {error}
+              </ThemedText>
+            ) : null}
+
+            <Button
+              label={parentId ? 'Create sub-group' : 'Create group'}
+              busy={busy}
+              disabled={name.trim().length === 0}
+              onPress={() => void handleCreate()}
+            />
+          </View>
+
+          {/* A sub-group is only ever made from inside its parent: there is
+              nothing to join from here. */}
+          {parentId ? null : (
+            <>
+              <OrDivider />
+              <InvitationCodeEntry title="Join a group" onSubmitted={onClose} />
+            </>
+          )}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </DismissiblePage>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     alignSelf: 'center',
     width: '100%',
     maxWidth: MaxContentWidth,
-    padding: Spacing.four,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.four,
   },
-  actions: {
-    gap: Spacing.two,
+  page: {
+    flex: 1,
+  },
+  // Takes the room the join part leaves; the friend list scrolls inside it.
+  create: {
+    flex: 1,
+    gap: Spacing.three,
   },
 });

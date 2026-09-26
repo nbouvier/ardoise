@@ -1,17 +1,19 @@
 import type { GroupSummary } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AddMenuButton } from '@/components/add-menu-button';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ListDivider } from '@/components/list-divider';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ScreenHeader } from '@/components/screen-header';
+import { SheetModal } from '@/components/sheet-modal';
+import { TextAction } from '@/components/text-action';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { CreateGroupScreen } from './create-group-screen';
@@ -20,15 +22,27 @@ import { useGroupRowActions } from './use-group-row-actions';
 import { useGroups } from './use-groups';
 
 export function GroupsScreen() {
-  const { status, active, archived, refresh, toggleFavorite, favoriteBusyId } = useGroups();
+  const {
+    status,
+    active,
+    archived,
+    refresh,
+    pullRefresh,
+    refreshing,
+    toggleFavorite,
+    favoriteBusyId,
+  } = useGroups();
   const rowActions = useGroupRowActions();
   const router = useRouter();
   const theme = useTheme();
   const [creating, setCreating] = useState(false);
-  const [joining, setJoining] = useState(false);
   // Archived groups are out of the way by default: the list is about what is
   // still going on.
   const [showArchived, setShowArchived] = useState(false);
+
+  // A star moves a group between the two at once — the move is its feedback.
+  const favorites = active.filter((group) => group.favorite);
+  const others = active.filter((group) => !group.favorite);
 
   const open = (group: GroupSummary) =>
     router.push({ pathname: '/groups/[id]', params: { id: group.id } });
@@ -45,14 +59,11 @@ export function GroupsScreen() {
   const archivedSection =
     archived.length === 0 ? null : (
       <View style={styles.archivedSection}>
-        <Pressable
-          accessibilityRole="button"
+        <TextAction
+          label={showArchived ? 'Hide archived' : `Show archived (${archived.length})`}
           onPress={() => setShowArchived((shown) => !shown)}
-          style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}>
-          <ThemedText type="smallBold" themeColor="primary">
-            {showArchived ? 'Hide archived' : `Show archived (${archived.length})`}
-          </ThemedText>
-        </Pressable>
+          style={styles.toggle}
+        />
 
         {showArchived ? (
           <View style={styles.archivedList}>
@@ -101,35 +112,40 @@ export function GroupsScreen() {
         <View style={styles.centered}>
           <Card tone="brand" style={styles.empty}>
             <ThemedText style={styles.emptyGlyph}>👥</ThemedText>
-            <ThemedText type="sectionTitle">No groups yet</ThemedText>
             <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-              A group is where you and other people track what you share.
+              No groups yet. Create one, or join one with a code, to start tracking what you share.
             </ThemedText>
           </Card>
         </View>
       );
     }
 
-    return (
-      <FlatList
-        data={active}
-        keyExtractor={(group) => group.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <GroupRow
-            group={item}
-            onPress={open}
-            onToggleFavorite={toggleFavorite}
-            onManage={manage}
-            onArchiveToggle={rowActions.archiveToggle}
-            onLeave={rowActions.confirmLeave}
-            onDelete={rowActions.confirmDelete}
-            favoriteBusy={favoriteBusyId === item.id}
-            actionsBusy={rowActions.busyId === item.id}
-          />
-        )}
-        ListFooterComponent={archivedSection}
+    const row = (group: GroupSummary) => (
+      <GroupRow
+        key={group.id}
+        group={group}
+        onPress={open}
+        onToggleFavorite={toggleFavorite}
+        onManage={manage}
+        onArchiveToggle={rowActions.archiveToggle}
+        onLeave={rowActions.confirmLeave}
+        onDelete={rowActions.confirmDelete}
+        favoriteBusy={favoriteBusyId === group.id}
+        actionsBusy={rowActions.busyId === group.id}
       />
+    );
+
+    return (
+      <RefreshableScrollView
+        testID="groups-list"
+        contentContainerStyle={styles.list}
+        refreshing={refreshing}
+        onRefresh={pullRefresh}>
+        {favorites.map(row)}
+        {favorites.length > 0 && others.length > 0 ? <ListDivider /> : null}
+        {others.map(row)}
+        {archivedSection}
+      </RefreshableScrollView>
     );
   }
 
@@ -141,44 +157,16 @@ export function GroupsScreen() {
       <ScreenHeader title="Groups" caption={activeCount} wash />
 
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
-        <View style={styles.body}>{body()}</View>
+        <View style={styles.actionRow}>
+          <TextAction label="+ Join or Create" onPress={() => setCreating(true)} />
+        </View>
 
-        <AddMenuButton
-          label="New group"
-          options={[
-            { icon: 'plus', label: 'Create a group', onPress: () => setCreating(true) },
-            { icon: 'key', label: 'Join a group', onPress: () => setJoining(true) },
-          ]}
-        />
+        <View style={styles.body}>{body()}</View>
       </SafeAreaView>
 
-      <Modal
-        visible={creating}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setCreating(false)}>
-        <ThemedView style={styles.modal}>
-          <SafeAreaView style={styles.modal}>
-            <CreateGroupScreen onCreated={handleCreated} onCancel={() => setCreating(false)} />
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
-
-      <Modal
-        visible={joining}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setJoining(false)}>
-        <ThemedView style={styles.modal}>
-          <SafeAreaView style={styles.modal}>
-            <View style={styles.sheetContent}>
-              <ThemedText type="subtitle">Join a group</ThemedText>
-              <InvitationCodeEntry onSubmitted={() => setJoining(false)} />
-              <Button label="Cancel" variant="ghost" onPress={() => setJoining(false)} />
-            </View>
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+      <SheetModal visible={creating} onClose={() => setCreating(false)}>
+        <CreateGroupScreen onCreated={handleCreated} onClose={() => setCreating(false)} />
+      </SheetModal>
 
       {rowActions.dialog}
     </ThemedView>
@@ -195,7 +183,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.three,
     gap: Spacing.three,
   },
   centered: {
@@ -223,10 +212,8 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
-  sheetContent: {
-    flex: 1,
-    gap: Spacing.three,
-    padding: Spacing.four,
+  actionRow: {
+    alignItems: 'flex-end',
   },
   archivedSection: {
     marginTop: Spacing.three,
@@ -236,12 +223,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   toggle: {
-    paddingVertical: Spacing.two,
-  },
-  pressed: {
-    opacity: 0.6,
-  },
-  modal: {
-    flex: 1,
+    alignSelf: 'flex-start',
+    marginVertical: Spacing.one,
   },
 });

@@ -20,6 +20,10 @@ interface FriendsState {
 export interface UseFriendsResult extends FriendsState {
   /** Reload the list — the retry action of the error state. */
   refresh: () => void;
+  /** Reload while the list stays up — a pull to refresh. */
+  pullRefresh: () => void;
+  /** A pull to refresh is under way. */
+  refreshing: boolean;
   remove: (friendId: string) => Promise<void>;
   /** Toggle a friend's favorite for the viewer (`docs/specs/favorites.md`). */
   toggleFavorite: (friend: FriendEntry) => void;
@@ -32,6 +36,7 @@ export function useFriends(): UseFriendsResult {
   const { authorizedFetch } = useAuth();
   const [state, setState] = useState<FriendsState>({ status: 'loading', friends: [] });
   const [reloadToken, setReloadToken] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
   // Reload when a friendship is created outside this screen (the invitation
   // confirmation modal lives above the tabs).
@@ -73,6 +78,7 @@ export function useFriends(): UseFriendsResult {
           : preserveOrder(displayedOrder.current, friends, (friend) => friend.id);
         displayedOrder.current = ordered.map((friend) => friend.id);
         setState({ status: 'ready', friends: ordered });
+        setRefreshing(false);
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -80,6 +86,7 @@ export function useFriends(): UseFriendsResult {
         }
         logger.warn('friends.list.failed', errorFields(error));
         setState((current) => ({ ...current, status: 'error' }));
+        setRefreshing(false);
       });
 
     return () => {
@@ -90,6 +97,12 @@ export function useFriends(): UseFriendsResult {
   const refresh = useCallback(() => {
     trustNextOrder.current = true;
     setState((current) => ({ ...current, status: 'loading' }));
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  const pullRefresh = useCallback(() => {
+    trustNextOrder.current = true;
+    setRefreshing(true);
     setReloadToken((token) => token + 1);
   }, []);
 
@@ -133,5 +146,5 @@ export function useFriends(): UseFriendsResult {
     [authorizedFetch],
   );
 
-  return { ...state, refresh, remove, toggleFavorite, favoriteBusyId };
+  return { ...state, refresh, pullRefresh, refreshing, remove, toggleFavorite, favoriteBusyId };
 }

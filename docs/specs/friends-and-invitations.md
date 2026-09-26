@@ -207,11 +207,12 @@ for *another* user (`FriendSummary`: id, name, avatar) is deliberately narrower 
 
 - The **Friends** tab replaces the Expo starter "Explore" tab.
 - **Friends list**: avatar + name rows, an explicit empty state ("No friends yet — invite
-  someone"), the invite action, and an "I have an invitation code" entry for the manual
-  fallback.
-- **Invite screen**: the link shown in full and selectable, a primary **Share** action and a
-  secondary **Copy** action, the expiry date in plain words, and a discreet "Generate a new
-  link" that warns the previous one stops working.
+  someone"), and one "+ Add or Invite" action that opens the "New friend" page.
+- **New friend page**: one page for both ways to make a friend, closed by the chevron in its
+  banner. On top, **invite**: the link shown in full and selectable, **share**, **copy** and
+  "generate a new link" actions (the last warns the previous one stops working), and the
+  expiry date in plain words. Below, after an "OR" rule, **enter a code**: the manual
+  fallback, where pasting a whole invitation link keeps just its code.
 - **Confirmation screen**: presented as a full-screen modal over the app so it appears the
   same way whether it came from a link or from a manually entered code. States: loading,
   preview + Accept/Not now, success, already friends, invalid link, own link, network error

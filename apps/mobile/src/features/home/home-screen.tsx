@@ -1,13 +1,14 @@
 import type { GroupSummary, RecentTransaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { GroupRow } from '@/features/groups/group-row';
 import { useGroupRowActions } from '@/features/groups/use-group-row-actions';
@@ -31,7 +32,6 @@ export function HomeScreen() {
   const { state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const router = useRouter();
-  const theme = useTheme();
   // Tracked separately from the two sections' own `loading`, which is also
   // what a first load looks like: the pull-to-refresh spinner belongs to the
   // gesture, and showing it on mount would double every section's own.
@@ -56,18 +56,12 @@ export function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView
+      <RefreshableScrollView
         testID="home-scroll"
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            // Both sections reload together: one gesture, one meaning.
-            refreshing={refreshing}
-            onRefresh={() => void refreshAll()}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
-          />
-        }>
+        // Both sections reload together: one gesture, one meaning.
+        refreshing={refreshing}
+        onRefresh={() => void refreshAll()}>
         <HomeHero />
 
         <View style={styles.sections}>
@@ -117,7 +111,7 @@ export function HomeScreen() {
             ))}
           </Section>
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
       {rowActions.dialog}
     </ThemedView>
   );
@@ -199,7 +193,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: MaxContentWidth,
-    paddingBottom: BottomTabInset + Spacing.four,
+    paddingBottom: Spacing.four,
     gap: Spacing.four,
   },
   // The hero runs edge to edge, so the padding sits on the sections instead

@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useFriends } from '@/features/friends/use-friends';
@@ -75,6 +76,24 @@ export function FriendPicker({
   );
 }
 
+/**
+ * The picker in its box, the way members are listed everywhere: a count of what
+ * is ticked, then the list, which scrolls when it runs out of room. Fills the
+ * space its parent gives it.
+ */
+export function FriendPickerCard(props: FriendPickerProps) {
+  return (
+    <Card style={styles.card}>
+      <ThemedText type="overline" themeColor="textSecondary">
+        {`${props.selected.size} selected`}
+      </ThemedText>
+      <View style={styles.cardList}>
+        <FriendPicker {...props} />
+      </View>
+    </Card>
+  );
+}
+
 function FriendOption({
   friend,
   checked,
@@ -129,6 +148,13 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
+  },
+  card: {
+    flex: 1,
+    gap: Spacing.two,
+  },
+  cardList: {
+    flex: 1,
   },
   list: {
     gap: Spacing.one,

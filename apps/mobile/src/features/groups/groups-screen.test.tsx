@@ -79,7 +79,7 @@ describe('GroupsScreen', () => {
   it('explains the empty state', async () => {
     await render(<GroupsScreen />);
 
-    expect(await screen.findByText('No groups yet')).toBeTruthy();
+    expect(await screen.findByText(/No groups yet/)).toBeTruthy();
   });
 
   it('lists active groups with their size', async () => {
@@ -89,6 +89,35 @@ describe('GroupsScreen', () => {
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
     expect(screen.getByText('3 members')).toBeTruthy();
+  });
+
+  it('reloads on a pull to refresh, keeping the list on screen meanwhile', async () => {
+    mockFetchGroups.mockResolvedValue([trip]);
+    await render(<GroupsScreen />);
+    await screen.findByText('Corsica 2026');
+
+    let resolveReload: (groups: GroupSummary[]) => void = () => undefined;
+    mockFetchGroups.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveReload = resolve;
+      }),
+    );
+    const list = screen.getByTestId('groups-list');
+    await act(async () => {
+      list.props.refreshControl.props.onRefresh();
+    });
+
+    expect(mockFetchGroups).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Corsica 2026')).toBeTruthy();
+    expect(screen.queryByTestId('groups-loading')).toBeNull();
+    expect(screen.getByTestId('groups-list').props.refreshControl.props.refreshing).toBe(true);
+
+    await act(async () => {
+      resolveReload([{ ...trip, name: 'Corsica 2027' }]);
+    });
+
+    expect(await screen.findByText('Corsica 2027')).toBeTruthy();
+    expect(screen.getByTestId('groups-list').props.refreshControl.props.refreshing).toBe(false);
   });
 
   describe('a row’s own "⋮" actions menu', () => {
@@ -263,7 +292,7 @@ describe('GroupsScreen', () => {
     await render(<GroupsScreen />);
 
     expect(await screen.findByText('Show archived (1)')).toBeTruthy();
-    expect(screen.queryByText('No groups yet')).toBeNull();
+    expect(screen.queryByText(/No groups yet/)).toBeNull();
   });
 
   it('opens a group when its row is tapped', async () => {
@@ -296,31 +325,24 @@ describe('GroupsScreen', () => {
     ).toBeTruthy();
   });
 
-  it('does not reorder the list the instant a group is favorited from its row', async () => {
+  it('sets favorites apart from the rest with a rule, and starring moves a group at once', async () => {
     const alpha = { ...trip, id: 'a', name: 'Alpha' };
     const zulu = { ...trip, id: 'z', name: 'Zulu' };
-    // Both the mutation's own optimistic update and the follow-up
-    // `groupsChanged`-triggered refetch must agree on the row order staying
-    // put — a real server that had already reordered would be indistinguishable
-    // here from one that had not, so this response keeps the same order,
-    // isolating the one thing this test checks.
     mockFetchGroups
       .mockResolvedValueOnce([alpha, zulu])
-      .mockResolvedValue([alpha, { ...zulu, favorite: true }]);
+      .mockResolvedValue([{ ...zulu, favorite: true }, alpha]);
 
     await render(<GroupsScreen />);
     await screen.findByText('Alpha');
+    expect(screen.queryByTestId('list-divider')).toBeNull();
+
+    // No favorites yet: one plain list, no rule.
 
     await fireEvent.press(screen.getByRole('button', { name: 'Add Zulu to favorites' }));
 
-    // The star flips...
-    await screen.findByRole('button', { name: 'Remove Zulu from favorites' });
-    // ...but Zulu's row stays put rather than jumping to the top under the
-    // viewer's finger — the pinned order only ever takes effect on the
-    // list's next natural refetch, never synchronously with the tap
-    // (`docs/specs/favorites.md`).
+    expect(await screen.findByTestId('list-divider')).toBeTruthy();
     const names = screen.getAllByText(/^(Alpha|Zulu)$/).map((node) => node.props.children);
-    expect(names).toEqual(['Alpha', 'Zulu']);
+    expect(names).toEqual(['Zulu', 'Alpha']);
   });
 
   it('reorders once something else refreshes the list, after a favorite was set', async () => {
@@ -363,29 +385,39 @@ describe('GroupsScreen', () => {
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
   });
 
-  it('opens the creation sheet from the add menu', async () => {
+  it('opens the one "New group" page — create and join together — from the top action', async () => {
     await render(<GroupsScreen />);
-    await screen.findByText('No groups yet');
+    await screen.findByText(/No groups yet/);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'New group' }));
-    await fireEvent.press(screen.getByText('Create a group'));
+    await fireEvent.press(screen.getByRole('button', { name: '+ Join or Create' }));
 
-    expect(await screen.findByLabelText('Group name')).toBeTruthy();
+    expect(await screen.findByText('New group')).toBeTruthy();
+    expect(screen.getByLabelText('Group name')).toBeTruthy();
+    expect(screen.getByLabelText('Invitation code')).toBeTruthy();
   });
 
-  it('offers the same "got a code?" entry as the Friends tab, for a group code', async () => {
+  it('closes that page from the banner chevron', async () => {
     await render(<GroupsScreen />);
-    await screen.findByText('No groups yet');
+    await screen.findByText(/No groups yet/);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'New group' }));
-    await fireEvent.press(screen.getByText('Join a group'));
+    await fireEvent.press(screen.getByRole('button', { name: '+ Join or Create' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Close' }));
 
+    expect(screen.queryByLabelText('Group name')).toBeNull();
+  });
+
+  it('hands a group code typed on that page to the pending-invite store, and closes it', async () => {
+    await render(<GroupsScreen />);
+    await screen.findByText(/No groups yet/);
+
+    await fireEvent.press(screen.getByRole('button', { name: '+ Join or Create' }));
     await fireEvent.changeText(
-      screen.getByLabelText('Invitation code'),
+      await screen.findByLabelText('Invitation code'),
       'Zx3k9QpL2mN7vR1sT4uW8g',
     );
-    await fireEvent.press(screen.getByRole('button', { name: /^open$/i }));
+    await fireEvent.press(screen.getByRole('button', { name: /^join$/i }));
 
     expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
+    expect(screen.queryByLabelText('Group name')).toBeNull();
   });
 });

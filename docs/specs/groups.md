@@ -71,7 +71,7 @@ know where I stand on the trip as a whole**.
 - **Archived groups are hidden by default**, behind a toggle at the bottom of the list
   that states how many there are. Revealed, they are shown **below** the active groups and
   are visually muted.
-- Empty state: an explanation and a "Create a group" action.
+- Empty state: an explanation; the "+ Join or Create" action stays at the top.
 - Each row carries its own **"⋮" actions menu**, next to its favorite star: Manage (opens
   the group opened on its Manage tab), Archive/Reopen, Leave and Delete —
   exactly the actions available from inside the group itself (see "Inside a group" below),
@@ -472,11 +472,14 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - **Group list**: root groups only, name + member count + the member's own balance in
   that group. Archived groups sit under a discreet
   "Show archived (n)" toggle at the bottom and are muted when shown. Primary
-  "Create a group" action, and the same manual "got an invitation code?" entry the
-  Friends tab has — one code, entered the same way, whichever it turns out to lead to.
-- **Create**: a name field and the friend list with multi-selection; creating with no
-  friends selected is allowed. Creating a sub-group reuses the same screen, opened from
-  inside the parent, with the parent implicit rather than a field to fill in.
+  "+ Join or Create" action, which opens the one "New group" page.
+- **New group**: one page for both ways in. On top, **create**: a name field and the
+  friend list with multi-selection; creating with no friends selected is allowed. Below,
+  after an "OR" rule, **join**: the same manual invitation-code entry the Friends tab has —
+  one code, entered the same way, whichever it turns out to lead to — where pasting a
+  whole invitation link keeps just its code. The page is closed by the chevron in its
+  banner. Creating a sub-group reuses the create part, opened from inside the parent, with
+  the parent implicit rather than a field to fill in and no join part.
 - **Group detail** is one screen used for every standard group at any depth, and for a
   pair group. Its **top banner** — the same wash as the app's other pages — carries the group's name and, after a "·" in smaller type, its member
   count on one line, with a breadcrumb of its ancestors above the name when it is a sub-group (so a member

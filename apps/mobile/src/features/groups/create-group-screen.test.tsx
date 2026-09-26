@@ -2,6 +2,8 @@ import type { FriendSummary, GroupDetail } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { pendingInvite } from '@/features/invites/pending-invite';
+
 import { CreateGroupScreen } from './create-group-screen';
 
 const grace: FriendSummary = {
@@ -40,25 +42,61 @@ jest.mock('@/lib/api/friends', () => ({
 }));
 
 const onCreated = jest.fn();
-const onCancel = jest.fn();
+const onClose = jest.fn();
 
 beforeEach(() => {
   mockCreateGroup.mockReset().mockResolvedValue(created);
   mockFetchFriends.mockReset().mockResolvedValue([grace]);
   onCreated.mockReset();
-  onCancel.mockReset();
+  onClose.mockReset();
+  pendingInvite.clear();
 });
 
-const renderScreen = (parentId?: string) =>
-  render(<CreateGroupScreen onCreated={onCreated} onCancel={onCancel} parentId={parentId} />);
+const renderScreen = (parentId?: string, parentTrail?: { id: string; name: string }[]) =>
+  render(
+    <CreateGroupScreen
+      onCreated={onCreated}
+      onClose={onClose}
+      parentId={parentId}
+      parentTrail={parentTrail}
+    />,
+  );
 
 describe('CreateGroupScreen', () => {
+  it('is a "New group" page with a chevron to fold it away, not a Cancel button', async () => {
+    await renderScreen();
+
+    expect(screen.getByText('New group')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('puts joining with a code below creating, and closes once the code is handed off', async () => {
+    await renderScreen();
+
+    expect(screen.getByText('Create a group')).toBeTruthy();
+    expect(screen.getByText('OR')).toBeTruthy();
+    expect(screen.getByText('Join a group')).toBeTruthy();
+
+    await fireEvent.changeText(
+      screen.getByLabelText('Invitation code'),
+      'https://api.splitcount.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
+    );
+    await fireEvent.press(screen.getByRole('button', { name: /^join$/i }));
+
+    expect(pendingInvite.getSnapshot()).toBe('Zx3k9QpL2mN7vR1sT4uW8g');
+    expect(onClose).toHaveBeenCalled();
+    expect(mockCreateGroup).not.toHaveBeenCalled();
+  });
+
   it('will not create a group without a name', async () => {
     await renderScreen();
 
     expect(
-      screen.getByRole('button', { name: /create group/i }).props.accessibilityState
-        .disabled,
+      screen.getByRole('button', { name: /create group/i }).props.accessibilityState.disabled,
     ).toBe(true);
   });
 
@@ -122,11 +160,19 @@ describe('CreateGroupScreen', () => {
   describe('as a sub-group', () => {
     const parentId = '99999999-9999-4999-8999-999999999999';
 
-    it('titles itself and sends the parent along', async () => {
-      await renderScreen(parentId);
+    it('keeps the title, puts the parent trail above it and sends the parent along', async () => {
+      await renderScreen(parentId, [
+        { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Summer' },
+        { id: parentId, name: 'Corsica' },
+      ]);
       await screen.findByText('Grace Hopper');
 
-      expect(screen.getByText('New sub-group')).toBeTruthy();
+      expect(screen.getByText('New group')).toBeTruthy();
+      expect(screen.getByText('Summer')).toBeTruthy();
+      expect(screen.getByText('Corsica')).toBeTruthy();
+      // Nothing to join from inside a group.
+      expect(screen.queryByLabelText('Invitation code')).toBeNull();
+      expect(screen.queryByText('OR')).toBeNull();
 
       await fireEvent.changeText(screen.getByLabelText('Group name'), 'Ajaccio weekend');
       await fireEvent.press(screen.getByRole('button', { name: /create sub-group/i }));

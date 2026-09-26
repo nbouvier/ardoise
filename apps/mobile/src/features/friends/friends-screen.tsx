@@ -1,27 +1,29 @@
 import type { FriendEntry } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AddMenuButton } from '@/components/add-menu-button';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ListDivider } from '@/components/list-divider';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { FavoriteStar } from '@/components/favorite-star';
 import { IconMenuButton } from '@/components/icon-menu-button';
 import { ScreenHeader } from '@/components/screen-header';
+import { SheetModal } from '@/components/sheet-modal';
+import { TextAction } from '@/components/text-action';
 import { ThemedText } from '@/components/themed-text';
 import { useDialog } from '@/components/use-dialog';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { groupsChanged } from '@/features/groups/groups-changed';
-import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
 import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
-import { InviteScreen } from './invite-screen';
+import { NewFriendScreen } from './new-friend-screen';
 import { useFriends } from './use-friends';
 
 function FriendRow({
@@ -84,11 +86,19 @@ function FriendRow({
 }
 
 export function FriendsScreen() {
-  const { status, friends, refresh, remove, toggleFavorite, favoriteBusyId } = useFriends();
+  const {
+    status,
+    friends,
+    refresh,
+    pullRefresh,
+    refreshing,
+    remove,
+    toggleFavorite,
+    favoriteBusyId,
+  } = useFriends();
   const router = useRouter();
   const theme = useTheme();
-  const [inviting, setInviting] = useState(false);
-  const [joining, setJoining] = useState(false);
+  const [adding, setAdding] = useState(false);
   const { dialog, confirm, inform } = useDialog();
 
   /** Open the group shared with a friend — it always exists by now. */
@@ -122,6 +132,22 @@ export function FriendsScreen() {
     });
   }
 
+  // A star moves a friend between the two at once — the move is its feedback.
+  const favorites = friends.filter((friend) => friend.favorite);
+  const others = friends.filter((friend) => !friend.favorite);
+
+  const row = (friend: FriendEntry) => (
+    <FriendRow
+      key={friend.id}
+      friend={friend}
+      favoriteBusy={favoriteBusyId === friend.id}
+      onOpen={handleOpen}
+      onManage={handleManage}
+      onRemove={handleRemove}
+      onToggleFavorite={toggleFavorite}
+    />
+  );
+
   const friendCount =
     friends.length === 0
       ? undefined
@@ -134,6 +160,10 @@ export function FriendsScreen() {
       <ScreenHeader title="Friends" caption={friendCount} wash />
 
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
+        <View style={styles.actionRow}>
+          <TextAction label="+ Add or Invite" onPress={() => setAdding(true)} />
+        </View>
+
         <View style={styles.body}>
           {status === 'loading' ? (
             <View style={styles.centered}>
@@ -150,70 +180,27 @@ export function FriendsScreen() {
             <View style={styles.centered}>
               <Card tone="brand" style={styles.empty}>
                 <ThemedText style={styles.emptyGlyph}>🤝</ThemedText>
-                <ThemedText type="sectionTitle">No friends yet</ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-                  Invite someone with a link and they’ll show up here.
+                  No friends yet. Invite someone with a link and they’ll show up here.
                 </ThemedText>
               </Card>
             </View>
           ) : (
-            <FlatList
-              data={friends}
-              keyExtractor={(friend) => friend.id}
+            <RefreshableScrollView
               contentContainerStyle={styles.list}
-              renderItem={({ item }) => (
-                <FriendRow
-                  friend={item}
-                  favoriteBusy={favoriteBusyId === item.id}
-                  onOpen={handleOpen}
-                  onManage={handleManage}
-                  onRemove={handleRemove}
-                  onToggleFavorite={toggleFavorite}
-                />
-              )}
-            />
+              refreshing={refreshing}
+              onRefresh={pullRefresh}>
+              {favorites.map(row)}
+              {favorites.length > 0 && others.length > 0 ? <ListDivider /> : null}
+              {others.map(row)}
+            </RefreshableScrollView>
           )}
         </View>
-
-        <AddMenuButton
-          label="Add a friend"
-          options={[
-            { icon: 'plus', label: 'Invite a friend', onPress: () => setInviting(true) },
-            { icon: 'key', label: 'Enter a code', onPress: () => setJoining(true) },
-          ]}
-        />
       </SafeAreaView>
 
-      <Modal
-        visible={inviting}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setInviting(false)}>
-        <ThemedView style={styles.modal}>
-          <SafeAreaView style={styles.modalSafeArea}>
-            <InviteScreen />
-            <View style={styles.modalFooter}>
-              <Button label="Done" variant="secondary" onPress={() => setInviting(false)} />
-            </View>
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
-
-      <Modal
-        visible={joining}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setJoining(false)}>
-        <ThemedView style={styles.modal}>
-          <SafeAreaView style={styles.modal}>
-            <View style={styles.sheetContent}>
-              <ThemedText type="subtitle">Enter a code</ThemedText>
-              <InvitationCodeEntry onSubmitted={() => setJoining(false)} />
-              <Button label="Cancel" variant="ghost" onPress={() => setJoining(false)} />
-            </View>
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+      <SheetModal visible={adding} onClose={() => setAdding(false)}>
+        <NewFriendScreen onClose={() => setAdding(false)} />
+      </SheetModal>
 
       {dialog}
     </ThemedView>
@@ -230,7 +217,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.three,
     gap: Spacing.three,
   },
   centered: {
@@ -258,6 +246,9 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
+  actionRow: {
+    alignItems: 'flex-end',
+  },
   row: {
     flexDirection: 'row',
     // The star aligns with the name line specifically, not the row's full
@@ -278,20 +269,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
-  },
-  sheetContent: {
-    flex: 1,
-    gap: Spacing.three,
-    padding: Spacing.four,
-  },
-  modal: {
-    flex: 1,
-  },
-  modalSafeArea: {
-    flex: 1,
-  },
-  modalFooter: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.four,
   },
 });

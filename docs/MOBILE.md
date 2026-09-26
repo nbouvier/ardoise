@@ -10,7 +10,7 @@ Living document for how `apps/mobile` is built and run. Update it when the workf
 Reasons:
 
 - The template already depends on native modules that Expo Go does not bundle
-  (`expo-router` native tabs, `@expo/ui`, `expo-glass-effect`).
+  (`@expo/ui`, `expo-glass-effect`, `react-native-gesture-handler`, `react-native-reanimated`).
 - Planned Google sign-in needs a native Google SDK that is not available in Expo Go.
 
 Scanning the QR code with Expo Go therefore fails ("Something went wrong"). Use a
