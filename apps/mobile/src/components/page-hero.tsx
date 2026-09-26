@@ -11,7 +11,7 @@ export interface PageHeroProps {
 
 /**
  * The app's decorative wash, bled to a tab screen's own edges, behind
- * `ScreenHeader`'s identity — SplitCount's own brand mark and the page name.
+ * `ScreenHeader`'s page name.
  * The one place this bleed and its top safe-area inset are computed, so
  * every header that carries it behaves identically instead of each screen
  * re-deriving its own margins (`docs/specs/home.md`).
@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.three,
   },
 });

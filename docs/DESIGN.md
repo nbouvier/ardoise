@@ -29,12 +29,12 @@ people. It is **drawn in SVG from the theme tokens**, not shipped as a bitmap, s
 identity has exactly one source. The app icon, splash glyph, favicon and Android
 adaptive layers are exports of that same mark.
 
-Every tab screen opens with the mark and the "SplitCount" wordmark **before** the name of
-the page — the app introduces itself first, the section second — via `ScreenHeader`. A
-page title is never the largest, boldest text at the top of a tab screen; it sits smaller
-and in `textSecondary` beneath the wordmark. The one page pushed above the tabs, a
-group's, keeps the same banner and the same two lines — the group's name, then its member
-count — in the place of the app's.
+The home screen is where the app introduces itself: "SplitCount" and the tagline. The other tab screens (Groups, Friends,
+Account) open with **the page's own name on a single line** — `sectionTitle`, then, smaller
+(`smallBold`, secondary) after a "·", what it counts ("3 groups", "2 friends"; nothing on
+Account) — via `ScreenHeader`. The one page pushed above the tabs, a group's, keeps the
+banner: the group's name and, in the same smaller style after a
+"·", its member count.
 
 ## Tokens
 
@@ -146,14 +146,12 @@ or box**; a screen that styles its own is a bug in this document.
   area (a group's own header); without it the trail is plain `small` text — what a row in
   a list wants, where the row is already the target and a nested pressable would steal
   the tap. Shown wherever a group is named away from its parent (`docs/specs/home.md`).
-- **`ScreenHeader`** — the top of a tab screen: **SplitCount's own identity first** — the
-  `BrandMark`, sized to stand as tall as the two text lines beside it, next to the
-  wordmark and, directly under it, the current page named in smaller, secondary-coloured
-  type, with an optional trailing caption and room for one screen-level action. Every tab
-  opens the same way, and reads as SplitCount before it reads as "Groups" or "Friends".
-  `wash` wraps the header in `PageHero` — used on the Groups list, Friends and Account.
-  Group detail wears the same wash in the same two-line shape (see below), but with the
-  group in the place of the app, so it does not use `ScreenHeader` itself.
+- **`ScreenHeader`** — the top of a tab screen: **the page's name** (`sectionTitle`) on one
+  line, with an optional caption after it — a "·" then a `smallBold`, secondary-coloured
+  count — and room for one screen-level action. No mark and no wordmark: the app names
+  itself on the home screen only. `wash` wraps the header in `PageHero` — used on the
+  Groups list, Friends and Account. Group detail wears the same wash and the same
+  name-then-count line, but has the group's name and count in its own row and so does not use `ScreenHeader`.
 - **`TabBar`** — the tabs *within* one screen (as opposed to the app's bottom tabs, which
   switch between screens): an underlined row of text labels, the selected one in the brand
   colour with a brand underline, on a hairline rule. Each tab grows to share the width and
@@ -198,10 +196,9 @@ or box**; a screen that styles its own is a bug in this document.
 - A destructive action is a **red text button**, never a filled red one, and always
   confirms through a `ConfirmDialog` that states what is lost.
 - A section heading inside a screen or sheet is an **`overline`**, not a bold sentence.
-- **Every screen has a banner** — the `PageHero` wash with two lines (the app then the
-  page for a tab screen, the group's name then its member count for a group), never a
-  bare or plain header. A new screen starts from that, and a pushed one draws its own
-  back arrow in it.
+- **Every screen has a banner** — the `PageHero` wash with the page's name and its count on
+  one line (a tab screen's page name, a group's name), never a bare or plain header. A new
+  screen starts from that, and a pushed one draws its own way back in it.
 - **Adding to a list is a "+ Verb" text action at the end of that list's own heading
   line** — brand-coloured `smallBold`, opposite the `overline` title: "+ Create" for
   sub-groups, "+ Add" for transactions, "+ Invite" for members. Not a full-width button
@@ -257,7 +254,7 @@ nothing give the same out-of-focus read from the tokens themselves, identically
 everywhere. The safe-area inset is padding *inside* the block, so the wash runs under the
 status bar. Nothing in it is tappable and it never carries a figure. The same wash, via
 `PageHero`, sits behind the `ScreenHeader` of Groups, Friends and Account, so the same
-"out of focus" read shows up at the top of every tab with an identity to lead with. Group
+"out of focus" read shows up at the top of every tab. Group
 detail — pushed above the tabs, under its own Stack header — keeps a plain header instead.
 
 **Two sections** follow, each an `overline` heading over its own content, and each with
@@ -304,18 +301,17 @@ shows the toggle, not the empty state.
 
 Pushed above the tabs. **Transactions are the default content**, one of four tabs.
 
-**Top banner.** The same `PageHero` wash as the tab screens, in the same two-line shape as
-`ScreenHeader` — but with the group in the place of the app: the group's **name** on the
-first line (overline, like "Sub-groups" and "Transactions") and its **member count** on the second (`smallBold`, secondary).
-The route has no native Stack header (`headerShown: false` on the stack), so the banner
-draws its own **back arrow** at its start; a **breadcrumb** of ancestors (brand-coloured,
-tappable, only on a sub-group) sits above the name, and a **`FavoriteStar`** at the far
-end (`docs/specs/favorites.md`) — present on every kind of group, pair included: a pair
-group's own page is one of the two places its star shows, the other being its row on the
-Friends tab (`docs/specs/friends-and-invitations.md`). An "Archived — read-only" note under
-the count when the group is *effectively* archived (itself or any ancestor, `readOnly` on
-`GroupDetail`). The loading / gone / error states have no banner but keep the same back
-arrow.
+**Top banner.** The same `PageHero` wash as the tab screens.
+The group's **name** (`sectionTitle`, one line, truncated first) followed by a "·" and its
+**member count** (`smallBold`, secondary), on the same line; a **breadcrumb** of ancestors
+(brand-coloured, tappable, only on a sub-group) sits above it. At the far end: a
+**`FavoriteStar`** (`docs/specs/favorites.md`) — present on every kind of group, pair
+included: a pair group's own page is one of the two places its star shows, the other being
+its row on the Friends tab (`docs/specs/friends-and-invitations.md`) — then the way back,
+a **chevron pointing down** (label "Back": fold the group away). The route has no native
+Stack header (`headerShown: false`). An "Archived — read-only" note under the name when the
+group is *effectively* archived (itself or any ancestor, `readOnly` on `GroupDetail`). The
+loading / gone / error states have no banner and keep a plain back arrow.
 
 **Tabs** (`TabBar`, under the banner, all four on every kind of group, archived or pair
 included): **Transactions** (default), **Balances**, **Statistics**, **Manage**. Only the

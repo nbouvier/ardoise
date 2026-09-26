@@ -478,10 +478,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   friends selected is allowed. Creating a sub-group reuses the same screen, opened from
   inside the parent, with the parent implicit rather than a field to fill in.
 - **Group detail** is one screen used for every standard group at any depth, and for a
-  pair group. Its **top banner** — the same wash-and-two-lines style as the app's other
-  pages — carries the group's name on the first line and its member count on the second,
-  with a breadcrumb of its ancestors above the name when it is a sub-group (so a member
-  always knows where in the tree they are), the favorite star, and the way back. Under it
+  pair group. Its **top banner** — the same wash as the app's other pages — carries the group's name and, after a "·" in smaller type, its member
+  count on one line, with a breadcrumb of its ancestors above the name when it is a sub-group (so a member
+  always knows where in the tree they are), the favorite star, and the way back (a down chevron at the far end). Under it
   are four **tabs**: **Transactions** (the default), **Balances**, **Statistics** and
   **Manage**, described below. The Transactions tab shows a **sub-groups section** — shown
   for a pair group too — above the transaction list, listing its direct

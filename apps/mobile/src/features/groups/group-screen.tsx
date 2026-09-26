@@ -354,15 +354,16 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           back is drawn here. */}
       <PageHero>
         <View style={styles.headerRow}>
-          <BackButton onPress={() => router.back()} />
           <View style={styles.headerText}>
             <Breadcrumb ancestors={group.ancestors} onOpen={openGroup} />
-            <ThemedText type="sectionTitle" numberOfLines={1}>
-              {group.name}
-            </ThemedText>
-            <ThemedText type="smallBold" themeColor="textSecondary">
-              {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-            </ThemedText>
+            <View style={styles.titleLine}>
+              <ThemedText type="sectionTitle" numberOfLines={1} style={styles.titleName}>
+                {group.name}
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.titleCount}>
+                {`· ${group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}`}
+              </ThemedText>
+            </View>
             {readOnly ? (
               <ThemedText type="small" themeColor="textSecondary">
                 Archived — read-only until it’s reopened.
@@ -379,6 +380,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             disabled={busy}
             onToggle={toggleFavorite}
           />
+          <BackButton icon="collapse" onPress={() => router.back()} />
         </View>
       </PageHero>
 
@@ -584,8 +586,18 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   );
 }
 
-/** The way back, at the start of the header — this route has no native header. */
-function BackButton({ onPress }: { onPress: () => void }) {
+/**
+ * The way back — this route has no native header. In the group's banner it is
+ * a chevron at the far end (the mark takes the start); the states without a
+ * banner keep the arrow.
+ */
+function BackButton({
+  onPress,
+  icon = 'back',
+}: {
+  onPress: () => void;
+  icon?: 'back' | 'collapse';
+}) {
   const theme = useTheme();
 
   return (
@@ -595,7 +607,7 @@ function BackButton({ onPress }: { onPress: () => void }) {
       hitSlop={8}
       onPress={onPress}
       style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-      <Icon name="back" size={26} color={theme.text} />
+      <Icon name={icon} size={26} color={theme.text} />
     </Pressable>
   );
 }
@@ -1051,6 +1063,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
+  // The name and its count on one line, the count smaller and never squeezed out.
+  titleLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.one,
+  },
+  titleName: {
+    flexShrink: 1,
+  },
+  titleCount: {
+    flexShrink: 0,
+  },
   headerText: {
     flex: 1,
     gap: Spacing.half,
@@ -1058,7 +1082,6 @@ const styles = StyleSheet.create({
   back: {
     width: 32,
     height: 40,
-    marginLeft: -Spacing.one,
     alignItems: 'center',
     justifyContent: 'center',
   },

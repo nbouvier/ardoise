@@ -215,7 +215,7 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={trip.id} />);
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
-    expect(screen.getByText('2 members')).toBeTruthy();
+    expect(screen.getByText('· 2 members')).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
     expect(mockBack).toHaveBeenCalled();

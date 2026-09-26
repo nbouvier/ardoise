@@ -11,6 +11,7 @@ export type IconName =
   | 'leave'
   | 'trash'
   | 'back'
+  | 'collapse'
   | 'share'
   | 'copy'
   | 'refresh'
@@ -26,6 +27,8 @@ const paths: Record<IconName, string> = {
   refresh: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   back: 'M15 5l-7 7 7 7',
+  // A chevron pointing down: fold the group away, back to where it came from.
+  collapse: 'M5 9l7 7 7-7',
   plus: 'M12 5v14M5 12h14',
   // A key: the ring you hold, the shaft, and its teeth — reads as "enter a
   // code to get in", clearer for "join" than an abstract link/chain.
