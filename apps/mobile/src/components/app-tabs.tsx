@@ -1,39 +1,14 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
-
-import { Colors } from '@/constants/theme';
+import { PagerTabs } from '@/components/pager-tabs';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
   return (
     // The tab bar is a surface, not the canvas, and the active tab carries the
     // brand hue — the one place navigation says which app this is.
-    <NativeTabs
-      backgroundColor={colors.surface}
-      indicatorColor={colors.primarySoft}
-      tintColor={colors.primary}
-      labelStyle={{ selected: { color: colors.primary } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="house" md="home" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="groups">
-        <NativeTabs.Trigger.Label>Groups</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.3" md="groups" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="friends">
-        <NativeTabs.Trigger.Label>Friends</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.2" md="group" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="account">
-        <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.crop.circle" md="account_circle" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <PagerTabs>
+      <PagerTabs.Screen name="index" options={{ title: 'Home', icon: 'home' }} />
+      <PagerTabs.Screen name="groups" options={{ title: 'Groups', icon: 'groups' }} />
+      <PagerTabs.Screen name="friends" options={{ title: 'Friends', icon: 'friends' }} />
+      <PagerTabs.Screen name="account" options={{ title: 'Account', icon: 'account' }} />
+    </PagerTabs>
   );
 }

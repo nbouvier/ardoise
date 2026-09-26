@@ -15,7 +15,11 @@ export type IconName =
   | 'share'
   | 'copy'
   | 'refresh'
-  | 'check';
+  | 'check'
+  | 'home'
+  | 'groups'
+  | 'friends'
+  | 'account';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
@@ -26,6 +30,14 @@ const paths: Record<IconName, string> = {
   // An arc with an arrowhead: start over with a new one.
   refresh: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4',
   check: 'M5 12.5l4.5 4.5L19 7.5',
+  // The bottom tabs' own four: a house, three people, two people, one in a circle.
+  home: 'M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z',
+  groups:
+    'M12 11.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6.5 19.5a5.5 5.5 0 0 1 11 0M6 11a2.25 2.25 0 1 1 .5-4.45M2.5 17a3.75 3.75 0 0 1 3-3.4M18 11a2.25 2.25 0 1 0-.5-4.45M21.5 17a3.75 3.75 0 0 0-3-3.4',
+  friends:
+    'M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6',
+  account:
+    'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 13a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5zM6.2 18.6a6.75 6.75 0 0 1 11.6 0',
   back: 'M15 5l-7 7 7 7',
   // A chevron pointing down: fold the group away, back to where it came from.
   collapse: 'M5 9l7 7 7-7',
