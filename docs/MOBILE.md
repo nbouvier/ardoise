@@ -52,6 +52,12 @@ Prerequisites:
 
 - **Android**: Android Studio + SDK, `ANDROID_HOME` set, an emulator or a USB device
   with USB debugging.
+- **A JDK 17–23 (21 recommended)**, e.g. `winget install EclipseAdoptium.Temurin.21.JDK`.
+  JDK 24+ breaks the native build (the prefab tool prints a warning on stderr that Gradle
+  treats as a failure). It need not be your default JDK: `npm run mobile:android` runs
+  `apps/mobile/scripts/android.js`, which uses `JAVA_HOME` if it is already 17–23, else
+  looks for an installed JDK in the usual folders (preferring 21) and sets `JAVA_HOME` and
+  `PATH` for that one build only. Other projects on JDK 25 are unaffected.
 - **iOS**: macOS, Xcode, CocoaPods.
 
 ```bash
