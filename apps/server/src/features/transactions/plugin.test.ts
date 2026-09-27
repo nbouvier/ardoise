@@ -110,12 +110,26 @@ describe('transactions routes', () => {
     return response.json().transaction;
   }
 
-  const listTx = (user: TestUser, groupId: string, scope?: string) =>
-    app.inject({
+  const listTx = (
+    user: TestUser,
+    groupId: string,
+    scope?: string,
+    subgroupIds?: readonly string[],
+  ) => {
+    const params = new URLSearchParams();
+    if (scope) {
+      params.set('scope', scope);
+    }
+    if (subgroupIds) {
+      params.set('subgroupIds', subgroupIds.join(','));
+    }
+    const query = params.toString();
+    return app.inject({
       method: 'GET',
-      url: `/groups/${groupId}/transactions${scope ? `?scope=${scope}` : ''}`,
+      url: `/groups/${groupId}/transactions${query ? `?${query}` : ''}`,
       headers: user.headers,
     });
+  };
 
   const getTx = (user: TestUser, groupId: string, txId: string) =>
     app.inject({
@@ -495,6 +509,55 @@ describe('transactions routes', () => {
 
         const ids = response.json().transactions.map((t: { id: string }) => t.id);
         expect(ids.sort()).toEqual([rootTx.id, childTx.id, grandchildTx.id].sort());
+      });
+
+      it('narrows to only the named branches, each with its own nested sub-groups', async () => {
+        const ada = await signIn('ada');
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const branchA = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+        const branchAChild = await createdSubgroup(ada, branchA.id, 'Beach day');
+        const branchB = await createdSubgroup(ada, root.id, 'Bastia weekend');
+        const rootTx = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+        const branchATx = await createdTx(ada, branchA.id, expense(ada.userId, [ada.userId]));
+        const branchAChildTx = await createdTx(
+          ada,
+          branchAChild.id,
+          expense(ada.userId, [ada.userId]),
+        );
+        await createdTx(ada, branchB.id, expense(ada.userId, [ada.userId]));
+
+        const response = await listTx(ada, root.id, 'subtree', [branchA.id]);
+
+        const ids = response.json().transactions.map((t: { id: string }) => t.id);
+        expect(ids.sort()).toEqual([rootTx.id, branchATx.id, branchAChildTx.id].sort());
+      });
+
+      it('includes only the root group when no branch is named', async () => {
+        const ada = await signIn('ada');
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+        await createdTx(ada, sub.id, expense(ada.userId, [ada.userId]));
+
+        const response = await listTx(ada, root.id, 'subtree', []);
+
+        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
+          inRoot.id,
+        ]);
+        expect(response.json().excludedSubgroupCount).toBe(0);
+      });
+
+      it('drops an id that is not actually a descendant of the group', async () => {
+        const ada = await signIn('ada');
+        const root = await createdGroup(ada, 'Corsica 2026');
+        const other = await createdGroup(ada, 'Unrelated');
+        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+
+        const response = await listTx(ada, root.id, 'subtree', [other.id]);
+
+        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
+          inRoot.id,
+        ]);
       });
     });
   });

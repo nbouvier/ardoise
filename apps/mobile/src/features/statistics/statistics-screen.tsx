@@ -3,6 +3,7 @@ import {
   categoryDefinition,
   type GroupMember,
   type StatisticsType,
+  type SubgroupSummary,
   type TransactionCategory,
   type TransactionsListScope,
 } from '@splitcount/shared';
@@ -26,11 +27,10 @@ import { DonutChart } from './donut-chart';
 export interface StatisticsScreenProps {
   groupId: string;
   /**
-   * Whether the group has any sub-groups at all — drives whether the
-   * "Include sub-groups" toggle shows. A group with none has nothing for it
-   * to change (`docs/specs/group-statistics.md`).
+   * The group's own direct sub-groups — drives whether the subgroups field
+   * shows at all. Empty for a group with none (`docs/specs/group-statistics.md`).
    */
-  hasSubgroups: boolean;
+  subgroups: readonly SubgroupSummary[];
   /** Who can be selected, everyone included by default. */
   members: readonly GroupMember[];
   /** The signed-in member, marked "Me" in the participant picker. */
@@ -63,20 +63,32 @@ function emptyMessage(type: StatisticsType, everyoneSelected: boolean): string {
 /** A group's money, broken down by category (`docs/specs/group-statistics.md`). */
 export function StatisticsScreen({
   groupId,
-  hasSubgroups,
+  subgroups,
   members,
   viewerId,
 }: StatisticsScreenProps) {
+  const hasSubgroups = subgroups.length > 0;
   const [type, setType] = useState<StatisticsType>('spending');
-  // Sub-groups are included by default — the natural reading of "this trip's
-  // spending" is the whole trip. This is the one view in the product that
-  // crosses into sub-groups, and it says so on the toggle: balances and the
-  // reimbursement plan are each scoped to one group
+  // Every direct sub-group is included by default — the natural reading of
+  // "this trip's spending" is the whole trip. This is the one view in the
+  // product that crosses into sub-groups, and it says so on the field:
+  // balances and the reimbursement plan are each scoped to one group
   // (`docs/specs/balances.md`).
-  const [scope, setScope] = useState<TransactionsListScope>(hasSubgroups ? 'subtree' : 'group');
+  const [selectedSubgroupIds, setSelectedSubgroupIds] = useState<ReadonlySet<string>>(
+    () => new Set(subgroups.map((subgroup) => subgroup.id)),
+  );
+  const allSubgroupsSelected = selectedSubgroupIds.size === subgroups.length;
+  const scope: TransactionsListScope =
+    hasSubgroups && selectedSubgroupIds.size > 0 ? 'subtree' : 'group';
+  // Omitting the id list when every branch is selected keeps the request the
+  // same one the feature started with, rather than always spelling out every
+  // id.
+  const subgroupIds =
+    scope === 'subtree' && !allSubgroupsSelected ? [...selectedSubgroupIds] : undefined;
   const { status, transactions, excludedSubgroupCount, refresh } = useTransactions(
     groupId,
     scope,
+    subgroupIds,
   );
   // Everyone is selected by default — this is what makes the group's total
   // match "the group" scope the feature started with.
@@ -85,6 +97,7 @@ export function StatisticsScreen({
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
   const [pickingParticipants, setPickingParticipants] = useState(false);
+  const [pickingSubgroups, setPickingSubgroups] = useState(false);
   const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
@@ -107,9 +120,22 @@ export function StatisticsScreen({
     setType(value);
   }
 
-  function toggleScope() {
+  function toggleSubgroup(subgroupId: string) {
     setSelected(null);
-    setScope((current) => (current === 'subtree' ? 'group' : 'subtree'));
+    setSelectedSubgroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(subgroupId)) {
+        next.delete(subgroupId);
+      } else {
+        next.add(subgroupId);
+      }
+      return next;
+    });
+  }
+
+  function setAllSubgroups(ids: ReadonlySet<string>) {
+    setSelected(null);
+    setSelectedSubgroupIds(ids);
   }
 
   function toggleMember(memberId: string) {
@@ -143,6 +169,18 @@ export function StatisticsScreen({
     );
   }
 
+  if (pickingSubgroups) {
+    return (
+      <SubgroupsPicker
+        subgroups={subgroups}
+        selectedSubgroupIds={selectedSubgroupIds}
+        onToggle={toggleSubgroup}
+        onSetAll={setAllSubgroups}
+        onDone={() => setPickingSubgroups(false)}
+      />
+    );
+  }
+
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
 
   return (
@@ -164,7 +202,11 @@ export function StatisticsScreen({
               <ThemedText type="overline" themeColor="textSecondary">
                 Subgroups
               </ThemedText>
-              <SubgroupsField scope={scope} onPress={toggleScope} />
+              <SubgroupsField
+                subgroups={subgroups}
+                selectedSubgroupIds={selectedSubgroupIds}
+                onPress={() => setPickingSubgroups(true)}
+              />
             </View>
           ) : null}
         </View>
@@ -312,21 +354,39 @@ function ParticipantsField({
   );
 }
 
+function subgroupsLabel(
+  subgroups: readonly SubgroupSummary[],
+  selectedSubgroupIds: ReadonlySet<string>,
+): string {
+  if (selectedSubgroupIds.size === 0) {
+    return 'None';
+  }
+  if (selectedSubgroupIds.size === subgroups.length) {
+    return 'All';
+  }
+  return subgroups
+    .filter((subgroup) => selectedSubgroupIds.has(subgroup.id))
+    .map((subgroup) => subgroup.name)
+    .join(', ');
+}
+
 /**
  * Same field shape as the participants selector — a labelled, fixed-size
- * pill — since including sub-groups is just as much "who counts" as which
- * members are. Only two states, so tapping flips it directly rather than
- * opening a page of its own (`docs/specs/group-statistics.md`).
+ * pill naming which of the group's direct sub-groups count towards the
+ * breakdown. Tapping it opens the same kind of full-page picker
+ * (`docs/specs/group-statistics.md`).
  */
 function SubgroupsField({
-  scope,
+  subgroups,
+  selectedSubgroupIds,
   onPress,
 }: {
-  scope: TransactionsListScope;
+  subgroups: readonly SubgroupSummary[];
+  selectedSubgroupIds: ReadonlySet<string>;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const label = scope === 'subtree' ? 'All' : 'None';
+  const label = subgroupsLabel(subgroups, selectedSubgroupIds);
 
   return (
     <Pressable
@@ -345,7 +405,7 @@ function SubgroupsField({
   );
 }
 
-type SelectionPreset = 'all' | 'none' | 'onlyMe' | null;
+type SelectionPreset = 'all' | 'onlyMe' | 'none' | null;
 
 function selectionPreset(
   members: readonly GroupMember[],
@@ -395,7 +455,6 @@ function ParticipantsPicker({
           selected={preset === 'all'}
           onPress={() => onSetAll(new Set(members.map((member) => member.id)))}
         />
-        <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
         {viewerId ? (
           <Pill
             label="Only you"
@@ -403,6 +462,7 @@ function ParticipantsPicker({
             onPress={() => onSetAll(new Set([viewerId]))}
           />
         ) : null}
+        <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
       </View>
 
       <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerList}>
@@ -457,6 +517,105 @@ function ParticipantOption({
           </ThemedText>
         </View>
       ) : null}
+      <View
+        style={[
+          styles.checkbox,
+          { borderColor: selected ? theme.primary : theme.border },
+          selected && { backgroundColor: theme.primary },
+        ]}>
+        {selected ? <Icon name="check" size={14} color={theme.onPrimary} /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+type SubgroupsPreset = 'all' | 'none' | null;
+
+function subgroupsPreset(
+  subgroups: readonly SubgroupSummary[],
+  selectedSubgroupIds: ReadonlySet<string>,
+): SubgroupsPreset {
+  if (selectedSubgroupIds.size === subgroups.length) {
+    return 'all';
+  }
+  if (selectedSubgroupIds.size === 0) {
+    return 'none';
+  }
+  return null;
+}
+
+/**
+ * Which of the group's direct sub-groups count, picked on a page of its own
+ * the same way `ParticipantsPicker` is — checking one in includes it and
+ * everything nested under it (`docs/specs/group-statistics.md`).
+ */
+function SubgroupsPicker({
+  subgroups,
+  selectedSubgroupIds,
+  onToggle,
+  onSetAll,
+  onDone,
+}: {
+  subgroups: readonly SubgroupSummary[];
+  selectedSubgroupIds: ReadonlySet<string>;
+  onToggle: (subgroupId: string) => void;
+  onSetAll: (ids: ReadonlySet<string>) => void;
+  onDone: () => void;
+}) {
+  const preset = subgroupsPreset(subgroups, selectedSubgroupIds);
+
+  return (
+    <View style={styles.pickerPanel}>
+      <View style={styles.pickerPresets}>
+        <Pill
+          label="All"
+          selected={preset === 'all'}
+          onPress={() => onSetAll(new Set(subgroups.map((subgroup) => subgroup.id)))}
+        />
+        <Pill label="None" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
+      </View>
+
+      <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerList}>
+        {subgroups.map((subgroup) => (
+          <SubgroupOption
+            key={subgroup.id}
+            subgroup={subgroup}
+            selected={selectedSubgroupIds.has(subgroup.id)}
+            onPress={() => onToggle(subgroup.id)}
+          />
+        ))}
+      </ScrollView>
+
+      <Button label="Done" variant="secondary" onPress={onDone} />
+    </View>
+  );
+}
+
+function SubgroupOption({
+  subgroup,
+  selected,
+  onPress,
+}: {
+  subgroup: SubgroupSummary;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={subgroup.name}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.subgroupRow,
+        selected && { backgroundColor: theme.primarySoft },
+        pressed && styles.pressed,
+      ]}>
+      <ThemedText style={styles.subgroupName} numberOfLines={1}>
+        {subgroup.name}
+      </ThemedText>
       <View
         style={[
           styles.checkbox,
@@ -576,6 +735,7 @@ const styles = StyleSheet.create({
   pickerPanel: {
     flex: 1,
     gap: Spacing.three,
+    paddingBottom: Spacing.six,
   },
   pickerPresets: {
     flexDirection: 'row',
@@ -598,6 +758,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
   },
   participantName: {
+    flex: 1,
+  },
+  subgroupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
+  },
+  subgroupName: {
     flex: 1,
   },
   meTag: {

@@ -23,16 +23,25 @@ const transactionPath = (groupId: string, transactionId: string) =>
  * A group's transactions, most recent first — the server does the ordering.
  * `scope: 'subtree'` adds those of every sub-group the caller belongs to
  * (`docs/specs/group-statistics.md`); the default, `'group'`, is what the
- * plain transaction list always uses.
+ * plain transaction list always uses. `subgroupIds`, only meaningful with
+ * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
+ * branches; omitted, every branch counts.
  */
 export async function fetchTransactions(
   fetcher: AuthorizedFetch,
   groupId: string,
   scope: TransactionsListScope = 'group',
+  subgroupIds?: readonly string[],
 ): Promise<TransactionsListResponse> {
-  const response = await fetcher(
-    scope === 'subtree' ? `${transactionsPath(groupId)}?scope=subtree` : transactionsPath(groupId),
-  );
+  const params = new URLSearchParams();
+  if (scope === 'subtree') {
+    params.set('scope', 'subtree');
+    if (subgroupIds) {
+      params.set('subgroupIds', subgroupIds.join(','));
+    }
+  }
+  const query = params.toString();
+  const response = await fetcher(`${transactionsPath(groupId)}${query ? `?${query}` : ''}`);
   return parsedJson(response, transactionsListResponseSchema);
 }
 

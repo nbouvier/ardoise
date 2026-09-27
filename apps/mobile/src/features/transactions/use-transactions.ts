@@ -23,25 +23,31 @@ export interface UseTransactionsResult {
  * A group's transactions, most recent first — the server does the ordering.
  * `scope: 'subtree'` (statistics only, `docs/specs/group-statistics.md`) adds
  * every sub-group the viewer belongs to; the default, `'group'`, is what the
- * plain transaction list always uses. Refetches whenever `scope` itself
- * changes, keeping the last-known data visible (rather than resetting to
- * `'loading'`) while that happens — the same "don't blink" choice already
- * made for balances elsewhere in this feature.
+ * plain transaction list always uses. `subgroupIds`, only meaningful with
+ * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
+ * branches. Refetches whenever `scope` or `subgroupIds` change, keeping the
+ * last-known data visible (rather than resetting to `'loading'`) while that
+ * happens — the same "don't blink" choice already made for balances
+ * elsewhere in this feature.
  */
 export function useTransactions(
   groupId: string,
   scope: TransactionsListScope = 'group',
+  subgroupIds?: readonly string[],
 ): UseTransactionsResult {
   const { authorizedFetch } = useAuth();
   const [status, setStatus] = useState<TransactionsStatus>('loading');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [excludedSubgroupCount, setExcludedSubgroupCount] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
+  // Arrays are a new reference every render; the join is what actually
+  // identifies the selection for the effect below.
+  const subgroupIdsKey = subgroupIds?.join(',');
 
   useEffect(() => {
     let active = true;
 
-    fetchTransactions(authorizedFetch, groupId, scope)
+    fetchTransactions(authorizedFetch, groupId, scope, subgroupIds)
       .then((loaded) => {
         if (active) {
           setTransactions(loaded.transactions);
@@ -60,7 +66,8 @@ export function useTransactions(
     return () => {
       active = false;
     };
-  }, [authorizedFetch, groupId, scope, reloadToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- subgroupIdsKey stands in for subgroupIds, a new array reference every render
+  }, [authorizedFetch, groupId, scope, subgroupIdsKey, reloadToken]);
 
   const refresh = useCallback(() => {
     setStatus('loading');

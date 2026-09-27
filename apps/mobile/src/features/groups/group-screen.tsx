@@ -422,7 +422,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
         return (
           <StatisticsScreen
             groupId={groupId}
-            hasSubgroups={hasSubgroups}
+            subgroups={group.subgroups}
             members={group.members}
             viewerId={viewerId}
           />

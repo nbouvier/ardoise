@@ -524,6 +524,13 @@ it is always `0` for `scope=group` and for a group with no sub-groups. An unreco
 answer, not a broken one. The plain transaction list itself always uses the default
 `scope=group` and is unaffected by any of this.
 
+`?subgroupIds=` (only meaningful with `scope=subtree`), a comma-separated list of direct
+sub-group ids, narrows the descendants added to only those branches — each named
+sub-group plus everything nested under it. The empty string means no branch, equivalent to
+`scope=group`; omitting the parameter entirely means every branch, the same answer as
+before this parameter existed. An id that is not actually one of the group's descendants is
+silently dropped rather than causing a `400`.
+
 ### `POST /groups/:groupId/transactions`
 
 Record a transaction. `payerId` and every concerned member must be current members of

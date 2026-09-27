@@ -455,31 +455,35 @@ The group's Statistics tab. A row of **labelled fields**, each a small uppercase
 above a fixed-size pill that never changes size with its content: a **participants field**
 (showing "Everybody" or the selected members' first names, ellipsized rather than wrapped)
 and, only for a group with any sub-groups, a **subgroups field** beside it (reading "All"
-or "None", active-by-default "All"). Centred on its own line below that row, a real
-**Spending / Income switch** — the two words drawn inside a sliding brand-filled thumb, not
-a pair of look-alike pills. When sub-groups are included and some are left out because the
-viewer has not joined them, a small line says how many rather than presenting a partial sum
-as the whole tree's.
+by default, "None", or the selected sub-groups' own names, ellipsized the same way).
+Centred on its own line below that row, a real **Spending / Income switch** — the two words
+drawn inside a sliding brand-filled thumb, not a pair of look-alike pills. When some
+sub-group in scope is left out because the viewer has not joined it, a small line says how
+many rather than presenting a partial sum as the whole tree's.
 
-The subgroups field is the same field component as the participants one, sized and styled
-identically, but since it only ever holds two states, tapping it flips "All"/"None"
-directly instead of opening a picker.
-
-Tapping the participants field **swaps the tab's own content for a picker**, exactly the
+Tapping either field **swaps the tab's own content for a picker of its own**, exactly the
 way "+ Invite" swaps the Manage tab's content for `InvitePanel` — not a sheet stacked on
-top. Three quick presets ("Everybody", "Nobody", "Only you", each reading as selected when
-the current selection already matches it) sit above a scrolling list: one row per member, an
-avatar, a checkbox, and the viewer's own row marked **"Me"** the same tag shape as "Owner" in
-Manage. Everyone is checked by default; each row or preset applies immediately, and a
-"Done" button at the bottom returns to the chart.
+top. Each picker gives its "Done" button room to breathe below the last row rather than
+sitting flush against the screen's bottom edge, the same way `InvitePanel`'s own does.
+
+- The **participants picker**: presets **"Everybody", "Only you", "Nobody"**, in that
+  order, each reading as selected when the current selection already matches it, above a
+  scrolling list — one row per member, an avatar, a checkbox, and the viewer's own row
+  marked **"Me"** the same tag shape as "Owner" in Manage. Everyone is checked by default.
+- The **subgroups picker**: presets **"All"** and **"None"**, above a scrolling list — one
+  row per *direct* sub-group, just its name and a checkbox. Every direct sub-group is
+  checked by default; checking one back in brings its own nested sub-groups along with it,
+  since there is no separate row for a grandchild.
+
+Either picker applies each row or preset immediately; "Done" only returns to the chart.
 
 Under that a **donut chart** (220pt, 44pt ring — thick enough that a small share reads as
 an arc, not a line), one arc per category in that category's own colour, and a legend card
 below: swatch, emoji + label, percentage, amount — largest first. The hole holds the total
 for the current selection; tapping an arc or legend row swaps it for that category's
 emoji, label, amount and percentage, fades the other arcs to 30%, and tints the legend row
-it came from. Tapping again, changing the type, or toggling a member or sub-groups returns
-to the total.
+it came from. Tapping again, changing the type, or changing either selection returns to the
+total.
 
 States: a spinner, the same retryable connection error as the list, and empty states that
 say *which* combination is empty ("Nothing recorded as income yet.") rather than a generic

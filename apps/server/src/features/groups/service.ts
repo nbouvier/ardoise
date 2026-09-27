@@ -103,10 +103,18 @@ export interface GroupsService {
    * depth, the ones `userId` belongs to — and how many they do not, so the
    * view can say when it is leaving some out. A sub-group's mere visibility
    * must never leak into this: an unjoined one is excluded, full stop.
+   *
+   * `subgroupIds`, when given, narrows this to only the named direct
+   * sub-groups' own branches (each one plus everything nested under it) —
+   * the statistics picker's per-branch selection. Any id that is not
+   * actually one of `groupId`'s descendants is silently dropped rather than
+   * erroring, the same tolerance `scope` itself gets. Omitted entirely, every
+   * branch counts, unchanged from before this existed.
    */
   subtreeScope(
     userId: string,
     groupId: string,
+    subgroupIds?: readonly string[],
   ): Promise<{ memberDescendantIds: string[]; excludedCount: number }>;
 }
 
@@ -656,9 +664,25 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       await invites.revoke(targetFor(groupId));
     },
 
-    async subtreeScope(userId, groupId) {
+    async subtreeScope(userId, groupId, subgroupIds) {
       await requireMembership(userId, groupId);
-      const descendantIds = await repository.listDescendantIds(groupId);
+      const allDescendantIds = await repository.listDescendantIds(groupId);
+
+      let descendantIds = allDescendantIds;
+      if (subgroupIds) {
+        const allowedRoots = subgroupIds.filter((id) => allDescendantIds.includes(id));
+        const branches = await Promise.all(
+          allowedRoots.map((id) => repository.listDescendantIds(id)),
+        );
+        const branchIds = new Set(allowedRoots);
+        for (const branch of branches) {
+          for (const id of branch) {
+            branchIds.add(id);
+          }
+        }
+        descendantIds = [...branchIds];
+      }
+
       const memberDescendantIds = await repository.filterMemberGroupIds(userId, descendantIds);
       return {
         memberDescendantIds,

@@ -31,6 +31,17 @@ const groupParamsSchema = z.object({ groupId: z.uuid() });
 const transactionParamsSchema = groupParamsSchema.extend({ transactionId: z.uuid() });
 
 /**
+ * `subgroupIds` on `GET .../transactions?scope=subtree` — comma-separated
+ * uuids naming which direct sub-groups' branches to include, or the empty
+ * string for none. Malformed input is dropped, the same tolerance `scope`
+ * itself gets: it narrows the answer, it never changes its shape.
+ */
+const subgroupIdsQuerySchema = z
+  .string()
+  .transform((value) => (value.length === 0 ? [] : value.split(',')))
+  .pipe(z.array(z.uuid()));
+
+/**
  * HTTP mapping of a refused transaction operation, once the caller's group
  * membership has already been confirmed (that refusal is a `GroupAccessError`
  * — `group_not_found` / `group_archived` — translated the same way `groups`
@@ -134,11 +145,16 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
         // An unrecognised scope falls back to the default rather than a 400
         // — nothing about it changes the shape of the answer, only its
         // completeness, so failing softly is kinder than failing loudly.
-        const scope = transactionsListScopeSchema.safeParse(
-          (query as Record<string, unknown> | undefined)?.scope,
-        );
+        const rawQuery = query as Record<string, unknown> | undefined;
+        const scope = transactionsListScopeSchema.safeParse(rawQuery?.scope);
+        const subgroupIds = subgroupIdsQuerySchema.safeParse(rawQuery?.subgroupIds);
         return reply.send(
-          await transactions.list(userId, params.groupId, scope.success ? scope.data : undefined),
+          await transactions.list(
+            userId,
+            params.groupId,
+            scope.success ? scope.data : undefined,
+            subgroupIds.success ? subgroupIds.data : undefined,
+          ),
         );
       }),
     );

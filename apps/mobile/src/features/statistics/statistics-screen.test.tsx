@@ -16,6 +16,19 @@ const members = [
   { ...grace, role: 'member' as const },
 ];
 
+const subgroupFixture = (id: string, name: string) => ({
+  id,
+  name,
+  memberCount: 2,
+  viewerIsMember: true,
+  viewerBalanceCents: 0,
+  favorite: false,
+  viewerRole: 'member' as const,
+  archivedAt: null,
+});
+const subOne = subgroupFixture('sub-1', 'Ajaccio weekend');
+const subTwo = subgroupFixture('sub-2', 'Bastia weekend');
+
 let sequence = 0;
 
 function transaction({
@@ -81,7 +94,7 @@ async function renderScreen(
   return render(
     <StatisticsScreen
       groupId="group-1"
-      hasSubgroups={false}
+      subgroups={[]}
       members={members}
       viewerId={ada.id}
       {...overrides}
@@ -306,12 +319,7 @@ describe('StatisticsScreen', () => {
   it('offers a retry when the transactions could not be loaded', async () => {
     mockFetchTransactions.mockRejectedValue(new Error('offline'));
     await render(
-      <StatisticsScreen
-        groupId="group-1"
-        hasSubgroups={false}
-        members={members}
-        viewerId={ada.id}
-      />,
+      <StatisticsScreen groupId="group-1" subgroups={[]} members={members} viewerId={ada.id} />,
     );
 
     const retry = await screen.findByRole('button', { name: 'Try again' });
@@ -324,12 +332,7 @@ describe('StatisticsScreen', () => {
   it('waits on the transactions rather than showing an empty chart', async () => {
     mockFetchTransactions.mockReturnValue(new Promise(() => undefined));
     await render(
-      <StatisticsScreen
-        groupId="group-1"
-        hasSubgroups={false}
-        members={members}
-        viewerId={ada.id}
-      />,
+      <StatisticsScreen groupId="group-1" subgroups={[]} members={members} viewerId={ada.id} />,
     );
 
     expect(screen.getByTestId('statistics-loading')).toBeTruthy();
@@ -346,7 +349,7 @@ describe('StatisticsScreen', () => {
       await render(
         <StatisticsScreen
           groupId="group-1"
-          hasSubgroups
+          subgroups={[subOne, subTwo]}
           members={members}
           viewerId={ada.id}
         />,
@@ -364,7 +367,7 @@ describe('StatisticsScreen', () => {
       expect(screen.queryByRole('button', { name: /Subgroups:/ })).toBeNull();
     });
 
-    it('excludes sub-groups when toggled off, and clears any selection', async () => {
+    it('excludes sub-groups when deselected, and clears any category selection', async () => {
       mockFetchTransactions.mockResolvedValue({
         transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
         excludedSubgroupCount: 0,
@@ -373,7 +376,7 @@ describe('StatisticsScreen', () => {
       await render(
         <StatisticsScreen
           groupId="group-1"
-          hasSubgroups
+          subgroups={[subOne, subTwo]}
           members={members}
           viewerId={ada.id}
         />,
@@ -386,9 +389,43 @@ describe('StatisticsScreen', () => {
         excludedSubgroupCount: 0,
       });
       await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'None' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
       expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('5.00');
       expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');
+      expect(screen.getByRole('button', { name: 'Subgroups: None' })).toBeTruthy();
+    });
+
+    it('narrows to a single named sub-group and its own nested branch', async () => {
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
+        excludedSubgroupCount: 0,
+      });
+
+      await render(
+        <StatisticsScreen
+          groupId="group-1"
+          subgroups={[subOne, subTwo]}
+          members={members}
+          viewerId={ada.id}
+        />,
+      );
+      await screen.findByTestId('statistics-centre-amount');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
+      await fireEvent.press(screen.getByRole('checkbox', { name: 'Bastia weekend' }));
+
+      expect(
+        screen.getByRole('checkbox', { name: 'Ajaccio weekend' }).props.accessibilityState,
+      ).toMatchObject({ checked: true });
+      expect(
+        screen.getByRole('checkbox', { name: 'Bastia weekend' }).props.accessibilityState,
+      ).toMatchObject({ checked: false });
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+
+      expect(screen.getByRole('button', { name: 'Subgroups: Ajaccio weekend' })).toBeTruthy();
     });
   });
 });

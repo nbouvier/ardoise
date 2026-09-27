@@ -43,14 +43,17 @@ viewer switches between:
   when all are selected, otherwise the selected members' first names — and changed from a
   checklist opened over the screen, not a row of per-member chips: a group of any size must
   stay legible in one line.
-- **Scope** — for a group with sub-groups, whether the breakdown covers **this group
-  alone** or **this group and every sub-group nested inside it**, at any depth. Including
-  sub-groups is the default: the natural reading of "this trip's spending" is the whole
-  trip, not just the top-level bucket. This is the **only** view in the product that
-  crosses into sub-groups, and it says so on the toggle — balances and the reimbursement
-  plan are each scoped to one group (`docs/specs/balances.md`,
-  `docs/specs/reimbursements.md`). A group with no sub-groups has nothing for this toggle
-  to change, and it is not shown.
+- **Scope** — for a group with sub-groups, which of its **direct** sub-groups are
+  included, each one bringing along everything nested under it, at any depth. Every
+  direct sub-group is selected by default: the natural reading of "this trip's spending"
+  is the whole trip, not just the top-level bucket. This is the **only** view in the
+  product that crosses into sub-groups, and it says so on its own field — balances and the
+  reimbursement plan are each scoped to one group (`docs/specs/balances.md`,
+  `docs/specs/reimbursements.md`). A group with no sub-groups has nothing for this field to
+  change, and it is not shown. The current selection is named the same way the
+  participants field is — "All" when every direct sub-group is selected, "None" when the
+  breakdown is narrowed to this group alone, otherwise the selected sub-groups' own
+  names — and changed from the same kind of checklist.
 
 The **participant list never changes** based on scope: every member of a sub-group is
 necessarily already a member of the group itself (`docs/specs/groups.md`), so the group's
@@ -90,7 +93,7 @@ has one (`Other` by default), so nothing falls outside the breakdown.
 ### Where it applies
 
 - Available on every group the viewer belongs to, **including the implicit pair group**
-  (which can neither have sub-groups nor show the scope toggle) and **including an
+  (which can neither have sub-groups nor show the subgroups field) and **including an
   archived group** — it is a read-only view of transactions that remain visible either
   way.
 - Non-members see nothing, exactly as for every other group route: the group itself is
@@ -193,19 +196,27 @@ its own.
       view, and the viewer can switch back.
 - [ ] The statistics view is available on a pair group and on an archived group.
 - [ ] A failure to load the group's transactions is reported with a way to retry.
-- [ ] For a group with sub-groups, a scope toggle defaults to including every sub-group's
-      transactions, at any depth, in the breakdown; switching it to "this group alone"
-      recomputes over only the group's own transactions.
-- [ ] A group with no sub-groups shows no scope toggle.
-- [ ] A sub-group the viewer has not joined never contributes to the "including
-      sub-groups" scope, and its exclusion is stated when it affects the total.
+- [ ] For a group with sub-groups, every direct sub-group is selected by default,
+      including every descendant's transactions, at any depth, in the breakdown;
+      deselecting one drops that branch — itself and everything nested under it — from the
+      breakdown.
+- [ ] A group with no sub-groups shows no subgroups field.
+- [ ] A sub-group the viewer has not joined never contributes to the breakdown, whether or
+      not its own branch is currently selected, and its exclusion is stated when it
+      affects the total.
 - [ ] The participant checklist is always the group's own member list, unaffected by the
-      scope toggle, with the viewer's own row marked "Me".
+      subgroups selection, with the viewer's own row marked "Me".
+- [ ] The subgroups checklist is always the group's own direct sub-group list, unaffected
+      by the participant selection.
 - [ ] The participants field names who is selected — "Everybody", or the selected
-      members' first names — and opens the checklist when tapped.
+      members' first names — and opens its picker when tapped; the subgroups field names
+      which branches are selected the same way — "All", "None", or the selected
+      sub-groups' own names — and opens its own picker when tapped.
 - [ ] The participants field and, when shown, the subgroups field are each labelled by a
       small caption above them and stay the same size regardless of their content.
-- [ ] The subgroups field reads "All" or "None" and flips between them when tapped.
+- [ ] The participants picker's presets read, in order, "Everybody", "Only you", "Nobody".
+      The subgroups picker's presets read "All" and "None".
+- [ ] Neither picker's "Done" button sits flush against the bottom edge of the screen.
 
 ## Testing considerations
 
@@ -228,9 +239,14 @@ its own.
 - **The participants field's own wording** — "Everybody" with everyone selected, first
   names joined by commas otherwise — is worth asserting directly, since it is the only
   place the current selection is stated once the per-member chips are gone.
-- **The three presets** must each resolve to the exact set they name — "Only you" selects
-  the viewer alone even when they are not first in the member list — and the field's own
-  wording after each is worth asserting, not just the resulting breakdown.
+- **The participants presets** must each resolve to the exact set they name — "Only you"
+  selects the viewer alone even when they are not first in the member list — and the
+  field's own wording after each is worth asserting, not just the resulting breakdown.
+- **Selecting one branch of several nested levels deep** must include that branch's own
+  descendants and nothing from a sibling branch — the case a flat "include sub-groups"
+  toggle could never distinguish. An id that is not actually a descendant of the group
+  must be silently ignored, never surfaced as an error or allowed to reach outside the
+  group's own tree.
 
 ## Data / API considerations
 
@@ -250,6 +266,14 @@ its own.
   `docs/API.md`. This is what "including sub-groups" is built from; the plain
   `GET /groups/:groupId/transactions` used by the transaction list itself is unaffected
   and keeps returning only that group's own transactions.
+- **`scope=subtree` also takes an optional `subgroupIds`** — a comma-separated list of
+  direct sub-group ids — narrowing the descendants added to only those named branches,
+  each with everything nested under it. Resolved server-side (each branch's own
+  descendant ids, unioned, then filtered to the ones the caller belongs to exactly as
+  `scope=subtree` already was) so an id outside the group's own tree can never leak
+  another group's transactions in. Omitting it keeps today's behaviour — every branch —
+  unchanged; this is additive, not a breaking change to `scope=subtree`'s existing
+  callers.
 - **This is only viable while the client holds every transaction in scope.** The
   transaction list is unpaginated today (an open question in
   `docs/specs/transactions.md`); the moment it is paginated, a client-side breakdown would
@@ -266,19 +290,23 @@ its own.
   fixed-size pill so neither shifts size as its content changes: a **participants field**
   ("Everybody" by default, or the selected members' first names, truncated with an
   ellipsis rather than wrapping), and — only for a group with sub-groups — a **subgroups
-  field** ("All" or "None") beside it. Under that row, centred on its own, a **real
-  two-way switch** for the type — "Spending" and "Income" named inside it, not two pills
-  that could as well be read as independent options.
-- Tapping the participants field **swaps the tab's content for a picker**, the same way
-  "+ Invite" swaps the Manage tab's content for its own page: three quick presets
-  ("Everybody", "Nobody", "Only you"), then one row per member with an avatar and a
-  checkbox, the viewer's own row marked "Me" the same way "Owner" marks a member in Manage
-  (`docs/specs/balances.md`) — everyone checked by default, changes taking effect as each
-  row (or preset) is tapped, confirmed by a "Done" button that returns to the chart. Not a
+  field** beside it ("All" by default, "None", or the selected sub-groups' own names,
+  truncated the same way). Under that row, centred on its own, a **real two-way switch**
+  for the type — "Spending" and "Income" named inside it, not two pills that could as well
+  be read as independent options.
+- Tapping either field **swaps the tab's content for a picker of its own**, the same way
+  "+ Invite" swaps the Manage tab's content for its own page: quick presets, then one row
+  per item with a checkbox, confirmed by a "Done" button that returns to the chart. Not a
   sheet stacked over the chart: the picker *is* the tab's content while it is open.
-- The **subgroups field** is the same field shape as the participants one, but since
-  "including sub-groups" is a binary choice, tapping it flips its own value directly
-  between "All" and "None" rather than opening a page.
+  - **The participants picker**: presets in order **"Everybody", "Only you", "Nobody"**,
+    then one row per member with an avatar and a checkbox, the viewer's own row marked
+    "Me" the same way "Owner" marks a member in Manage (`docs/specs/balances.md`) —
+    everyone checked by default.
+  - **The subgroups picker**: presets **"All"** and **"None"**, then one row per direct
+    sub-group with just its name and a checkbox — every direct sub-group checked by
+    default, checking one in bringing along everything nested under it.
+  - Either picker's changes take effect as each row or preset is tapped; the "Done" button
+    only returns to the chart, it does not itself apply anything.
 - The **ring is noticeably thick** relative to its diameter, so a category holding a small
   share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the
@@ -291,10 +319,14 @@ its own.
   read as "no transactions".
 - Amounts follow the formatting already used by the transaction list and balances; no new
   money formatting.
-- The **scope toggle** is the subgroups field described above, next to the participants
-  field, and is present only for a group that has sub-groups. When it excludes at least
-  one unjoined sub-group, a single small line under the toggles states how many — worded
-  plainly ("n sub-groups you're not in aren't included"), not as a warning.
+- The **subgroups field** described above is present only for a group that has sub-groups.
+  When the current selection excludes at least one unjoined sub-group, a single small line
+  under the fields states how many — worded plainly ("n sub-groups you're not in aren't
+  included"), not as a warning. This can happen even with every direct sub-group selected,
+  since a nested one further down could still be one the viewer has not joined.
+  - A "Done" button that ends up flush against the bottom edge of the screen is a defect,
+    not a style choice — both pickers give it room to breathe below the last row, the same
+    way `InvitePanel`'s own "Done" already does.
 
 ## Observability
 
@@ -315,6 +347,11 @@ amounts are financial data and must not be logged
   resolved server-side to the group plus only the descendants the caller is currently a
   member of; a sub-group they cannot read contributes nothing and is never named, exactly
   as it contributes nothing to any balance of theirs (`docs/specs/balances.md`).
+- **`subgroupIds` can only narrow, never widen, that same set.** Every id it names is
+  checked server-side against the group's own descendant ids before anything is looked up;
+  an id from outside the group's tree — a different group entirely, or one the caller
+  supplies by guessing — is dropped rather than resolved, so it can never be used to pull
+  in another group's transactions.
 
 ## Open questions
 

@@ -34,9 +34,16 @@ export interface TransactionsService {
    * A group's transactions. `scope: 'subtree'` adds those of every
    * descendant the caller belongs to (`docs/specs/group-statistics.md`);
    * `'group'` (the default call site, the plain transaction list) is
-   * unaffected by sub-groups entirely.
+   * unaffected by sub-groups entirely. `subgroupIds`, only meaningful with
+   * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
+   * branches — see `GroupsService.subtreeScope`.
    */
-  list(userId: string, groupId: string, scope?: TransactionsListScope): Promise<TransactionsListResult>;
+  list(
+    userId: string,
+    groupId: string,
+    scope?: TransactionsListScope,
+    subgroupIds?: readonly string[],
+  ): Promise<TransactionsListResult>;
   get(userId: string, groupId: string, transactionId: string): Promise<Transaction>;
   create(userId: string, groupId: string, input: CreateTransactionRequest): Promise<Transaction>;
   update(
@@ -227,7 +234,7 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
   }
 
   return {
-    async list(userId, groupId, scope = 'group') {
+    async list(userId, groupId, scope = 'group', subgroupIds) {
       await requireMembership(userId, groupId);
 
       let excludedSubgroupCount = 0;
@@ -236,6 +243,7 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
         const { memberDescendantIds, excludedCount } = await groups.subtreeScope(
           userId,
           groupId,
+          subgroupIds,
         );
         excludedSubgroupCount = excludedCount;
         rows = await repository.listByGroups([groupId, ...memberDescendantIds]);
