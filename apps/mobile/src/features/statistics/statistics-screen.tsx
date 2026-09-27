@@ -8,11 +8,18 @@ import {
 } from '@splitcount/shared';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { Icon } from '@/components/icon';
+import { IconButton } from '@/components/icon-button';
 import { Pill } from '@/components/pill';
+import { SegmentedSwitch } from '@/components/segmented-switch';
+import { SheetModal } from '@/components/sheet-modal';
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { useTransactions } from '@/features/transactions/use-transactions';
@@ -30,7 +37,7 @@ export interface StatisticsScreenProps {
   hasSubgroups: boolean;
   /** Who can be selected, everyone included by default. */
   members: readonly GroupMember[];
-  /** The signed-in member, labelled "You" in the participant list. */
+  /** The signed-in member, marked "Me" in the participant picker. */
   viewerId: string | null;
 }
 
@@ -81,6 +88,7 @@ export function StatisticsScreen({
     () => new Set(members.map((member) => member.id)),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
@@ -126,33 +134,30 @@ export function StatisticsScreen({
   return (
     <View style={styles.panel}>
       <View style={styles.toggles}>
-        <View style={styles.toggleRow}>
-          {(['spending', 'income'] as const).map((option) => (
-            <Pill
-              key={option}
-              label={typeLabels[option]}
-              selected={type === option}
-              onPress={() => changeType(option)}
-            />
-          ))}
-          {hasSubgroups ? (
+        <View style={styles.controlRow}>
+          <ParticipantsField
+            members={members}
+            selectedMemberIds={selectedMemberIds}
+            onPress={() => setPickerOpen(true)}
+          />
+          <SegmentedSwitch
+            options={[
+              { key: 'spending', label: typeLabels.spending },
+              { key: 'income', label: typeLabels.income },
+            ]}
+            value={type}
+            onChange={changeType}
+          />
+        </View>
+        {hasSubgroups ? (
+          <View style={styles.toggleRow}>
             <Pill
               label="Include sub-groups"
               selected={scope === 'subtree'}
               onPress={toggleScope}
             />
-          ) : null}
-        </View>
-        <View style={styles.toggleRow}>
-          {members.map((member) => (
-            <Pill
-              key={member.id}
-              label={member.id === viewerId ? 'You' : member.name}
-              selected={selectedMemberIds.has(member.id)}
-              onPress={() => toggleMember(member.id)}
-            />
-          ))}
-        </View>
+          </View>
+        ) : null}
         {excludedSubgroupCount > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
             {excludedSubgroupCount === 1
@@ -161,6 +166,15 @@ export function StatisticsScreen({
           </ThemedText>
         ) : null}
       </View>
+
+      <ParticipantsSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        members={members}
+        viewerId={viewerId}
+        selectedMemberIds={selectedMemberIds}
+        onToggle={toggleMember}
+      />
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
@@ -236,6 +250,154 @@ export function StatisticsScreen({
         </ScrollView>
       )}
     </View>
+  );
+}
+
+/** First name only — a chip-sized label has no room for a surname. */
+function firstName(name: string): string {
+  return name.split(' ')[0] ?? name;
+}
+
+function participantsLabel(
+  members: readonly GroupMember[],
+  selectedMemberIds: ReadonlySet<string>,
+): string {
+  if (selectedMemberIds.size === 0) {
+    return 'No one selected';
+  }
+  if (selectedMemberIds.size === members.length) {
+    return 'Everybody';
+  }
+  return members
+    .filter((member) => selectedMemberIds.has(member.id))
+    .map((member) => firstName(member.name))
+    .join(', ');
+}
+
+function ParticipantsField({
+  members,
+  selectedMemberIds,
+  onPress,
+}: {
+  members: readonly GroupMember[];
+  selectedMemberIds: ReadonlySet<string>;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const label = participantsLabel(members, selectedMemberIds);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Participants: ${label}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.participantsField,
+        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+      ]}>
+      <ThemedText numberOfLines={1} style={styles.participantsLabel}>
+        {label}
+      </ThemedText>
+      <Icon name="collapse" size={16} color={theme.textSecondary} />
+    </Pressable>
+  );
+}
+
+/**
+ * Who the breakdown counts, opened over the screen rather than a row of
+ * chips that would not fit a group of any size (`docs/specs/group-statistics.md`).
+ */
+function ParticipantsSheet({
+  visible,
+  onClose,
+  members,
+  viewerId,
+  selectedMemberIds,
+  onToggle,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  members: readonly GroupMember[];
+  viewerId: string | null;
+  selectedMemberIds: ReadonlySet<string>;
+  onToggle: (memberId: string) => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <SheetModal visible={visible} onClose={onClose}>
+      <ThemedView style={styles.sheetContainer}>
+        <SafeAreaView style={styles.sheetContainer}>
+          <View style={styles.sheetHeader}>
+            <ThemedText type="subtitle">Participants</ThemedText>
+            <IconButton
+              icon="close"
+              accessibilityLabel="Close"
+              color={theme.textSecondary}
+              onPress={onClose}
+            />
+          </View>
+          <ScrollView contentContainerStyle={styles.sheetList}>
+            {members.map((member) => (
+              <ParticipantOption
+                key={member.id}
+                member={member}
+                isViewer={member.id === viewerId}
+                selected={selectedMemberIds.has(member.id)}
+                onPress={() => onToggle(member.id)}
+              />
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
+    </SheetModal>
+  );
+}
+
+function ParticipantOption({
+  member,
+  isViewer,
+  selected,
+  onPress,
+}: {
+  member: GroupMember;
+  isViewer: boolean;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={member.name}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.participantRow,
+        selected && { backgroundColor: theme.primarySoft },
+        pressed && styles.pressed,
+      ]}>
+      <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
+      <ThemedText style={styles.participantName} numberOfLines={1}>
+        {member.name}
+      </ThemedText>
+      {isViewer ? (
+        <View style={[styles.meTag, { backgroundColor: theme.accentSoft }]}>
+          <ThemedText type="overline" themeColor="onAccentSoft">
+            Me
+          </ThemedText>
+        </View>
+      ) : null}
+      <View
+        style={[
+          styles.checkbox,
+          { borderColor: selected ? theme.primary : theme.border },
+          selected && { backgroundColor: theme.primary },
+        ]}>
+        {selected ? <Icon name="check" size={14} color={theme.onPrimary} /> : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -325,6 +487,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  participantsField: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    height: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
+  participantsLabel: {
+    flexShrink: 1,
+  },
+  sheetContainer: {
+    flex: 1,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  sheetList: {
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.four,
+  },
+  participantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.medium,
+  },
+  participantName: {
+    flex: 1,
+  },
+  meTag: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Radius.pill,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: Radius.pill,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   body: {
     gap: Spacing.four,

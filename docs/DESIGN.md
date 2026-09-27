@@ -111,6 +111,10 @@ or box**; a screen that styles its own is a bug in this document.
 - **`Pill`** — the selectable token: a mode toggle, a category, a member filter. Filled
   when selected, outlined when not. One shape, so a row of pills always means "pick from
   these".
+- **`SegmentedSwitch`** — a real two-way switch, its two options named inside a sliding
+  brand-filled thumb rather than drawn as two look-alike pills: used where the choice is
+  one setting with two positions (Spending / Income on Statistics), not a "pick one of
+  these tokens" row. Not for three or more options — that stays `Pill` or `TabBar`.
 - **`TextField`** — every text input: a filled, rounded field on `backgroundElement`,
   never a bare underline. `multiline` for a comment.
 - **`Avatar`** — someone's Google picture, falling back to their initial **on their own
@@ -447,11 +451,16 @@ The plan is **derived from the balances the group screen already loaded**
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
-The group's Statistics tab. A **Spending / Income** pill row — with an **"Include sub-groups"**
-pill for a group that has any, active by default — then a wrapped row of **one pill per
-member** (the viewer's reads "You"), all active by default, each independently tappable.
-When sub-groups are included and some are left out because the viewer has not joined them,
-a small line says how many rather than presenting a partial sum as the whole tree's.
+The group's Statistics tab. A **participants field** (flex-filling, showing "Everybody" or
+the selected members' first names, ellipsized rather than wrapped) next to a real
+**Spending / Income switch** — the two words drawn inside a sliding track, not a pair of
+look-alike pills. Tapping the field opens a checklist over most of the screen: one row per
+member, an avatar, a checkbox, and the viewer's own row marked **"Me"** the same tag shape
+as "Owner" in Manage; everyone checked by default, each row independently tappable, changes
+applying immediately. Under that, for a group that has any sub-groups, an **"Include
+sub-groups"** pill, active by default. When sub-groups are included and some are left out
+because the viewer has not joined them, a small line says how many rather than presenting a
+partial sum as the whole tree's.
 
 Under that a **donut chart** (220pt, 44pt ring — thick enough that a small share reads as
 an arc, not a line), one arc per category in that category's own colour, and a legend card

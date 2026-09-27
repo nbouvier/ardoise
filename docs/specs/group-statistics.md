@@ -34,12 +34,15 @@ viewer switches between:
 - **Type** — **Spending** (transactions of kind `expense`) or **Income** (kind `income`).
   The two are never mixed into one chart: they move money in opposite directions, and a
   single chart summing them would be meaningless. Spending is the default.
-- **Participants** — every group member appears as a selectable chip, **all of them
-  selected by default**. With everyone selected, each transaction contributes its full
-  amount, whoever paid — "the group" in full. Deselecting members narrows the breakdown to
-  the sum of only the selected members' own shares of each transaction; selecting the
-  viewer alone reproduces what used to be called the "Me" scope. At least one member must
-  stay selected for the chart to mean anything.
+- **Participants** — every group member is selectable, **all of them selected by
+  default**. With everyone selected, each transaction contributes its full amount, whoever
+  paid — "the group" in full. Deselecting members narrows the breakdown to the sum of only
+  the selected members' own shares of each transaction; selecting the viewer alone
+  reproduces what used to be called the "Me" scope. At least one member must stay selected
+  for the chart to mean anything. The current selection is named in one field — "Everybody"
+  when all are selected, otherwise the selected members' first names — and changed from a
+  checklist opened over the screen, not a row of per-member chips: a group of any size must
+  stay legible in one line.
 - **Scope** — for a group with sub-groups, whether the breakdown covers **this group
   alone** or **this group and every sub-group nested inside it**, at any depth. Including
   sub-groups is the default: the natural reading of "this trip's spending" is the whole
@@ -49,7 +52,7 @@ viewer switches between:
   `docs/specs/reimbursements.md`). A group with no sub-groups has nothing for this toggle
   to change, and it is not shown.
 
-The **participant chips never change** based on scope: every member of a sub-group is
+The **participant list never changes** based on scope: every member of a sub-group is
 necessarily already a member of the group itself (`docs/specs/groups.md`), so the group's
 own member list is always the complete set of people who could appear on any transaction
 in scope, whether or not sub-groups are included.
@@ -196,8 +199,10 @@ its own.
 - [ ] A group with no sub-groups shows no scope toggle.
 - [ ] A sub-group the viewer has not joined never contributes to the "including
       sub-groups" scope, and its exclusion is stated when it affects the total.
-- [ ] The participant chips are always the group's own member list, unaffected by the
-      scope toggle.
+- [ ] The participant checklist is always the group's own member list, unaffected by the
+      scope toggle, with the viewer's own row marked "Me".
+- [ ] The participants field names who is selected — "Everybody", or the selected
+      members' first names — and opens the checklist when tapped.
 
 ## Testing considerations
 
@@ -217,6 +222,9 @@ its own.
 - **Scope must never leak an unjoined sub-group's amounts.** A test generating a tree
   where the viewer belongs to some sub-groups and not others must show the "including
   sub-groups" breakdown identical to one computed only from the joined ones.
+- **The participants field's own wording** — "Everybody" with everyone selected, first
+  names joined by commas otherwise — is worth asserting directly, since it is the only
+  place the current selection is stated once the per-member chips are gone.
 
 ## Data / API considerations
 
@@ -248,10 +256,14 @@ its own.
 - Shown as the group screen's **Statistics tab** — the transaction list stays the group's
   default and primary content, and the statistics are one tab over, read afresh each time
   the tab is opened.
-- The type is a **segmented toggle above the chart**, reusing the pill styling of the
-  existing kind and split-mode toggles. Participants are the same pill styling, one chip
-  per member (the viewer's own chip reads "You"), wrapped onto multiple rows and all
-  active by default — tapping a chip toggles that member in or out of the selection.
+- The type is a **real two-way switch above the chart** — "Spending" and "Income" named
+  inside it, not two pills that could as well be read as independent options. Next to it,
+  a **field naming who is currently selected** ("Everybody" by default, or the selected
+  members' first names, truncated with an ellipsis rather than wrapping); tapping it opens
+  a checklist over most of the screen, one row per member with an avatar, a checkbox, and
+  the viewer's own row marked "Me" the same way "Owner" marks a member in Manage
+  (`docs/specs/balances.md`) — everyone checked by default, changes taking effect as each
+  row is tapped rather than behind a separate "Apply".
 - The **ring is noticeably thick** relative to its diameter, so a category holding a small
   share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the
@@ -264,10 +276,11 @@ its own.
   read as "no transactions".
 - Amounts follow the formatting already used by the transaction list and balances; no new
   money formatting.
-- The **scope toggle** sits alongside the type toggle, same pill styling, and is present
-  only for a group that has sub-groups. When it excludes at least one unjoined sub-group,
-  a single small line under the toggles states how many — worded plainly ("n sub-groups
-  you're not in aren't included"), not as a warning.
+- The **scope toggle** sits on its own row under the participants field and the type
+  switch, same pill styling as before, and is present only for a group that has
+  sub-groups. When it excludes at least one unjoined sub-group, a single small line under
+  the toggles states how many — worded plainly ("n sub-groups you're not in aren't
+  included"), not as a warning.
 
 ## Observability
 
