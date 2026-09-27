@@ -451,16 +451,21 @@ The plan is **derived from the balances the group screen already loaded**
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
-The group's Statistics tab. A **participants field** (flex-filling, showing "Everybody" or
-the selected members' first names, ellipsized rather than wrapped) next to a real
-**Spending / Income switch** — the two words drawn inside a sliding track, not a pair of
-look-alike pills. Tapping the field opens a checklist over most of the screen: one row per
-member, an avatar, a checkbox, and the viewer's own row marked **"Me"** the same tag shape
-as "Owner" in Manage; everyone checked by default, each row independently tappable, changes
-applying immediately. Under that, for a group that has any sub-groups, an **"Include
-sub-groups"** pill, active by default. When sub-groups are included and some are left out
-because the viewer has not joined them, a small line says how many rather than presenting a
-partial sum as the whole tree's.
+The group's Statistics tab. A **participants field** (left-aligned, hugging its own content,
+showing "Everybody" or the selected members' first names, ellipsized rather than wrapped),
+then, centred on its own line below it, a real **Spending / Income switch** — the two words
+drawn inside a sliding brand-filled thumb, not a pair of look-alike pills. Under that, for a
+group that has any sub-groups, an **"Include sub-groups"** pill, active by default. When
+sub-groups are included and some are left out because the viewer has not joined them, a
+small line says how many rather than presenting a partial sum as the whole tree's.
+
+Tapping the participants field **swaps the tab's own content for a picker**, exactly the
+way "+ Invite" swaps the Manage tab's content for `InvitePanel` — not a sheet stacked on
+top. Three quick presets ("Everybody", "Nobody", "Only you", each reading as selected when
+the current selection already matches it) sit above a scrolling list: one row per member, an
+avatar, a checkbox, and the viewer's own row marked **"Me"** the same tag shape as "Owner" in
+Manage. Everyone is checked by default; each row or preset applies immediately, and a
+"Done" button at the bottom returns to the chart.
 
 Under that a **donut chart** (220pt, 44pt ring — thick enough that a small share reads as
 an arc, not a line), one arc per category in that category's own colour, and a legend card

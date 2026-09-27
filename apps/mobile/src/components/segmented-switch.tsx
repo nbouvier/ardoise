@@ -22,10 +22,16 @@ export interface SegmentedSwitchProps<Key extends string> {
   onChange: (key: Key) => void;
 }
 
+const HEIGHT = 44;
+const INSET = 3;
+
 /**
  * A two-way switch with its own options named inside it — "Spending" /
  * "Income" — rather than two look-alike `Pill`s next to each other, which
- * reads as "pick either" instead of "one setting, two positions".
+ * reads as "pick either" instead of "one setting, two positions". Its own
+ * height is fixed rather than left to wrap its content: an absolutely
+ * positioned thumb inside an auto-height row is what previously let this
+ * balloon to fill whatever flexible space its ancestors offered.
  */
 export function SegmentedSwitch<Key extends string>({
   options,
@@ -33,7 +39,7 @@ export function SegmentedSwitch<Key extends string>({
   onChange,
 }: SegmentedSwitchProps<Key>) {
   const theme = useTheme();
-  const [trackWidth, setTrackWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
   const selectedIndex = value === options[0].key ? 0 : 1;
   const position = useSharedValue(selectedIndex);
 
@@ -41,66 +47,63 @@ export function SegmentedSwitch<Key extends string>({
     position.set(withTiming(selectedIndex, { duration: 220, easing: Easing.out(Easing.cubic) }));
   }, [position, selectedIndex]);
 
-  const half = trackWidth / 2;
+  const half = contentWidth / 2;
   const thumbStyle = useAnimatedStyle(() => ({
     width: half,
     transform: [{ translateX: position.get() * half }],
   }));
 
   return (
-    <View style={[styles.track, { backgroundColor: theme.backgroundElement }]}>
-      <View
-        style={styles.row}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}>
-        {trackWidth > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.thumb, { backgroundColor: theme.primary }, thumbStyle]}
-          />
-        ) : null}
-        {options.map((option) => {
-          const active = option.key === value;
-          return (
-            <Pressable
-              key={option.key}
-              accessibilityRole="button"
-              accessibilityLabel={option.label}
-              accessibilityState={{ selected: active }}
-              onPress={() => onChange(option.key)}
-              style={styles.option}>
-              <ThemedText
-                type="smallBold"
-                style={{ color: active ? theme.onPrimary : theme.textSecondary }}>
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+    <View
+      style={[styles.track, { backgroundColor: theme.backgroundElement }]}
+      onLayout={(event) => setContentWidth(event.nativeEvent.layout.width - INSET * 2)}>
+      {contentWidth > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.thumb, { backgroundColor: theme.primary }, thumbStyle]}
+        />
+      ) : null}
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
+          <Pressable
+            key={option.key}
+            accessibilityRole="button"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(option.key)}
+            style={styles.option}>
+            <ThemedText
+              type="smallBold"
+              style={{ color: active ? theme.onPrimary : theme.textSecondary }}>
+              {option.label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   track: {
-    borderRadius: Radius.pill,
-    padding: 3,
-  },
-  row: {
+    alignSelf: 'center',
     flexDirection: 'row',
+    height: HEIGHT,
+    borderRadius: Radius.pill,
+    padding: INSET,
   },
   thumb: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
+    top: INSET,
+    bottom: INSET,
+    left: INSET,
     borderRadius: Radius.pill,
   },
   option: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.four,
   },
 });

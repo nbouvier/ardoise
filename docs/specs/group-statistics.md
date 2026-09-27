@@ -225,6 +225,9 @@ its own.
 - **The participants field's own wording** — "Everybody" with everyone selected, first
   names joined by commas otherwise — is worth asserting directly, since it is the only
   place the current selection is stated once the per-member chips are gone.
+- **The three presets** must each resolve to the exact set they name — "Only you" selects
+  the viewer alone even when they are not first in the member list — and the field's own
+  wording after each is worth asserting, not just the resulting breakdown.
 
 ## Data / API considerations
 
@@ -256,14 +259,18 @@ its own.
 - Shown as the group screen's **Statistics tab** — the transaction list stays the group's
   default and primary content, and the statistics are one tab over, read afresh each time
   the tab is opened.
-- The type is a **real two-way switch above the chart** — "Spending" and "Income" named
-  inside it, not two pills that could as well be read as independent options. Next to it,
-  a **field naming who is currently selected** ("Everybody" by default, or the selected
-  members' first names, truncated with an ellipsis rather than wrapping); tapping it opens
-  a checklist over most of the screen, one row per member with an avatar, a checkbox, and
-  the viewer's own row marked "Me" the same way "Owner" marks a member in Manage
+- Above the chart: a **field naming who is currently selected** ("Everybody" by default, or
+  the selected members' first names, truncated with an ellipsis rather than wrapping),
+  left-aligned; under it, centred on its own, a **real two-way switch** for the type —
+  "Spending" and "Income" named inside it, not two pills that could as well be read as
+  independent options.
+- Tapping the participants field **swaps the tab's content for a picker**, the same way
+  "+ Invite" swaps the Manage tab's content for its own page: three quick presets
+  ("Everybody", "Nobody", "Only you"), then one row per member with an avatar and a
+  checkbox, the viewer's own row marked "Me" the same way "Owner" marks a member in Manage
   (`docs/specs/balances.md`) — everyone checked by default, changes taking effect as each
-  row is tapped rather than behind a separate "Apply".
+  row (or preset) is tapped, confirmed by a "Done" button that returns to the chart. Not a
+  sheet stacked over the chart: the picker *is* the tab's content while it is open.
 - The **ring is noticeably thick** relative to its diameter, so a category holding a small
   share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the

@@ -8,18 +8,14 @@ import {
 } from '@splitcount/shared';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Icon } from '@/components/icon';
-import { IconButton } from '@/components/icon-button';
 import { Pill } from '@/components/pill';
 import { SegmentedSwitch } from '@/components/segmented-switch';
-import { SheetModal } from '@/components/sheet-modal';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { useTransactions } from '@/features/transactions/use-transactions';
@@ -88,7 +84,7 @@ export function StatisticsScreen({
     () => new Set(members.map((member) => member.id)),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickingParticipants, setPickingParticipants] = useState(false);
   const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
@@ -129,26 +125,42 @@ export function StatisticsScreen({
     });
   }
 
+  function setAllMembers(ids: ReadonlySet<string>) {
+    setSelected(null);
+    setSelectedMemberIds(ids);
+  }
+
+  if (pickingParticipants) {
+    return (
+      <ParticipantsPicker
+        members={members}
+        viewerId={viewerId}
+        selectedMemberIds={selectedMemberIds}
+        onToggle={toggleMember}
+        onSetAll={setAllMembers}
+        onDone={() => setPickingParticipants(false)}
+      />
+    );
+  }
+
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
 
   return (
     <View style={styles.panel}>
       <View style={styles.toggles}>
-        <View style={styles.controlRow}>
-          <ParticipantsField
-            members={members}
-            selectedMemberIds={selectedMemberIds}
-            onPress={() => setPickerOpen(true)}
-          />
-          <SegmentedSwitch
-            options={[
-              { key: 'spending', label: typeLabels.spending },
-              { key: 'income', label: typeLabels.income },
-            ]}
-            value={type}
-            onChange={changeType}
-          />
-        </View>
+        <ParticipantsField
+          members={members}
+          selectedMemberIds={selectedMemberIds}
+          onPress={() => setPickingParticipants(true)}
+        />
+        <SegmentedSwitch
+          options={[
+            { key: 'spending', label: typeLabels.spending },
+            { key: 'income', label: typeLabels.income },
+          ]}
+          value={type}
+          onChange={changeType}
+        />
         {hasSubgroups ? (
           <View style={styles.toggleRow}>
             <Pill
@@ -166,15 +178,6 @@ export function StatisticsScreen({
           </ThemedText>
         ) : null}
       </View>
-
-      <ParticipantsSheet
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        members={members}
-        viewerId={viewerId}
-        selectedMemberIds={selectedMemberIds}
-        onToggle={toggleMember}
-      />
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
@@ -303,54 +306,80 @@ function ParticipantsField({
   );
 }
 
+type SelectionPreset = 'all' | 'none' | 'onlyMe' | null;
+
+function selectionPreset(
+  members: readonly GroupMember[],
+  selectedMemberIds: ReadonlySet<string>,
+  viewerId: string | null,
+): SelectionPreset {
+  if (selectedMemberIds.size === members.length) {
+    return 'all';
+  }
+  if (selectedMemberIds.size === 0) {
+    return 'none';
+  }
+  if (viewerId && selectedMemberIds.size === 1 && selectedMemberIds.has(viewerId)) {
+    return 'onlyMe';
+  }
+  return null;
+}
+
 /**
- * Who the breakdown counts, opened over the screen rather than a row of
- * chips that would not fit a group of any size (`docs/specs/group-statistics.md`).
+ * Who the breakdown counts, picked on a page of its own — swapped in for the
+ * chart the way "+ Invite" swaps in `InvitePanel` on the Manage tab — rather
+ * than a row of chips that would not fit a group of any size
+ * (`docs/specs/group-statistics.md`).
  */
-function ParticipantsSheet({
-  visible,
-  onClose,
+function ParticipantsPicker({
   members,
   viewerId,
   selectedMemberIds,
   onToggle,
+  onSetAll,
+  onDone,
 }: {
-  visible: boolean;
-  onClose: () => void;
   members: readonly GroupMember[];
   viewerId: string | null;
   selectedMemberIds: ReadonlySet<string>;
   onToggle: (memberId: string) => void;
+  onSetAll: (ids: ReadonlySet<string>) => void;
+  onDone: () => void;
 }) {
-  const theme = useTheme();
+  const preset = selectionPreset(members, selectedMemberIds, viewerId);
 
   return (
-    <SheetModal visible={visible} onClose={onClose}>
-      <ThemedView style={styles.sheetContainer}>
-        <SafeAreaView style={styles.sheetContainer}>
-          <View style={styles.sheetHeader}>
-            <ThemedText type="subtitle">Participants</ThemedText>
-            <IconButton
-              icon="close"
-              accessibilityLabel="Close"
-              color={theme.textSecondary}
-              onPress={onClose}
-            />
-          </View>
-          <ScrollView contentContainerStyle={styles.sheetList}>
-            {members.map((member) => (
-              <ParticipantOption
-                key={member.id}
-                member={member}
-                isViewer={member.id === viewerId}
-                selected={selectedMemberIds.has(member.id)}
-                onPress={() => onToggle(member.id)}
-              />
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </ThemedView>
-    </SheetModal>
+    <View style={styles.pickerPanel}>
+      <View style={styles.pickerPresets}>
+        <Pill
+          label="Everybody"
+          selected={preset === 'all'}
+          onPress={() => onSetAll(new Set(members.map((member) => member.id)))}
+        />
+        <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
+        {viewerId ? (
+          <Pill
+            label="Only you"
+            selected={preset === 'onlyMe'}
+            onPress={() => onSetAll(new Set([viewerId]))}
+          />
+        ) : null}
+      </View>
+
+      <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerList}>
+        {members.map((member) => (
+          <ParticipantOption
+            key={member.id}
+            member={member}
+            isViewer={member.id === viewerId}
+            selected={selectedMemberIds.has(member.id)}
+            onPress={() => onToggle(member.id)}
+          />
+        ))}
+      </ScrollView>
+
+      <Button label="Done" variant="secondary" onPress={onDone} />
+    </View>
   );
 }
 
@@ -481,23 +510,18 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   toggles: {
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   toggleRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
   participantsField: {
-    flex: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '80%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.two,
     height: 44,
     paddingHorizontal: Spacing.three,
@@ -506,19 +530,20 @@ const styles = StyleSheet.create({
   participantsLabel: {
     flexShrink: 1,
   },
-  sheetContainer: {
+  pickerPanel: {
+    flex: 1,
+    gap: Spacing.three,
+  },
+  pickerPresets: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  pickerScroll: {
     flex: 1,
   },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  sheetList: {
+  pickerList: {
     gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.four,
   },
   participantRow: {

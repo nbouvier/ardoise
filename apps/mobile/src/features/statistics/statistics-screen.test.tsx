@@ -149,6 +149,7 @@ describe('StatisticsScreen', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
   });
@@ -166,6 +167,7 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
   });
@@ -175,8 +177,8 @@ describe('StatisticsScreen', () => {
     await screen.findByTestId('statistics-centre-amount');
 
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ada Lovelace' }));
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Nobody' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
     expect(screen.getByText(/Select at least one participant/)).toBeTruthy();
   });
@@ -190,9 +192,12 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Participants: Everybody' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
 
-    expect(screen.getByRole('button', { name: 'Participants: Ada' })).toBeTruthy();
     const graceOption = screen.getByRole('checkbox', { name: 'Grace Hopper' });
     expect(graceOption.props.accessibilityState).toMatchObject({ checked: false });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.getByRole('button', { name: 'Participants: Ada' })).toBeTruthy();
   });
 
   it('marks the viewer’s own row “Me” in the participant checklist', async () => {
@@ -202,6 +207,34 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
 
     expect(screen.getByText('Me')).toBeTruthy();
+  });
+
+  it('offers quick presets for everybody, nobody and only the viewer', async () => {
+    await renderScreen([
+      transaction({
+        category: 'restaurant',
+        amountCents: 3000,
+        shares: { ada: 1000, grace: 2000 },
+      }),
+    ]);
+    await screen.findByTestId('statistics-centre-amount');
+
+    await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
+    expect(screen.getByRole('button', { name: 'Everybody' }).props.accessibilityState).toMatchObject(
+      { selected: true },
+    );
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Only you' }));
+    expect(
+      screen.getByRole('checkbox', { name: 'Ada Lovelace' }).props.accessibilityState,
+    ).toMatchObject({ checked: true });
+    expect(
+      screen.getByRole('checkbox', { name: 'Grace Hopper' }).props.accessibilityState,
+    ).toMatchObject({ checked: false });
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
   });
 
   it('shows a selected category in the centre, and deselects on a second tap', async () => {
@@ -263,6 +296,7 @@ describe('StatisticsScreen', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
     expect(
       screen.getByText(/None of this group’s spending concerns the selected participants/),
