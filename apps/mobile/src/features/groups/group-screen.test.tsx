@@ -255,7 +255,7 @@ describe('GroupScreen', () => {
 
     await swipe(-400);
     await waitFor(() => expect(selected('Balances')).toBe(true));
-    expect(await screen.findByText('Your balance here')).toBeTruthy();
+    expect(await screen.findByText('You’re all settled up')).toBeTruthy();
 
     await swipe(400);
     await waitFor(() => expect(selected('Transactions')).toBe(true));
@@ -506,17 +506,18 @@ describe('GroupScreen', () => {
     expect(await screen.findByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
-  it('answers "where do I stand" at the top of the Balances tab', async () => {
-    // Ada is owed 21.25 — said in words, not left to a leading "+". Sourced
-    // from the group's own viewerBalanceCents, not the per-member list.
-    mockFetchGroup.mockResolvedValue({ ...trip, viewerBalanceCents: 2125 });
+  it('marks the viewer’s own row “Me” in “Where everyone stands”', async () => {
+    mockFetchGroup.mockResolvedValue(trip);
     mockFetchBalances.mockResolvedValue(balances);
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
     await openTab('Balances');
 
-    expect(await screen.findByText('You are owed 21.25')).toBeTruthy();
+    await screen.findByText('Where everyone stands');
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
+    expect(screen.getByText('+21.25')).toBeTruthy();
   });
 
   it('states the viewer’s own side when they are the one owing', async () => {
@@ -530,7 +531,7 @@ describe('GroupScreen', () => {
     await screen.findByText('Corsica 2026');
     await openTab('Balances');
 
-    expect(await screen.findByText('You owe 8.00')).toBeTruthy();
+    expect(await screen.findByText('−8.00')).toBeTruthy();
   });
 
   it('shows a pair group named after the other person, with no way to change who is in it', async () => {

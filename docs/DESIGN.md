@@ -372,10 +372,10 @@ over the transaction list (`TransactionRow` cards). A row opens the same
 add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
 state: a brand card with a glyph and an explanation.
 
-**Balances tab** — **the viewer's own balance in a brand card** — "Your balance here"
-over the figure, said in words so it never rests on spotting a minus sign, read straight
-off `group.viewerBalanceCents` rather than a separate fetch — then the reimbursement plan
-and everyone's standings (see "Reimbursements" below).
+**Balances tab** — "Where everyone stands" first, then the reimbursement plan (see
+"Reimbursements" below); the viewer's own figure is their row in that list, marked with an
+accent **"Me"** tag the same shape as the "Owner" tag in Manage, rather than repeated in a
+card of its own.
 
 **Statistics tab** — the breakdown, see "Group statistics" below.
 
@@ -429,10 +429,13 @@ emoji is the badge — it is *not* prefixed to the title text.
 
 ### Reimbursements (`src/features/reimbursements/reimbursements-screen.tsx`)
 
-The lower part of the group's Balances tab, under the viewer's own balance card. **Answer first, justification second**: "Suggested reimbursements"
-— one card per payment, a sentence ("You pay Alan Turing") with the amount at the end as
-an `amount`, the viewer's own rows first — then a one-line count, then "Where everyone
-stands", the group's balances in one card, the same colours and wording as the viewer's own figure above.
+The group's Balances tab, in full. **The figures first, then what to do about them**:
+"Where everyone stands" — the group's balances in one card, the viewer's own row marked
+"Me" — then "Suggested reimbursements": one card per payment, a sentence ("You pay Alan
+Turing") with the amount at the end, sized as `smallBold` like the standings above it
+rather than a headline `amount` (there is one figure on this tab that deserves that
+weight, and it is the plan as a whole, not any single row), the viewer's own rows first,
+then a plain "Tap to reimburse." hint in place of a payment count.
 
 A payment card is **pressable and opens the pre-filled transfer form**; when it cannot be
 recorded (archived group, or a party who has left) it is `muted`, disabled, and carries

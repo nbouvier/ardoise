@@ -214,18 +214,21 @@ See `docs/API.md` for the authoritative surface.
 
 ## UX / UI considerations
 
-- Shown on the group screen's **Balances tab**, under the viewer's own balance — it is a
-  read-and-act view of its own, and folding it into Manage would bury it under group
-  management.
-- The tab reads top to bottom as **answer, then justification**:
-  1. **"Suggested reimbursements"** — the plan, one row per payment, worded as a
+- Shown on the group screen's **Balances tab** in full — it is a read-and-act view of its
+  own, and folding it into Manage would bury it under group management.
+- The tab reads top to bottom as **the figures, then what to do about them**:
+  1. **"Where everyone stands"** — the group's balances, in the same colours and wording
+     as every other balance display, the viewer's own row marked "Me" rather than
+     repeated in a card of its own (`docs/specs/balances.md`);
+  2. **"Suggested reimbursements"** — the plan, one row per payment, worded as a
      sentence ("Alice pays Bob 30.00") rather than a signed figure, with the viewer's own
-     payments first so the first thing they see is what *they* have to do;
-  2. **"Where everyone stands"** — the group's balances, in the same colours and wording
-     as every other balance display.
+     payments first so the first thing they see is what *they* have to do, and a plain
+     "Tap to reimburse" hint rather than a count of payments — the count is not the
+     point, recording one is.
 - A suggested payment row is **tappable when it can be recorded** and visibly inert when
   it cannot (archived group, or a party who is no longer a member), with the reason in
-  one line rather than a silent dead tap.
+  one line rather than a silent dead tap. Its amount is worded, not shouted: sized with
+  the rest of the row rather than as a headline figure.
 - **Settled state**: one clear line ("You're all settled up") in place of both lists, not
   two empty sections.
 - **Loading and error states** mirror the existing balances list: a spinner in place of

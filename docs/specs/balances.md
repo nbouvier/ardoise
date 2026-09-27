@@ -44,9 +44,10 @@ going group by group**.
   their share; an `income` reverses both signs. See `docs/specs/transactions.md`.
 
 **What changes here is visibility only.** The viewer's own balance and the per-member list
-both live on the group screen's **Balances** tab: the viewer's own figure in a card at its
-head, then the plan to reimburse and "Where everyone stands"
-(`docs/specs/reimbursements.md`).
+both live on the group screen's **Balances** tab, in "Where everyone stands", the viewer's
+own row marked "Me" — with the reimbursement plan below it
+(`docs/specs/reimbursements.md`). There is no separate card for the viewer's own figure:
+it would only repeat their row in the list right below it.
 
 ### One group, one figure
 
@@ -170,7 +171,8 @@ properties the display depends on:
 - [ ] For any group, the sum of a member's balances with each other member of that group
       equals that member's group balance.
 - [ ] The viewer's own balance is visible on the group screen itself, without opening the
-      details sheet.
+      details sheet, marked among the per-member list rather than repeated in a card of
+      its own.
 - [ ] The per-member balance list remains available in the group details sheet, unchanged,
       and stays scoped to that one group.
 - [ ] A friend balance is computed only from transactions the viewer is party to, so no
@@ -236,10 +238,11 @@ See `docs/API.md` for the authoritative surface.
   open the shared group, the "⋮" actions menu as a separate hit area — is unchanged.
 - The **friend picker** (create a group, add members) shows no balance: it is a selection
   list, and a money figure there is noise.
-- **Group screen**: the viewer's own balance appears on the screen itself, above the
-  transaction list — the answer to "where do I stand" without a tap. Worded as what the
-  viewer is owed or owes, not as a bare signed number, and neutral when settled. It is
-  this group's figure, and the per-member list below it adds up to exactly that.
+- **Group screen**: the viewer's own balance appears on the screen itself, in "Where
+  everyone stands" (`docs/specs/reimbursements.md`) — the answer to "where do I stand"
+  without a tap, and without a second card repeating a row already in that list. Their
+  row is marked "Me", styled the same way "Owner" marks a member in Manage, so it reads
+  at a glance without changing how the amount itself is worded.
 - The per-member list stays in the details sheet, as specified in
   `docs/specs/transactions.md`, scoped to the same group as the line above it.
 - **Group list row**: the same figure for each group, styled exactly like the

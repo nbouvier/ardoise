@@ -6,7 +6,7 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { balanceTone } from '@/features/transactions/balance-display';
 import type { UseBalancesResult } from '@/features/transactions/use-balances';
@@ -155,26 +155,6 @@ export function ReimbursementsScreen({
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.section}>
             <ThemedText type="overline" themeColor="textSecondary">
-              Suggested reimbursements
-            </ThemedText>
-            {suggestions.map((suggestion) => (
-              <SuggestionRow
-                key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
-                suggestion={suggestion}
-                viewerId={viewerId}
-                blocked={blockedReason(suggestion, readOnly, memberIds)}
-                onPress={() => onRecord(suggestion)}
-              />
-            ))}
-            <ThemedText type="small" themeColor="textSecondary">
-              {suggestions.length === 1
-                ? 'One payment clears everything.'
-                : `${suggestions.length} payments clear everything.`}
-            </ThemedText>
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText type="overline" themeColor="textSecondary">
               Where everyone stands
             </ThemedText>
             <Card style={styles.standings}>
@@ -187,6 +167,24 @@ export function ReimbursementsScreen({
                 />
               ))}
             </Card>
+          </View>
+
+          <View style={styles.section}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Suggested reimbursements
+            </ThemedText>
+            {suggestions.map((suggestion) => (
+              <SuggestionRow
+                key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
+                suggestion={suggestion}
+                viewerId={viewerId}
+                blocked={blockedReason(suggestion, readOnly, memberIds)}
+                onPress={() => onRecord(suggestion)}
+              />
+            ))}
+            <ThemedText type="small" themeColor="textSecondary">
+              Tap to reimburse.
+            </ThemedText>
           </View>
         </ScrollView>
       )}
@@ -230,7 +228,7 @@ function SuggestionRow({
         <ThemedText style={styles.cardLabel} numberOfLines={2}>
           {label}
         </ThemedText>
-        <ThemedText type="amount">{amount}</ThemedText>
+        <ThemedText type="smallBold">{amount}</ThemedText>
       </View>
       {blocked === null ? null : (
         <ThemedText type="small" themeColor="textSecondary">
@@ -251,6 +249,7 @@ function BalanceRow({
   amountCents: number;
   isViewer: boolean;
 }) {
+  const theme = useTheme();
   const amount =
     amountCents === 0
       ? 'settled up'
@@ -260,8 +259,15 @@ function BalanceRow({
     <View style={styles.row}>
       <Avatar name={party.name} picture={party.picture} size={32} seed={party.id} />
       <ThemedText style={styles.name} numberOfLines={1}>
-        {isViewer ? 'You' : party.name}
+        {party.name}
       </ThemedText>
+      {isViewer ? (
+        <View style={[styles.meTag, { backgroundColor: theme.accentSoft }]}>
+          <ThemedText type="overline" themeColor="onAccentSoft">
+            Me
+          </ThemedText>
+        </View>
+      ) : null}
       <ThemedText type="smallBold" themeColor={balanceTone(amountCents)}>
         {amount}
       </ThemedText>
@@ -312,6 +318,11 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
+  },
+  meTag: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Radius.pill,
   },
   pressed: {
     opacity: 0.6,

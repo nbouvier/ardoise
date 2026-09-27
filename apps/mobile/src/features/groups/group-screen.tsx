@@ -30,7 +30,6 @@ import {
 } from '@/features/reimbursements/reimbursements-screen';
 import { StatisticsScreen } from '@/features/statistics/statistics-screen';
 import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
-import { ViewerBalance } from '@/features/transactions/group-balances';
 import {
   TransactionFormScreen,
   type TransactionPrefill,
@@ -410,14 +409,6 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       case 'balances':
         return (
           <>
-            {/* The one figure the page exists to answer, given its own card. */}
-            <Card tone="brand" style={styles.balanceCard}>
-              <ThemedText type="overline" themeColor="onPrimarySoft">
-                Your balance here
-              </ThemedText>
-              <ViewerBalance amountCents={group.viewerBalanceCents} />
-            </Card>
-
             <ReimbursementsScreen
               balances={balancesResult}
               members={group.members}
@@ -1068,9 +1059,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
     alignItems: 'flex-start',
-  },
-  balanceCard: {
-    gap: Spacing.one,
   },
   subgroups: {
     gap: Spacing.two,

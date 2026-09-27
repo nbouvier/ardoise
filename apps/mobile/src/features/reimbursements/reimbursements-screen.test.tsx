@@ -46,7 +46,7 @@ describe('ReimbursementsScreen', () => {
 
     // Grace is at zero overall, so she is not asked to pay or be paid.
     expect(screen.getByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
-    expect(screen.getByText('One payment clears everything.')).toBeTruthy();
+    expect(screen.getByText('Tap to reimburse.')).toBeTruthy();
     expect(screen.queryByLabelText(/Grace Hopper pays/)).toBeNull();
   });
 
@@ -113,10 +113,11 @@ describe('ReimbursementsScreen', () => {
     expect(screen.queryByText('Suggested reimbursements')).toBeNull();
   });
 
-  it('shows where everyone stands, the viewer as “You”', async () => {
+  it('shows where everyone stands, the viewer marked “Me”', async () => {
     await renderScreen();
 
-    expect(screen.getByText('You')).toBeTruthy();
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
     expect(screen.getByText('−10.00')).toBeTruthy();
     expect(screen.getByText('+10.00')).toBeTruthy();
     expect(screen.getByText('settled up')).toBeTruthy();
