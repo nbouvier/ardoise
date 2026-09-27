@@ -14,11 +14,14 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Icon } from '@/components/icon';
+import { IconButton } from '@/components/icon-button';
 import { Pill } from '@/components/pill';
 import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
+import { DatePickerField } from '@/features/transactions/date-picker-field';
+import { toOccurredOn } from '@/features/transactions/date-picker-props';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -49,11 +52,25 @@ const typeLabels: Record<StatisticsType, string> = {
  * Why there is nothing to show, said precisely: "no income recorded" must not
  * read as "no transactions", or the viewer goes looking for a bug.
  */
-function emptyMessage(type: StatisticsType, everyoneSelected: boolean): string {
+function emptyMessage(
+  type: StatisticsType,
+  everyoneSelected: boolean,
+  dateRangeActive: boolean,
+): string {
+  if (!everyoneSelected && dateRangeActive) {
+    return type === 'spending'
+      ? 'None of this group’s spending concerns the selected participants in this date range.'
+      : 'None of this group’s income concerns the selected participants in this date range.';
+  }
   if (!everyoneSelected) {
     return type === 'spending'
       ? 'None of this group’s spending concerns the selected participants.'
       : 'None of this group’s income concerns the selected participants.';
+  }
+  if (dateRangeActive) {
+    return type === 'spending'
+      ? 'Nothing spent in the selected date range.'
+      : 'Nothing recorded as income in the selected date range.';
   }
   return type === 'spending'
     ? 'Nothing spent yet. Transfers between members don’t count — they only move money around.'
@@ -98,26 +115,52 @@ export function StatisticsScreen({
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
   const [pickingParticipants, setPickingParticipants] = useState(false);
   const [pickingSubgroups, setPickingSubgroups] = useState(false);
+  // `null` means "no bound" — the breakdown covers every date, same as before
+  // this existed. `occurredOn` is `YYYY-MM-DD`, so a plain string comparison
+  // is a correct date comparison too.
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
   const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
+  const dateRangeActive = fromDate !== null || toDate !== null;
+
+  const dateFilteredTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          (fromDate === null || transaction.occurredOn >= fromDate) &&
+          (toDate === null || transaction.occurredOn <= toDate),
+      ),
+    [transactions, fromDate, toDate],
+  );
 
   const breakdown = useMemo(
     () =>
-      categoryBreakdown(transactions, {
+      categoryBreakdown(dateFilteredTransactions, {
         type,
         // Passing `null` for "everyone" rather than every member id keeps the
         // group total exactly `transaction.amountCents`, immune to any
         // rounding remainder a shares split assigned only to some of them.
         participantIds: everyoneSelected ? null : [...selectedMemberIds],
       }),
-    [transactions, type, everyoneSelected, selectedMemberIds],
+    [dateFilteredTransactions, type, everyoneSelected, selectedMemberIds],
   );
 
   /** Switching what is measured makes any selected slice meaningless. */
   function changeType(value: StatisticsType) {
     setSelected(null);
     setType(value);
+  }
+
+  function changeFromDate(value: string | null) {
+    setSelected(null);
+    setFromDate(value);
+  }
+
+  function changeToDate(value: string | null) {
+    setSelected(null);
+    setToDate(value);
   }
 
   function toggleSubgroup(subgroupId: string) {
@@ -210,6 +253,20 @@ export function StatisticsScreen({
             </View>
           ) : null}
         </View>
+        <View style={styles.fieldsRow}>
+          <View style={styles.fieldColumn}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              From
+            </ThemedText>
+            <DateRangeField label="From" value={fromDate} onChange={changeFromDate} />
+          </View>
+          <View style={styles.fieldColumn}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              To
+            </ThemedText>
+            <DateRangeField label="To" value={toDate} onChange={changeToDate} />
+          </View>
+        </View>
         <SegmentedSwitch
           options={[
             { key: 'spending', label: typeLabels.spending },
@@ -226,6 +283,8 @@ export function StatisticsScreen({
           </ThemedText>
         ) : null}
       </View>
+
+      <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
@@ -248,7 +307,7 @@ export function StatisticsScreen({
       ) : breakdown.slices.length === 0 ? (
         <View style={styles.centeredBody}>
           <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            {emptyMessage(type, everyoneSelected)}
+            {emptyMessage(type, everyoneSelected, dateRangeActive)}
           </ThemedText>
         </View>
       ) : (
@@ -402,6 +461,57 @@ function SubgroupsField({
       </ThemedText>
       <Icon name="collapse" size={16} color={theme.textSecondary} />
     </Pressable>
+  );
+}
+
+/**
+ * "Any" until tapped, the same fixed-size pill shape as the participants and
+ * subgroups fields; tapping it defaults to today and swaps in the real
+ * `DatePickerField` (the same widget the transaction form's own date field
+ * uses), with a clear button to drop back to "no bound"
+ * (`docs/specs/group-statistics.md`).
+ */
+function DateRangeField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  const theme = useTheme();
+
+  if (value === null) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: Any`}
+        onPress={() => onChange(toOccurredOn(new Date()))}
+        style={({ pressed }) => [
+          styles.selectField,
+          { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+        ]}>
+        <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
+          Any
+        </ThemedText>
+        <Icon name="collapse" size={16} color={theme.textSecondary} />
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.dateFieldRow}>
+      <View style={styles.dateFieldPicker}>
+        <DatePickerField value={value} onChange={onChange} />
+      </View>
+      <IconButton
+        icon="close"
+        accessibilityLabel={`Clear ${label.toLowerCase()}`}
+        color={theme.textSecondary}
+        onPress={() => onChange(null)}
+      />
+    </View>
   );
 }
 
@@ -731,6 +841,18 @@ const styles = StyleSheet.create({
   },
   selectFieldLabel: {
     flexShrink: 1,
+  },
+  dateFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  dateFieldPicker: {
+    flex: 1,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: Spacing.two,
   },
   pickerPanel: {
     flex: 1,

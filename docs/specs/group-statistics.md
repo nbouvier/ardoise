@@ -16,6 +16,9 @@ Since groups can nest (`docs/specs/groups.md`), the same question comes up one l
 higher: did *the trip as a whole* go on food or on hotels, once its sub-groups are counted
 too? The breakdown answers this with a third toggle, alongside type and participants.
 
+A fourth axis narrows *when*: a date range, so "what did we spend in the first week" is
+as answerable as "what did we spend overall".
+
 ## User story
 
 As a **member of a group**, I want to **see how the group's money is split across
@@ -23,6 +26,10 @@ categories**, so that **I can tell at a glance what we're actually spending on**
 
 As a **member of a group**, I want to **narrow the breakdown to one or more members**, so
 that **I can see what this group cost me, or a subset of us, category by category**.
+
+As a **member of a group**, I want to **narrow the breakdown to a date range**, so that
+**I can see what a specific stretch of time — a trip's first week, a single month — cost,
+rather than only the running total**.
 
 ## Expected behavior
 
@@ -54,6 +61,13 @@ viewer switches between:
   participants field is — "All" when every direct sub-group is selected, "None" when the
   breakdown is narrowed to this group alone, otherwise the selected sub-groups' own
   names — and changed from the same kind of checklist.
+- **Date range** — an optional **from** and an optional **to** bound, both unset by
+  default (the breakdown covers every date). A transaction counts when its own date falls
+  on or after `from` (when set) and on or before `to` (when set) — both bounds are
+  inclusive, so a "from" and a "to" set to the same day includes transactions on that one
+  day. Either bound can be set without the other: a "from" alone means "since then,
+  onward"; a "to" alone means "up to then". Clearing a bound restores every date on that
+  side again.
 
 The **participant list never changes** based on scope: every member of a sub-group is
 necessarily already a member of the group itself (`docs/specs/groups.md`), so the group's
@@ -83,8 +97,8 @@ has one (`Other` by default), so nothing falls outside the breakdown.
   scope.
 - **Selecting a category** — by tapping its arc or its legend row — shows that category's
   emoji, label, amount and percentage in the centre instead of the total, and highlights
-  the arc. Selecting it again, or switching the type, the participant selection, or the
-  sub-groups scope, returns to the total.
+  the arc. Selecting it again, or changing the type, the participant selection, the
+  sub-groups scope, or either date bound, returns to the total.
 - A **legend** under the chart: one row per category, **largest first**, with the
   category's colour, emoji, label, amount and percentage.
 - The breakdown is **reachable from the group screen** and does not displace the
@@ -116,8 +130,9 @@ its own.
 
 ## Out of scope
 
-- **Any time filtering** — this month, this year, a custom range. The breakdown covers
-  every transaction in the group. A period filter is the most likely next step.
+- **Named or relative periods** — "this month", "this year", "last week" as one-tap
+  presets. The date range is two plain bounds the viewer sets themselves; naming common
+  ranges is a plausible follow-up, not part of this pass.
 - **Per-member breakdown shown at once** — "what did each member spend on, by category",
   side by side. The participant selector narrows one chart to a subset; it does not draw
   one chart per member.
@@ -171,6 +186,18 @@ its own.
 - **A sub-group deleted, archived, or left between the group screen loading and the
   breakdown being opened**: reflected the next time the breakdown reads its data, same as
   any other transaction-affecting change — no separate staleness rule for sub-groups.
+- **A "from" set after "to"**: not rejected or corrected — the range simply matches
+  nothing, and the breakdown shows the same empty state as any other combination with
+  nothing in it. Correcting or swapping the bounds automatically would second-guess which
+  one the viewer meant to change.
+- **A date range with nothing in it** (valid or not): an empty state naming the date
+  range specifically, not the generic "nothing spent" wording — the same way narrowing to
+  participants with nothing of their own gets its own wording rather than reading as "no
+  transactions at all".
+- **Both a narrowed participant selection and a date range with nothing in their
+  intersection**: the empty state names both, not just one, so the viewer knows two
+  filters are narrowing the result rather than suspecting a bug in whichever one they
+  changed last.
 
 ## Acceptance criteria
 
@@ -217,6 +244,14 @@ its own.
 - [ ] The participants picker's presets read, in order, "Everybody", "Only you", "Nobody".
       The subgroups picker's presets read "All" and "None".
 - [ ] Neither picker's "Done" button sits flush against the bottom edge of the screen.
+- [ ] Setting a "from" date recomputes the breakdown over transactions on or after it;
+      setting a "to" date, on or before it; setting both narrows to that inclusive range.
+- [ ] Clearing a date bound restores every transaction on that side, recomputing the
+      breakdown as if it had never been set.
+- [ ] A date range with nothing in it shows an empty state that names the date range,
+      distinct from the wording used for an empty participant selection or an empty group.
+- [ ] A "from" later than a "to" is accepted as entered, not corrected or rejected, and
+      shows the same empty-range state as any other range with nothing in it.
 
 ## Testing considerations
 
@@ -247,6 +282,13 @@ its own.
   toggle could never distinguish. An id that is not actually a descendant of the group
   must be silently ignored, never surfaced as an error or allowed to reach outside the
   group's own tree.
+- **Date bounds are inclusive on both ends** — a transaction dated exactly on `from` or
+  exactly on `to` must count, not just one that falls strictly between them; an
+  off-by-one here is easy to write and easy to miss with only interior dates in a test.
+- **Setting only one bound** must leave the other side open — a "from" alone must still
+  include a transaction with no meaningful upper date, and vice versa.
+- **A "from" after a "to"** must not throw, silently swap the bounds, or otherwise
+  "correct" the input — it is accepted as entered and simply matches nothing.
 
 ## Data / API considerations
 
@@ -280,20 +322,39 @@ its own.
   silently describe only the loaded page, and the aggregation must move behind a
   `GET /groups/:groupId/transactions/statistics` route that accepts the same `scope`.
   Recorded as an open question below and in `docs/ARCHITECTURE.md`.
+- **The date range needed no API change at all.** `occurredOn` was already on every
+  `Transaction` the client holds for this view; the range is one more `Array.filter`
+  alongside the existing participant one, computed on the same already-fetched list, the
+  same way participants and (client-side) sub-group branches already are. It inherits the
+  pagination caveat directly above rather than adding a new one: once the transaction list
+  is paginated, the date range moves behind the same future
+  `GET /groups/:groupId/transactions/statistics` route, most naturally as its own
+  `from`/`to` query parameters, rather than staying a client-side filter over a partial
+  list.
 
 ## UX / UI considerations
 
 - Shown as the group screen's **Statistics tab** — the transaction list stays the group's
   default and primary content, and the statistics are one tab over, read afresh each time
   the tab is opened.
-- Above the chart, a row of one or two **labelled fields**, each a small caption above a
-  fixed-size pill so neither shifts size as its content changes: a **participants field**
-  ("Everybody" by default, or the selected members' first names, truncated with an
-  ellipsis rather than wrapping), and — only for a group with sub-groups — a **subgroups
-  field** beside it ("All" by default, "None", or the selected sub-groups' own names,
-  truncated the same way). Under that row, centred on its own, a **real two-way switch**
-  for the type — "Spending" and "Income" named inside it, not two pills that could as well
-  be read as independent options.
+- Above the chart, from top to bottom: a row of one or two **labelled fields** (a
+  **participants field** and, only for a group with sub-groups, a **subgroups field**
+  beside it, each a small caption above a fixed-size pill so neither shifts size as its
+  content changes); a second row of two more labelled fields, **From** and **To**, the
+  date range; and, centred on its own beneath both rows, a **real two-way switch** for the
+  type — "Spending" and "Income" named inside it, not two pills that could as well be read
+  as independent options. The participants field reads "Everybody" by default, or the
+  selected members' first names, truncated with an ellipsis rather than wrapping; the
+  subgroups field reads "All" by default, "None", or the selected sub-groups' own names,
+  truncated the same way.
+- **From** and **To** each read "Any" until set. Tapping either swaps in the same native
+  date field the transaction form's own Date field uses, defaulting to today the first
+  time; a small clear control next to it drops the bound back to "Any". Neither field is a
+  full-page picker — a single date is a small enough choice that the inline native picker
+  is the whole interaction, unlike participants and sub-groups.
+- A **divider** with visible padding above and below separates this whole block of fields
+  and the type switch from the chart underneath, so "the controls" and "the result" read
+  as two distinct regions rather than one long list.
 - Tapping either field **swaps the tab's content for a picker of its own**, the same way
   "+ Invite" swaps the Manage tab's content for its own page: quick presets, then one row
   per item with a checkbox, confirmed by a "Done" button that returns to the chart. Not a
@@ -316,7 +377,9 @@ its own.
   other across all thirteen categories.
 - States: loading (while the transactions load), retryable error, and the empty states
   described above — the empty state must be specific enough that "no income" does not
-  read as "no transactions".
+  read as "no transactions", and an empty date range does not read as "no participant
+  selected" or vice versa; when both are narrowed at once and nothing matches, the
+  wording names both.
 - Amounts follow the formatting already used by the transaction list and balances; no new
   money formatting.
 - The **subgroups field** described above is present only for a group that has sub-groups.
@@ -358,9 +421,8 @@ amounts are financial data and must not be logged
 - **Pagination.** Deriving the breakdown client-side is correct only while the whole
   transaction list is loaded. Paginating the list requires moving this to the server;
   which of the two happens first is not decided.
-- **Time filtering** (this month / this year / trip range) is the most requested natural
-  extension and deliberately absent from this pass. Whether the default should then stay
-  "all time" is undecided.
+- **Named or relative date presets** ("this month", "this year", "last 7 days") on top of
+  the two plain bounds — the most likely next step now that the range itself exists.
 - **Per-member breakdown shown side by side** — "who spends on what, member by member" —
   is plausible but carries a social dimension (it exposes each member's habits to the
   whole group) that deserves an explicit decision rather than being added by symmetry with

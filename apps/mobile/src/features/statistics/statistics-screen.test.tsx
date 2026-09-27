@@ -4,8 +4,9 @@ import type {
   TransactionKind,
   TransactionsListResponse,
 } from '@splitcount/shared';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import { StatisticsScreen } from './statistics-screen';
 
@@ -36,11 +37,13 @@ function transaction({
   category = 'other' as TransactionCategory,
   amountCents,
   shares,
+  occurredOn = '2026-01-01',
 }: {
   kind?: TransactionKind;
   category?: TransactionCategory;
   amountCents: number;
   shares?: { ada?: number; grace?: number };
+  occurredOn?: string;
 }): Transaction {
   sequence += 1;
   const split = shares ?? { ada: amountCents };
@@ -51,7 +54,7 @@ function transaction({
     kind,
     title: 'Something',
     amountCents,
-    occurredOn: '2026-01-01',
+    occurredOn,
     comment: null,
     category,
     payer: ada,
@@ -426,6 +429,85 @@ describe('StatisticsScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
 
       expect(screen.getByRole('button', { name: 'Subgroups: Ajaccio weekend' })).toBeTruthy();
+    });
+  });
+
+  describe('date range', () => {
+    const originalOS = Platform.OS;
+
+    beforeEach(() => {
+      Platform.OS = 'ios';
+    });
+
+    afterEach(() => {
+      Platform.OS = originalOS;
+    });
+
+    it('shows "Any" for both bounds by default', async () => {
+      await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      expect(screen.getByRole('button', { name: 'From: Any' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'To: Any' })).toBeTruthy();
+    });
+
+    it('excludes transactions before the "from" date', async () => {
+      await renderScreen([
+        transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
+        transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
+      ]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
+
+      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('20.00');
+      expect(screen.getByRole('button', { name: 'Clear from' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'From: Any' })).toBeNull();
+    });
+
+    it('excludes transactions after the "to" date', async () => {
+      await renderScreen([
+        transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
+        transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
+      ]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'To: Any' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
+
+      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
+    });
+
+    it('clearing a bound restores every transaction', async () => {
+      await renderScreen([
+        transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
+        transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
+      ]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
+      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('20.00');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Clear from' }));
+
+      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+      expect(screen.getByRole('button', { name: 'From: Any' })).toBeTruthy();
+    });
+
+    it('explains a date range with nothing in it, rather than drawing an empty ring', async () => {
+      await renderScreen([
+        transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
+      ]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
+
+      expect(
+        await screen.findByText('Nothing spent in the selected date range.'),
+      ).toBeTruthy();
     });
   });
 });
