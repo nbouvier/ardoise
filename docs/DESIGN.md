@@ -457,17 +457,25 @@ above a fixed-size pill that never changes size with its content: a **participan
 and, only for a group with any sub-groups, a **subgroups field** beside it (reading "All"
 by default, "None", or the selected sub-groups' own names, ellipsized the same way). Below
 that, a second row of two more labelled fields, **From** and **To** — each reading "Any"
-until set, tapping one swapping it for the same native date field the transaction form's
-own Date field uses (defaulting to today the first time), with a small clear (×) control
-beside it once set. Centred on its own line below both rows, a real **Spending / Income
-switch** — the two words drawn inside a sliding brand-filled thumb, not a pair of
-look-alike pills. When some sub-group in scope is left out because the viewer has not
-joined it, a small line says how many rather than presenting a partial sum as the whole
-tree's.
+until set, then a set date in short form ("11 Sep 2026"), ellipsized the same way as the
+fields above rather than resizing, with a **calendar icon** in place of the chevron
+(opening one date, not a list). Tapping one swaps it for the same native date field the
+transaction form's own Date field uses (defaulting to today the first time), with a small
+clear (×) control beside it once set. Centred on its own line below both rows, a real
+**Spending / Income switch** — the two words drawn inside a sliding brand-filled thumb, not
+a pair of look-alike pills. When some sub-group in scope is left out because the viewer
+has not joined it, a small line says how many rather than presenting a partial sum as the
+whole tree's.
 
 A **hairline divider**, with visible margin above and below, separates this whole block —
 every field and the type switch — from the chart underneath: the controls read as one
 region, the result as another.
+
+The short form, ellipsis and calendar icon are fully controlled on Android, which also
+opens a native dialog directly from the field itself. iOS's inline `compact` date widget
+draws its own label once a date is set — a platform limit, not a missed detail — so there
+the field still shows "Any" first the same way, but a set bound falls back to the OS's own
+formatting.
 
 Tapping either field **swaps the tab's own content for a picker of its own**, exactly the
 way "+ Invite" swaps the Manage tab's content for `InvitePanel` — not a sheet stacked on

@@ -289,6 +289,9 @@ its own.
   include a transaction with no meaningful upper date, and vice versa.
 - **A "from" after a "to"** must not throw, silently swap the bounds, or otherwise
   "correct" the input — it is accepted as entered and simply matches nothing.
+- **The date fields' own short-form wording** is worth asserting directly, the same way
+  the participants field's wording is: a set bound reads a short month name, not the long
+  one the rest of the app uses for a single transaction's date.
 
 ## Data / API considerations
 
@@ -347,11 +350,16 @@ its own.
   selected members' first names, truncated with an ellipsis rather than wrapping; the
   subgroups field reads "All" by default, "None", or the selected sub-groups' own names,
   truncated the same way.
-- **From** and **To** each read "Any" until set. Tapping either swaps in the same native
-  date field the transaction form's own Date field uses, defaulting to today the first
-  time; a small clear control next to it drops the bound back to "Any". Neither field is a
-  full-page picker — a single date is a small enough choice that the inline native picker
-  is the whole interaction, unlike participants and sub-groups.
+- **From** and **To** each read "Any" until set, then a set date in **short form** ("11
+  Sep 2026", not "11 September 2026") truncated with an ellipsis the same way the
+  participants and subgroups fields are, rather than resizing the field or wrapping the
+  text — the field never changes size regardless of what it holds. Each carries a
+  **calendar icon**, not the chevron the participants and subgroups fields use: it opens a
+  single date, not a list. Tapping either swaps in the same native date picker the
+  transaction form's own Date field uses, defaulting to today the first time; a small
+  clear control next to it drops the bound back to "Any". Neither field is a full-page
+  picker — a single date is a small enough choice that the native picker is the whole
+  interaction, unlike participants and sub-groups.
 - A **divider** with visible padding above and below separates this whole block of fields
   and the type switch from the chart underneath, so "the controls" and "the result" read
   as two distinct regions rather than one long list.

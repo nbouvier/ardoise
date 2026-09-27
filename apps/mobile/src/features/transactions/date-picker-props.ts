@@ -5,6 +5,15 @@ export interface DatePickerFieldProps {
   onChange: (value: string) => void;
 }
 
+/** Platform-agnostic contract for an optional date bound (`DateRangeField`). */
+export interface DateRangeFieldProps {
+  /** Said in words on failure and in the clear control's own label. */
+  label: string;
+  /** `YYYY-MM-DD`, or `null` for "no bound". */
+  value: string | null;
+  onChange: (value: string | null) => void;
+}
+
 /** Parsed as local midnight, so no time-zone day shift either way. */
 export function parseOccurredOn(occurredOn: string): Date {
   return new Date(`${occurredOn}T00:00:00`);
@@ -22,6 +31,15 @@ export function formatOccurredOn(occurredOn: string): string {
   return parseOccurredOn(occurredOn).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'long',
+    year: 'numeric',
+  });
+}
+
+/** "11 Sep 2026" — short enough to fit a narrow, fixed-size field. */
+export function formatOccurredOnShort(occurredOn: string): string {
+  return parseOccurredOn(occurredOn).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
     year: 'numeric',
   });
 }

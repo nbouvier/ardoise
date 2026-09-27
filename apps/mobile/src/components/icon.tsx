@@ -19,7 +19,8 @@ export type IconName =
   | 'home'
   | 'groups'
   | 'friends'
-  | 'account';
+  | 'account'
+  | 'calendar';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
@@ -56,6 +57,10 @@ const paths: Record<IconName, string> = {
   // A door with an arrow through it.
   leave: 'M9 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h3M17 12H9M13 8l4 4-4 4',
   trash: 'M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M10 11v6M14 11v6',
+  // A page-a-day block: the body, its header rule, and the two hangers a
+  // wall calendar hangs from — reads as "date" at a glance.
+  calendar:
+    'M4 5h16a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 10h18M8 3v4M16 3v4',
 };
 
 export interface IconProps {

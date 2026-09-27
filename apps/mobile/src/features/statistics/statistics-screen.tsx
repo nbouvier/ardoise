@@ -14,14 +14,12 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Icon } from '@/components/icon';
-import { IconButton } from '@/components/icon-button';
 import { Pill } from '@/components/pill';
 import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
-import { DatePickerField } from '@/features/transactions/date-picker-field';
-import { toOccurredOn } from '@/features/transactions/date-picker-props';
+import { DateRangeField } from '@/features/transactions/date-range-field';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -464,57 +462,6 @@ function SubgroupsField({
   );
 }
 
-/**
- * "Any" until tapped, the same fixed-size pill shape as the participants and
- * subgroups fields; tapping it defaults to today and swaps in the real
- * `DatePickerField` (the same widget the transaction form's own date field
- * uses), with a clear button to drop back to "no bound"
- * (`docs/specs/group-statistics.md`).
- */
-function DateRangeField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  onChange: (value: string | null) => void;
-}) {
-  const theme = useTheme();
-
-  if (value === null) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${label}: Any`}
-        onPress={() => onChange(toOccurredOn(new Date()))}
-        style={({ pressed }) => [
-          styles.selectField,
-          { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-        ]}>
-        <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
-          Any
-        </ThemedText>
-        <Icon name="collapse" size={16} color={theme.textSecondary} />
-      </Pressable>
-    );
-  }
-
-  return (
-    <View style={styles.dateFieldRow}>
-      <View style={styles.dateFieldPicker}>
-        <DatePickerField value={value} onChange={onChange} />
-      </View>
-      <IconButton
-        icon="close"
-        accessibilityLabel={`Clear ${label.toLowerCase()}`}
-        color={theme.textSecondary}
-        onPress={() => onChange(null)}
-      />
-    </View>
-  );
-}
-
 type SelectionPreset = 'all' | 'onlyMe' | 'none' | null;
 
 function selectionPreset(
@@ -841,14 +788,6 @@ const styles = StyleSheet.create({
   },
   selectFieldLabel: {
     flexShrink: 1,
-  },
-  dateFieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  dateFieldPicker: {
-    flex: 1,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
