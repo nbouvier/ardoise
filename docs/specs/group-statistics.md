@@ -203,6 +203,9 @@ its own.
       scope toggle, with the viewer's own row marked "Me".
 - [ ] The participants field names who is selected — "Everybody", or the selected
       members' first names — and opens the checklist when tapped.
+- [ ] The participants field and, when shown, the subgroups field are each labelled by a
+      small caption above them and stay the same size regardless of their content.
+- [ ] The subgroups field reads "All" or "None" and flips between them when tapped.
 
 ## Testing considerations
 
@@ -259,11 +262,13 @@ its own.
 - Shown as the group screen's **Statistics tab** — the transaction list stays the group's
   default and primary content, and the statistics are one tab over, read afresh each time
   the tab is opened.
-- Above the chart: a **field naming who is currently selected** ("Everybody" by default, or
-  the selected members' first names, truncated with an ellipsis rather than wrapping),
-  left-aligned; under it, centred on its own, a **real two-way switch** for the type —
-  "Spending" and "Income" named inside it, not two pills that could as well be read as
-  independent options.
+- Above the chart, a row of one or two **labelled fields**, each a small caption above a
+  fixed-size pill so neither shifts size as its content changes: a **participants field**
+  ("Everybody" by default, or the selected members' first names, truncated with an
+  ellipsis rather than wrapping), and — only for a group with sub-groups — a **subgroups
+  field** ("All" or "None") beside it. Under that row, centred on its own, a **real
+  two-way switch** for the type — "Spending" and "Income" named inside it, not two pills
+  that could as well be read as independent options.
 - Tapping the participants field **swaps the tab's content for a picker**, the same way
   "+ Invite" swaps the Manage tab's content for its own page: three quick presets
   ("Everybody", "Nobody", "Only you"), then one row per member with an avatar and a
@@ -271,6 +276,9 @@ its own.
   (`docs/specs/balances.md`) — everyone checked by default, changes taking effect as each
   row (or preset) is tapped, confirmed by a "Done" button that returns to the chart. Not a
   sheet stacked over the chart: the picker *is* the tab's content while it is open.
+- The **subgroups field** is the same field shape as the participants one, but since
+  "including sub-groups" is a binary choice, tapping it flips its own value directly
+  between "All" and "None" rather than opening a page.
 - The **ring is noticeably thick** relative to its diameter, so a category holding a small
   share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the
@@ -283,11 +291,10 @@ its own.
   read as "no transactions".
 - Amounts follow the formatting already used by the transaction list and balances; no new
   money formatting.
-- The **scope toggle** sits on its own row under the participants field and the type
-  switch, same pill styling as before, and is present only for a group that has
-  sub-groups. When it excludes at least one unjoined sub-group, a single small line under
-  the toggles states how many — worded plainly ("n sub-groups you're not in aren't
-  included"), not as a warning.
+- The **scope toggle** is the subgroups field described above, next to the participants
+  field, and is present only for a group that has sub-groups. When it excludes at least
+  one unjoined sub-group, a single small line under the toggles states how many — worded
+  plainly ("n sub-groups you're not in aren't included"), not as a warning.
 
 ## Observability
 

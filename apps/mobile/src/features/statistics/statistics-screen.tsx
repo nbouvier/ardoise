@@ -148,11 +148,26 @@ export function StatisticsScreen({
   return (
     <View style={styles.panel}>
       <View style={styles.toggles}>
-        <ParticipantsField
-          members={members}
-          selectedMemberIds={selectedMemberIds}
-          onPress={() => setPickingParticipants(true)}
-        />
+        <View style={styles.fieldsRow}>
+          <View style={styles.fieldColumn}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Participants
+            </ThemedText>
+            <ParticipantsField
+              members={members}
+              selectedMemberIds={selectedMemberIds}
+              onPress={() => setPickingParticipants(true)}
+            />
+          </View>
+          {hasSubgroups ? (
+            <View style={styles.fieldColumn}>
+              <ThemedText type="overline" themeColor="textSecondary">
+                Subgroups
+              </ThemedText>
+              <SubgroupsField scope={scope} onPress={toggleScope} />
+            </View>
+          ) : null}
+        </View>
         <SegmentedSwitch
           options={[
             { key: 'spending', label: typeLabels.spending },
@@ -161,15 +176,6 @@ export function StatisticsScreen({
           value={type}
           onChange={changeType}
         />
-        {hasSubgroups ? (
-          <View style={styles.toggleRow}>
-            <Pill
-              label="Include sub-groups"
-              selected={scope === 'subtree'}
-              onPress={toggleScope}
-            />
-          </View>
-        ) : null}
         {excludedSubgroupCount > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
             {excludedSubgroupCount === 1
@@ -295,10 +301,43 @@ function ParticipantsField({
       accessibilityLabel={`Participants: ${label}`}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.participantsField,
+        styles.selectField,
         { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
       ]}>
-      <ThemedText numberOfLines={1} style={styles.participantsLabel}>
+      <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
+        {label}
+      </ThemedText>
+      <Icon name="collapse" size={16} color={theme.textSecondary} />
+    </Pressable>
+  );
+}
+
+/**
+ * Same field shape as the participants selector — a labelled, fixed-size
+ * pill — since including sub-groups is just as much "who counts" as which
+ * members are. Only two states, so tapping flips it directly rather than
+ * opening a page of its own (`docs/specs/group-statistics.md`).
+ */
+function SubgroupsField({
+  scope,
+  onPress,
+}: {
+  scope: TransactionsListScope;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const label = scope === 'subtree' ? 'All' : 'None';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Subgroups: ${label}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.selectField,
+        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+      ]}>
+      <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
         {label}
       </ThemedText>
       <Icon name="collapse" size={16} color={theme.textSecondary} />
@@ -512,22 +551,26 @@ const styles = StyleSheet.create({
   toggles: {
     gap: Spacing.three,
   },
-  toggleRow: {
+  fieldsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
-  participantsField: {
-    alignSelf: 'flex-start',
-    maxWidth: '80%',
+  fieldColumn: {
+    flex: 1,
+    alignItems: 'flex-start',
+    gap: Spacing.one,
+  },
+  selectField: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
     gap: Spacing.two,
     height: 44,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,
   },
-  participantsLabel: {
+  selectFieldLabel: {
     flexShrink: 1,
   },
   pickerPanel: {

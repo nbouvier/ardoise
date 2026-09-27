@@ -353,10 +353,7 @@ describe('StatisticsScreen', () => {
       );
 
       await screen.findByTestId('statistics-centre-amount');
-      expect(
-        screen.getByRole('button', { name: 'Include sub-groups' }).props.accessibilityState
-          .selected,
-      ).toBe(true);
+      expect(screen.getByRole('button', { name: 'Subgroups: All' })).toBeTruthy();
       expect(screen.getByText('2 sub-groups you’re not in aren’t included.')).toBeTruthy();
     });
 
@@ -364,7 +361,7 @@ describe('StatisticsScreen', () => {
       await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
       await screen.findByTestId('statistics-centre-amount');
 
-      expect(screen.queryByRole('button', { name: 'Include sub-groups' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Subgroups:/ })).toBeNull();
     });
 
     it('excludes sub-groups when toggled off, and clears any selection', async () => {
@@ -388,7 +385,7 @@ describe('StatisticsScreen', () => {
         transactions: [transaction({ category: 'travel', amountCents: 500 })],
         excludedSubgroupCount: 0,
       });
-      await fireEvent.press(screen.getByRole('button', { name: 'Include sub-groups' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
 
       expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('5.00');
       expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');

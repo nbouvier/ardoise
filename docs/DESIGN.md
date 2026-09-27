@@ -451,13 +451,19 @@ The plan is **derived from the balances the group screen already loaded**
 
 ### Group statistics (`src/features/statistics/statistics-screen.tsx`)
 
-The group's Statistics tab. A **participants field** (left-aligned, hugging its own content,
-showing "Everybody" or the selected members' first names, ellipsized rather than wrapped),
-then, centred on its own line below it, a real **Spending / Income switch** — the two words
-drawn inside a sliding brand-filled thumb, not a pair of look-alike pills. Under that, for a
-group that has any sub-groups, an **"Include sub-groups"** pill, active by default. When
-sub-groups are included and some are left out because the viewer has not joined them, a
-small line says how many rather than presenting a partial sum as the whole tree's.
+The group's Statistics tab. A row of **labelled fields**, each a small uppercase caption
+above a fixed-size pill that never changes size with its content: a **participants field**
+(showing "Everybody" or the selected members' first names, ellipsized rather than wrapped)
+and, only for a group with any sub-groups, a **subgroups field** beside it (reading "All"
+or "None", active-by-default "All"). Centred on its own line below that row, a real
+**Spending / Income switch** — the two words drawn inside a sliding brand-filled thumb, not
+a pair of look-alike pills. When sub-groups are included and some are left out because the
+viewer has not joined them, a small line says how many rather than presenting a partial sum
+as the whole tree's.
+
+The subgroups field is the same field component as the participants one, sized and styled
+identically, but since it only ever holds two states, tapping it flips "All"/"None"
+directly instead of opening a picker.
 
 Tapping the participants field **swaps the tab's own content for a picker**, exactly the
 way "+ Invite" swaps the Manage tab's content for `InvitePanel` — not a sheet stacked on
