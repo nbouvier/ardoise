@@ -7,8 +7,9 @@ import {
   type TransactionCategory,
   type TransactionsListScope,
 } from '@splitcount/shared';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -118,6 +119,10 @@ export function StatisticsScreen({
   // is a correct date comparison too.
   const [fromDate, setFromDate] = useState<string | null>(null);
   const [toDate, setToDate] = useState<string | null>(null);
+  // Collapsed by default — participants, sub-groups and the date range are
+  // secondary to the type switch, which stays visible above them
+  // (`docs/specs/group-statistics.md`).
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
   const theme = useTheme();
 
   const everyoneSelected = selectedMemberIds.size === members.length;
@@ -226,45 +231,7 @@ export function StatisticsScreen({
 
   return (
     <View style={styles.panel}>
-      <View style={styles.toggles}>
-        <View style={styles.fieldsRow}>
-          <View style={styles.fieldColumn}>
-            <ThemedText type="overline" themeColor="textSecondary">
-              Participants
-            </ThemedText>
-            <ParticipantsField
-              members={members}
-              selectedMemberIds={selectedMemberIds}
-              onPress={() => setPickingParticipants(true)}
-            />
-          </View>
-          {hasSubgroups ? (
-            <View style={styles.fieldColumn}>
-              <ThemedText type="overline" themeColor="textSecondary">
-                Subgroups
-              </ThemedText>
-              <SubgroupsField
-                subgroups={subgroups}
-                selectedSubgroupIds={selectedSubgroupIds}
-                onPress={() => setPickingSubgroups(true)}
-              />
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.fieldsRow}>
-          <View style={styles.fieldColumn}>
-            <ThemedText type="overline" themeColor="textSecondary">
-              From
-            </ThemedText>
-            <DateRangeField label="From" value={fromDate} onChange={changeFromDate} />
-          </View>
-          <View style={styles.fieldColumn}>
-            <ThemedText type="overline" themeColor="textSecondary">
-              To
-            </ThemedText>
-            <DateRangeField label="To" value={toDate} onChange={changeToDate} />
-          </View>
-        </View>
+      <View style={styles.optionsSection}>
         <SegmentedSwitch
           options={[
             { key: 'spending', label: typeLabels.spending },
@@ -273,16 +240,50 @@ export function StatisticsScreen({
           value={type}
           onChange={changeType}
         />
-        {excludedSubgroupCount > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {excludedSubgroupCount === 1
-              ? '1 sub-group you’re not in isn’t included.'
-              : `${excludedSubgroupCount} sub-groups you’re not in aren’t included.`}
-          </ThemedText>
-        ) : null}
+        <MoreOptionsToggle
+          open={moreOptionsOpen}
+          onPress={() => setMoreOptionsOpen((open) => !open)}
+        />
+        <Collapsible open={moreOptionsOpen}>
+          <View style={styles.toggles}>
+            <View style={styles.fieldsRow}>
+              <View style={styles.fieldColumn}>
+                <ThemedText type="overline" themeColor="textSecondary">
+                  Participants
+                </ThemedText>
+                <ParticipantsField
+                  members={members}
+                  selectedMemberIds={selectedMemberIds}
+                  onPress={() => setPickingParticipants(true)}
+                />
+              </View>
+              {hasSubgroups ? (
+                <View style={styles.fieldColumn}>
+                  <ThemedText type="overline" themeColor="textSecondary">
+                    Subgroups
+                  </ThemedText>
+                  <SubgroupsField
+                    subgroups={subgroups}
+                    selectedSubgroupIds={selectedSubgroupIds}
+                    onPress={() => setPickingSubgroups(true)}
+                  />
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.fieldsRow}>
+              <DateFieldColumn label="From" value={fromDate} onChange={changeFromDate} />
+              <DateFieldColumn label="To" value={toDate} onChange={changeToDate} />
+            </View>
+            {excludedSubgroupCount > 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {excludedSubgroupCount === 1
+                  ? '1 sub-group you’re not in isn’t included.'
+                  : `${excludedSubgroupCount} sub-groups you’re not in aren’t included.`}
+              </ThemedText>
+            ) : null}
+          </View>
+        </Collapsible>
       </View>
-
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
       {status === 'loading' ? (
         <View style={styles.centeredBody}>
@@ -357,6 +358,101 @@ export function StatisticsScreen({
           </Card>
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+/**
+ * "More options", its chevron turning from pointing right to pointing down —
+ * `collapse`'s own path is already a down-chevron, so closed is just that
+ * rotated back a quarter turn (`docs/specs/group-statistics.md`).
+ */
+function MoreOptionsToggle({ open, onPress }: { open: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  const progress = useSharedValue(open ? 1 : 0);
+
+  useEffect(() => {
+    progress.set(withTiming(open ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }));
+  }, [open, progress]);
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${-90 + progress.get() * 90}deg` }],
+  }));
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel="More options"
+      onPress={onPress}
+      style={styles.moreOptionsButton}>
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        More options
+      </ThemedText>
+      <Animated.View style={chevronStyle}>
+        <Icon name="collapse" size={16} color={theme.textSecondary} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/**
+ * Animates its own height and opacity between 0 and its content's natural
+ * size. The content is measured through `position: absolute` so the
+ * animated height never constrains its own layout while collapsing
+ * (`docs/specs/group-statistics.md`).
+ */
+function Collapsible({ open, children }: { open: boolean; children: ReactNode }) {
+  const [contentHeight, setContentHeight] = useState(0);
+  const progress = useSharedValue(open ? 1 : 0);
+
+  useEffect(() => {
+    progress.set(withTiming(open ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) }));
+  }, [open, progress]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    height: contentHeight * progress.get(),
+    opacity: progress.get(),
+  }));
+
+  return (
+    <Animated.View style={[styles.collapsible, containerStyle]}>
+      <View
+        style={styles.collapsibleContent}
+        onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}>
+        {children}
+      </View>
+    </Animated.View>
+  );
+}
+
+function DateFieldColumn({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <View style={styles.fieldColumn}>
+      <View style={styles.fieldLabelRow}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          {label}
+        </ThemedText>
+        {value !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Clear ${label.toLowerCase()}`}
+            onPress={() => onChange(null)}>
+            <ThemedText type="overline" themeColor="primary">
+              Clear
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+      <DateRangeField label={label} value={value} onChange={onChange} />
     </View>
   );
 }
@@ -764,6 +860,29 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.three,
   },
+  // The divider that used to sit here is gone, but the breathing room it
+  // gave the chart underneath stays — this is that room, now carried by the
+  // section above rather than a line between the two.
+  optionsSection: {
+    gap: Spacing.two,
+    paddingBottom: Spacing.three,
+  },
+  moreOptionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.one,
+    paddingVertical: Spacing.one,
+  },
+  collapsible: {
+    overflow: 'hidden',
+  },
+  collapsibleContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   toggles: {
     gap: Spacing.three,
   },
@@ -775,6 +894,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-start',
     gap: Spacing.one,
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    alignSelf: 'stretch',
   },
   selectField: {
     flexDirection: 'row',
@@ -788,10 +913,6 @@ const styles = StyleSheet.create({
   },
   selectFieldLabel: {
     flexShrink: 1,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: Spacing.two,
   },
   pickerPanel: {
     flex: 1,

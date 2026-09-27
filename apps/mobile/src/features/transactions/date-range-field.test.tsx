@@ -20,7 +20,6 @@ describe('DateRangeField', () => {
       const field = screen.getByRole('button', { name: 'From: Any' });
       expect(field).toBeTruthy();
       expect(screen.getByText('Any').props.numberOfLines).toBe(1);
-      expect(screen.queryByRole('button', { name: 'Clear from' })).toBeNull();
     });
 
     it('opens a native dialog on tap and reports the picked date', async () => {
@@ -36,7 +35,7 @@ describe('DateRangeField', () => {
       expect(screen.queryByRole('button', { name: 'date-picker-mock' })).toBeNull();
     });
 
-    it('shows a set bound in short month form, truncated, with a clear control', async () => {
+    it('shows a set bound in short month form, truncated', async () => {
       Platform.OS = 'android';
       const onChange = jest.fn();
       await render(<DateRangeField label="To" value="2026-09-11" onChange={onChange} />);
@@ -45,9 +44,6 @@ describe('DateRangeField', () => {
       const field = screen.getByRole('button', { name: `To: ${expectedLabel}` });
       expect(field).toBeTruthy();
       expect(screen.getByText(expectedLabel).props.numberOfLines).toBe(1);
-
-      await fireEvent.press(screen.getByRole('button', { name: 'Clear to' }));
-      expect(onChange).toHaveBeenCalledWith(null);
     });
 
     it('lets a set bound be changed again through the same dialog', async () => {
@@ -82,16 +78,13 @@ describe('DateRangeField', () => {
       expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     });
 
-    it('once set, shows the native field with a clear control', async () => {
+    it('once set, shows the native field and reports further changes', async () => {
       Platform.OS = 'ios';
       const onChange = jest.fn();
       await render(<DateRangeField label="To" value="2026-09-11" onChange={onChange} />);
 
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
       expect(onChange).toHaveBeenCalledWith('2027-01-15');
-
-      await fireEvent.press(screen.getByRole('button', { name: 'Clear to' }));
-      expect(onChange).toHaveBeenCalledWith(null);
     });
   });
 });

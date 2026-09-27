@@ -89,6 +89,11 @@ beforeEach(() => {
   mockFetchTransactions.mockReset();
 });
 
+/** Participants, subgroups and the date range live behind "More options", closed by default. */
+async function openMoreOptions() {
+  await fireEvent.press(screen.getByRole('button', { name: 'More options' }));
+}
+
 async function renderScreen(
   transactions: Transaction[],
   overrides: Partial<Parameters<typeof StatisticsScreen>[0]> = {},
@@ -163,6 +168,7 @@ describe('StatisticsScreen', () => {
 
     expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
@@ -180,6 +186,7 @@ describe('StatisticsScreen', () => {
     ]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
@@ -192,6 +199,7 @@ describe('StatisticsScreen', () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('button', { name: 'Nobody' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
@@ -203,6 +211,7 @@ describe('StatisticsScreen', () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     expect(screen.getByRole('button', { name: 'Participants: Everybody' })).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Participants: Everybody' }));
@@ -220,6 +229,7 @@ describe('StatisticsScreen', () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
 
     expect(screen.getByText('Me')).toBeTruthy();
@@ -235,6 +245,7 @@ describe('StatisticsScreen', () => {
     ]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     expect(screen.getByRole('button', { name: 'Everybody' }).props.accessibilityState).toMatchObject(
       { selected: true },
@@ -310,6 +321,7 @@ describe('StatisticsScreen', () => {
     ]);
     await screen.findByTestId('statistics-centre-amount');
 
+    await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
@@ -359,6 +371,7 @@ describe('StatisticsScreen', () => {
       );
 
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
       expect(screen.getByRole('button', { name: 'Subgroups: All' })).toBeTruthy();
       expect(screen.getByText('2 sub-groups you’re not in aren’t included.')).toBeTruthy();
     });
@@ -366,6 +379,7 @@ describe('StatisticsScreen', () => {
     it('shows no toggle for a group with no sub-groups', async () => {
       await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       expect(screen.queryByRole('button', { name: /Subgroups:/ })).toBeNull();
     });
@@ -391,6 +405,7 @@ describe('StatisticsScreen', () => {
         transactions: [transaction({ category: 'travel', amountCents: 500 })],
         excludedSubgroupCount: 0,
       });
+      await openMoreOptions();
       await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
       await fireEvent.press(screen.getByRole('button', { name: 'None' }));
       await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
@@ -416,6 +431,7 @@ describe('StatisticsScreen', () => {
       );
       await screen.findByTestId('statistics-centre-amount');
 
+      await openMoreOptions();
       await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
       await fireEvent.press(screen.getByRole('checkbox', { name: 'Bastia weekend' }));
 
@@ -446,6 +462,7 @@ describe('StatisticsScreen', () => {
     it('shows "Any" for both bounds by default', async () => {
       await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       expect(screen.getByRole('button', { name: 'From: Any' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'To: Any' })).toBeTruthy();
@@ -457,6 +474,7 @@ describe('StatisticsScreen', () => {
         transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
       ]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
@@ -472,6 +490,7 @@ describe('StatisticsScreen', () => {
         transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
       ]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       await fireEvent.press(screen.getByRole('button', { name: 'To: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
@@ -485,6 +504,7 @@ describe('StatisticsScreen', () => {
         transaction({ category: 'travel', amountCents: 2000, occurredOn: '2027-06-01' }),
       ]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
@@ -501,6 +521,7 @@ describe('StatisticsScreen', () => {
         transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
       ]);
       await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
 
       await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
@@ -508,6 +529,31 @@ describe('StatisticsScreen', () => {
       expect(
         await screen.findByText('Nothing spent in the selected date range.'),
       ).toBeTruthy();
+    });
+  });
+
+  describe('more options', () => {
+    it('starts collapsed, with the type switch always visible', async () => {
+      await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      expect(screen.getByRole('button', { name: 'Spending' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Income' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'More options' }).props.accessibilityState,
+      ).toMatchObject({ expanded: false });
+    });
+
+    it('reveals the fields on tap, and marks itself expanded', async () => {
+      await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await openMoreOptions();
+
+      expect(screen.getByRole('button', { name: /Participants:/ })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'More options' }).props.accessibilityState,
+      ).toMatchObject({ expanded: true });
     });
   });
 });

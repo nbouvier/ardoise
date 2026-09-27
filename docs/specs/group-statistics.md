@@ -252,6 +252,13 @@ its own.
       distinct from the wording used for an empty participant selection or an empty group.
 - [ ] A "from" later than a "to" is accepted as entered, not corrected or rejected, and
       shows the same empty-range state as any other range with nothing in it.
+- [ ] The type switch is visible without opening anything; participants, sub-groups and
+      the date range are hidden behind "More options", closed by default, and revealed by
+      tapping it.
+- [ ] "More options" states whether it is open or closed in a way assistive technology can
+      read, independent of its own visual chevron.
+- [ ] Once a date bound is set, the field itself stays the same size; a "Clear" text next
+      to that field's own label — not an icon inside the field — removes it.
 
 ## Testing considerations
 
@@ -292,6 +299,10 @@ its own.
 - **The date fields' own short-form wording** is worth asserting directly, the same way
   the participants field's wording is: a set bound reads a short month name, not the long
   one the rest of the app uses for a single transaction's date.
+- **"More options" starting closed** means every test that reaches the participants
+  field, the subgroups field, or either date bound must open it first — a test that
+  doesn't would only be passing because the collapsed section stays mounted (for a smooth
+  reveal) rather than because a real person could reach it collapsed.
 
 ## Data / API considerations
 
@@ -340,30 +351,42 @@ its own.
 - Shown as the group screen's **Statistics tab** — the transaction list stays the group's
   default and primary content, and the statistics are one tab over, read afresh each time
   the tab is opened.
-- Above the chart, from top to bottom: a row of one or two **labelled fields** (a
+- **The type switch sits above everything else**, on its own line, centred: a real
+  two-way **Spending / Income** switch — the two words named inside a sliding
+  brand-filled thumb, not two pills that could as well be read as independent options.
+  It is the one control that always matters, so it is never hidden behind a disclosure.
+- **Everything that narrows the breakdown — participants, sub-groups, the date range —
+  sits behind a "More options" disclosure**, closed by default, right under the type
+  switch: a small text label with a chevron that reads right when closed and rotates to
+  point down when open, both the chevron's turn and the section's own reveal animated
+  rather than snapping. Collapsed by default because narrowing is the exception, not the
+  common case — most visits want the whole group's total.
+- **Inside "More options"**, top to bottom: a row of one or two **labelled fields** (a
   **participants field** and, only for a group with sub-groups, a **subgroups field**
   beside it, each a small caption above a fixed-size pill so neither shifts size as its
-  content changes); a second row of two more labelled fields, **From** and **To**, the
-  date range; and, centred on its own beneath both rows, a **real two-way switch** for the
-  type — "Spending" and "Income" named inside it, not two pills that could as well be read
-  as independent options. The participants field reads "Everybody" by default, or the
-  selected members' first names, truncated with an ellipsis rather than wrapping; the
-  subgroups field reads "All" by default, "None", or the selected sub-groups' own names,
-  truncated the same way.
+  content changes), then a second row of two more labelled fields, **From** and **To**,
+  the date range. The participants field reads "Everybody" by default, or the selected
+  members' first names, truncated with an ellipsis rather than wrapping; the subgroups
+  field reads "All" by default, "None", or the selected sub-groups' own names, truncated
+  the same way.
 - **From** and **To** each read "Any" until set, then a set date in **short form** ("11
   Sep 2026", not "11 September 2026") truncated with an ellipsis the same way the
   participants and subgroups fields are, rather than resizing the field or wrapping the
   text — the field never changes size regardless of what it holds. Each carries a
   **calendar icon**, not the chevron the participants and subgroups fields use: it opens a
   single date, not a list. Tapping either swaps in the same native date picker the
-  transaction form's own Date field uses, defaulting to today the first time; a small
-  clear control next to it drops the bound back to "Any". Neither field is a full-page
-  picker — a single date is a small enough choice that the native picker is the whole
-  interaction, unlike participants and sub-groups.
-- A **divider** with visible padding above and below separates this whole block of fields
-  and the type switch from the chart underneath, so "the controls" and "the result" read
-  as two distinct regions rather than one long list.
-- Tapping either field **swaps the tab's content for a picker of its own**, the same way
+  transaction form's own Date field uses, defaulting to today the first time. Once a
+  bound is set, **the field itself never shrinks to make room for a clear control** — a
+  "Clear" text appears at the far right of that field's own caption instead, beside
+  "From" or "To", the way a form field's own inline error or hint sits next to its label
+  rather than inside the field. Neither field is a full-page picker — a single date is a
+  small enough choice that the native picker is the whole interaction, unlike
+  participants and sub-groups.
+- **The divider that used to separate the controls from the chart is gone** now that
+  "More options" itself marks that boundary, but the padding it gave the chart is kept —
+  removing the line did not mean removing the breathing room.
+- Tapping either the participants or the subgroups field **swaps the tab's content for a
+  picker of its own**, the same way
   "+ Invite" swaps the Manage tab's content for its own page: quick presets, then one row
   per item with a checkbox, confirmed by a "Done" button that returns to the chart. Not a
   sheet stacked over the chart: the picker *is* the tab's content while it is open.
@@ -392,9 +415,10 @@ its own.
   money formatting.
 - The **subgroups field** described above is present only for a group that has sub-groups.
   When the current selection excludes at least one unjoined sub-group, a single small line
-  under the fields states how many — worded plainly ("n sub-groups you're not in aren't
-  included"), not as a warning. This can happen even with every direct sub-group selected,
-  since a nested one further down could still be one the viewer has not joined.
+  inside "More options", under the fields, states how many — worded plainly ("n
+  sub-groups you're not in aren't included"), not as a warning. This can happen even with
+  every direct sub-group selected, since a nested one further down could still be one the
+  viewer has not joined.
   - A "Done" button that ends up flush against the bottom edge of the screen is a defect,
     not a style choice — both pickers give it room to breathe below the last row, the same
     way `InvitePanel`'s own "Done" already does.

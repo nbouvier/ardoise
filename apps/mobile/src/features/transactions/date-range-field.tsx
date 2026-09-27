@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,12 +20,16 @@ export type { DateRangeFieldProps } from './date-picker-props';
 /**
  * An optional date bound — "Any" until set, a calendar icon rather than
  * `ParticipantsField`'s chevron since tapping it opens a single date rather
- * than a list. Android gets full control over its own pill (a short-format
- * label, truncated with an ellipsis rather than resized or wrapped, a
- * native dialog on tap) the same way `DatePickerField`'s own Android branch
- * does; iOS's inline `compact` widget owns its own label and can't take a
- * custom one, so it keeps the "Any" pill only until first tapped, then
- * falls back to the shared `DatePickerField` (`docs/specs/group-statistics.md`).
+ * than a list. Clearing a set bound is not this component's own job — the
+ * caller renders that as a "Clear" text next to the field's label instead
+ * of shrinking the field with an icon (`docs/specs/group-statistics.md`).
+ *
+ * Android gets full control over its own pill (a short-format label,
+ * truncated with an ellipsis rather than resized or wrapped) and a native
+ * dialog on tap, the same way `DatePickerField`'s own Android branch does;
+ * iOS's inline `compact` widget owns its own label and can't take a custom
+ * one, so it keeps the "Any" pill only until first tapped, then falls back
+ * to the shared `DatePickerField`.
  */
 export function DateRangeField({ label, value, onChange }: DateRangeFieldProps) {
   const theme = useTheme();
@@ -35,14 +38,14 @@ export function DateRangeField({ label, value, onChange }: DateRangeFieldProps) 
   if (Platform.OS === 'android') {
     const displayLabel = value === null ? 'Any' : formatOccurredOnShort(value);
     return (
-      <View style={styles.row}>
+      <View style={styles.stretch}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${label}: ${displayLabel}`}
           onPress={() => setDialogOpen(true)}
           style={({ pressed }) => [
             styles.field,
-            styles.picker,
+            styles.stretch,
             { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
           ]}>
           <ThemedText numberOfLines={1} style={styles.label}>
@@ -50,14 +53,6 @@ export function DateRangeField({ label, value, onChange }: DateRangeFieldProps) 
           </ThemedText>
           <Icon name="calendar" size={16} color={theme.textSecondary} />
         </Pressable>
-        {value !== null ? (
-          <IconButton
-            icon="close"
-            accessibilityLabel={`Clear ${label.toLowerCase()}`}
-            color={theme.textSecondary}
-            onPress={() => onChange(null)}
-          />
-        ) : null}
         {dialogOpen ? (
           <DateTimePicker
             value={value === null ? new Date() : parseOccurredOn(value)}
@@ -94,32 +89,15 @@ export function DateRangeField({ label, value, onChange }: DateRangeFieldProps) 
   }
 
   return (
-    <View style={styles.row}>
-      <View style={styles.picker}>
-        <DatePickerField value={value} onChange={onChange} />
-      </View>
-      <IconButton
-        icon="close"
-        accessibilityLabel={`Clear ${label.toLowerCase()}`}
-        color={theme.textSecondary}
-        onPress={() => onChange(null)}
-      />
+    <View style={styles.stretch}>
+      <DatePickerField value={value} onChange={onChange} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    gap: Spacing.one,
-  },
   stretch: {
     alignSelf: 'stretch',
-  },
-  picker: {
-    flex: 1,
   },
   field: {
     flexDirection: 'row',
