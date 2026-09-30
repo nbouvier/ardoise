@@ -403,34 +403,57 @@ describe('GroupScreen', () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
-    for (const action of [/invite/i, /rename/i, /archive group/i]) {
+    for (const action of [/invite/i, /archive group/i]) {
       expect(screen.queryByRole('button', { name: action })).toBeNull();
     }
+    expect(screen.queryByDisplayValue('Corsica 2026')).toBeNull();
 
     await openTab('Manage');
 
     expect(await screen.findByText('Grace Hopper')).toBeTruthy();
     expect(screen.getByText('Members (2)')).toBeTruthy();
-    for (const action of [/invite/i, /rename/i, /archive group/i]) {
+    expect(screen.getByDisplayValue('Corsica 2026')).toBeTruthy();
+    for (const action of [/invite/i, /archive group/i]) {
       expect(screen.getByRole('button', { name: action })).toBeTruthy();
     }
   });
 
-  it('shows the group name in a disabled field until the pencil is pressed', async () => {
+  it('shows no icon at all until the field is focused, then just a checkmark', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
     expect(screen.getByText('Group name')).toBeTruthy();
-    expect(screen.getByDisplayValue('Corsica 2026').props.editable).toBe(false);
+    const field = screen.getByDisplayValue('Corsica 2026');
+    expect(field.props.editable).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save group name' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+    await fireEvent(field, 'focus');
 
-    expect(screen.getByDisplayValue('Corsica 2026').props.editable).toBe(true);
+    // The checkmark shows as soon as the field is focused, even before
+    // anything has actually been typed — but there's nothing to discard yet.
     expect(screen.getByRole('button', { name: 'Save group name' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
   });
 
-  it('saves the new name on the checkmark, then settles back into a pencil', async () => {
+  it('only shows the discard cross once the name actually differs from the saved one', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
+
+    await fireEvent.changeText(field, 'Corsica Trip');
+    expect(screen.getByRole('button', { name: 'Discard change' })).toBeTruthy();
+
+    await fireEvent.changeText(field, 'Corsica 2026');
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
+  });
+
+  it('commits the new name on the checkmark, then its icons fade away', async () => {
     mockUpdateGroup.mockResolvedValue({ ...trip, name: 'Corsica Trip' });
     // The background refetch that `groupsChanged` triggers races the direct
     // `set()` from the rename response — give it the same fresh name, the
@@ -441,46 +464,156 @@ describe('GroupScreen', () => {
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
-    await fireEvent.changeText(screen.getByDisplayValue('Corsica 2026'), 'Corsica Trip');
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
     await fireEvent.press(screen.getByRole('button', { name: 'Save group name' }));
 
     expect(mockUpdateGroup).toHaveBeenCalledWith(expect.anything(), trip.id, {
       name: 'Corsica Trip',
     });
-    expect(
-      await screen.findByRole('button', { name: 'Rename group' }, { timeout: 2000 }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Save group name' })).toBeNull();
+    });
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
     expect(screen.getByDisplayValue('Corsica Trip')).toBeTruthy();
   });
 
-  it('saves on blur too, when the name changed', async () => {
+  it('also commits on the keyboard’s own submit', async () => {
     mockUpdateGroup.mockResolvedValue({ ...trip, name: 'Corsica Trip' });
+    mockFetchGroup.mockResolvedValueOnce(trip).mockResolvedValue({ ...trip, name: 'Corsica Trip' });
 
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
     const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
     await fireEvent.changeText(field, 'Corsica Trip');
-    await fireEvent(field, 'blur');
+    await fireEvent(field, 'submitEditing');
 
     expect(mockUpdateGroup).toHaveBeenCalledWith(expect.anything(), trip.id, {
       name: 'Corsica Trip',
     });
   });
 
-  it('does not save when the name is unchanged or blank', async () => {
+  it('does not save or discard on blur — the draft and its icons stay put, and the unsaved hint arrives after a short delay', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    expect(screen.queryByText('Change not saved yet')).toBeNull();
+
+    await fireEvent(field, 'blur');
+
+    expect(mockUpdateGroup).not.toHaveBeenCalled();
+    // Blurring neither saved nor discarded — the typed draft is exactly
+    // what's still there, and its icons stay up too, since the name is still
+    // un-validated. The hint itself waits a beat rather than showing the
+    // instant focus goes.
+    expect(screen.getByDisplayValue('Corsica Trip')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save group name' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Discard change' })).toBeTruthy();
+    expect(screen.queryByText('Change not saved yet')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Change not saved yet')).toBeTruthy();
+    });
+  });
+
+  it('never shows the unsaved hint if the field is refocused before its delay elapses', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    await fireEvent(field, 'blur');
+    await fireEvent(field, 'focus');
+
+    // Long enough that the hint's own delay would have elapsed had it not
+    // been cancelled by the refocus.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+
+    expect(screen.queryByText('Change not saved yet')).toBeNull();
+  });
+
+  it('hides the unsaved hint again once the field is refocused', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    await fireEvent(field, 'blur');
+    await waitFor(() => {
+      expect(screen.getByText('Change not saved yet')).toBeTruthy();
+    });
+
+    await fireEvent(field, 'focus');
+
+    expect(screen.queryByText('Change not saved yet')).toBeNull();
+    expect(screen.getByDisplayValue('Corsica Trip')).toBeTruthy();
+  });
+
+  it('clears the unsaved hint and its icons once the name is typed back to its saved value', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    await fireEvent(field, 'blur');
+    await waitFor(() => {
+      expect(screen.getByText('Change not saved yet')).toBeTruthy();
+    });
+
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica 2026');
+    await fireEvent(field, 'blur');
+
+    expect(screen.queryByText('Change not saved yet')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save group name' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
+  });
+
+  it('treats a blank name as a discard rather than sending it', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, '');
     await fireEvent.press(screen.getByRole('button', { name: 'Save group name' }));
 
     expect(mockUpdateGroup).not.toHaveBeenCalled();
-    expect(await screen.findByRole('button', { name: 'Rename group' })).toBeTruthy();
+    expect(screen.getByDisplayValue('Corsica 2026')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save group name' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
+  });
+
+  it('discards the draft and its icons fade away when reset is pressed', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent(field, 'focus');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    await fireEvent.press(screen.getByRole('button', { name: 'Discard change' }));
+
+    expect(screen.getByDisplayValue('Corsica 2026')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save group name' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard change' })).toBeNull();
+    expect(mockUpdateGroup).not.toHaveBeenCalled();
   });
 
   it('lists the owner first regardless of the server’s own member order', async () => {
@@ -635,7 +768,9 @@ describe('GroupScreen', () => {
     // Absent, not disabled: none of these can ever apply to a pair group.
     for (const action of [
       /invite/i,
-      /rename/i,
+      /rename group/i,
+      /save group name/i,
+      /discard change/i,
       /archive group/i,
       /leave group/i,
       /delete group/i,
@@ -829,10 +964,9 @@ describe('GroupScreen', () => {
       mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
 
       await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
-      await screen.findByRole('button', { name: 'Rename group' });
+      await screen.findByDisplayValue('Corsica 2026');
 
       expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'Rename group' })).toBeTruthy();
       expect(
         screen.getByText('Just the two of you here too — no one else can be added.'),
       ).toBeTruthy();

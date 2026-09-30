@@ -399,14 +399,39 @@ permanent empty box.
 
 **Manage tab** — top to bottom: an overline **"Group name"** label (the same quiet,
 all-caps section heading as "Sub-groups" on the Transactions tab — small, secondary-toned,
-never a sentence) over a row holding the name in a `TextField`, and a pencil `IconButton`
-at its end. The field is **edited in place, not on a page of its own**: the pencil makes
-the field editable and focuses it (opening the keyboard), turning itself into a checkmark;
-committing — tapping the checkmark, submitting from the keyboard, or simply moving on to
-anything else (a blur) — sends the new name if it changed, and the checkmark flashes
-credit-green with a small tilt before settling back into a pencil, so a save reads as
-confirmed rather than silent. An unchanged or blank name is discarded quietly, no request
-sent. Then an overline **"Members (n)"** label — the count lives inside the label itself,
+never a sentence) over a `TextField` that is **always editable**, no separate rename page —
+tapping directly into the field is the only way in, no dedicated edit button (one existed
+briefly; coordinating its own crossfade against the checkmark's and the discard's own
+appearance rules cost more than a plain always-editable field was worth). Its checkmark
+`IconButton` fades in at the field's own end, inside it, not beside it, the moment the field is
+focused, even before the name has actually changed, since it always means "done here", not
+"something changed"; it also stays up whenever the name differs from the saved one, focused or
+not — so a change left hanging is never silently lost. A discard (a cross, back to what it was)
+joins it, to its left, but **only once the name actually differs from the saved one** — a cross
+with nothing behind it to discard would be a false offer, so focusing an unchanged field shows
+the checkmark alone. Both icons share the same brand color, never a muted secondary tone.
+Committing only ever happens on the checkmark or the keyboard's own submit — **never on blur,
+in either direction**: losing focus neither saves nor discards, it just leaves the draft
+exactly as typed, with a small note reading **"Change not saved yet"** under the field for as
+long as it sits there unsaved and unfocused. The note itself waits a short delay
+(`NAME_UNSAVED_HINT_DELAY_MS`, 400ms) after that blur before showing, cancelled outright by a
+refocus, a discard or a commit that lands first — tapping straight back into the field to keep
+editing should never see it flash on the way past. It reads `type="small" themeColor="danger"`, with its
+`fontSize`/`lineHeight` further overridden down to 12/16 (see `nameHintText`,
+`group-screen.tsx`): deliberately smaller than "small" text elsewhere, since it's a field-level
+caveat, not a message meant to compete with the field's own contents. Keep any future name-field
+hint at that same smaller size rather than the ordinary "small" one. That note lives in its own
+fixed-height slot, always present whether or not the note itself is — the field's own row
+(`TextField` plus its icon overlay) is a separate block above it for the same reason, so neither
+the icon crossfade nor the note appearing or clearing ever changes the field's own height;
+without that, the two animations landing a beat apart could make the field flash to a taller,
+wrapped-looking shape for an instant. (The Manage tab's own scroll view sets
+`keyboardShouldPersistTaps="handled"` specifically so tapping the checkmark doesn't blur the
+field — and so lose that focus-independent draft's chance to be read — a beat before its own
+`onPress` runs.) The checkmark does a small confirming tilt (no color change — the app doesn't
+read a rename as a "credit"), held a moment before both icons fade away.
+A blank name, or one identical to the saved one, is treated the same as tapping discard rather
+than sent. Then an overline **"Members (n)"** label — the count lives inside the label itself,
 not a separate line — with the brand **"+ Invite"** text action at its end (the same shape
 as "+ Create" and "+ Add"), and the member list itself (avatar + name, an accent "Owner"
 tag on the owner — always the first row, whatever order the server listed them in) in its
