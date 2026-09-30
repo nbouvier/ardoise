@@ -413,6 +413,38 @@ describe('GroupScreen', () => {
     }
   });
 
+  it('shows the group name in a field of its own, editable only through the pencil', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    expect(screen.getByText('Group name')).toBeTruthy();
+    const field = screen.getByDisplayValue('Corsica 2026');
+    expect(field.props.editable).toBe(false);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+
+    expect(await screen.findByText('Rename group')).toBeTruthy();
+  });
+
+  it('lists the owner first regardless of the server’s own member order', async () => {
+    mockFetchGroup.mockResolvedValue({
+      ...trip,
+      members: [
+        { ...grace, role: 'member' },
+        { ...ada, role: 'owner' },
+      ],
+    });
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const names = await screen.findAllByText(/Lovelace|Hopper/);
+    expect(names[0]).toHaveTextContent('Ada Lovelace');
+    expect(names[1]).toHaveTextContent('Grace Hopper');
+  });
+
   it('puts the friend picker and the invitation link on one "+ Invite" page', async () => {
     mockFetchGroupInvite.mockResolvedValue({
       code: 'abc',
@@ -741,10 +773,10 @@ describe('GroupScreen', () => {
       mockFetchGroup.mockResolvedValue({ ...trip, pairRooted: true });
 
       await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
-      await screen.findByRole('button', { name: 'Rename' });
+      await screen.findByRole('button', { name: 'Rename group' });
 
       expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Rename group' })).toBeTruthy();
       expect(
         screen.getByText('Just the two of you here too — no one else can be added.'),
       ).toBeTruthy();

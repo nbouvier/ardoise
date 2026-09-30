@@ -397,30 +397,37 @@ membership row to favorite on, or manage — and tapping one opens a "Join this 
 nothing when there are no sub-groups and the group is read-only, so it never becomes a
 permanent empty box.
 
-**Manage tab** — the member list (avatar + name, an accent "Owner" tag on the owner) in
-one card, headed by an overline member count with a brand **"+ Invite"** text action at
-its end (the same shape as "+ Create" and "+ Add"), then the management actions.
-"+ Invite" **swaps the Manage tab's own content for the invite page** (`InvitePanel`) —
-no modal, no navigation; the banner and tabs stay, and picking any tab leaves it. Both
-ways in are on it, no menu between, told apart by a hairline. "Add friends" (overline
-section title) heads the friend picker, in the same surface card as the member list,
-headed by an overline count ("0 selected", "2 selected") where the member list says
-"n members". The card **always fills the room the link leaves** even with few friends,
-its list scrolling when it runs out; friends already in the group are listed too, ticked
-and disabled. "Add to group" closes the section, under the card. "Invitation link"
-(overline, its share / copy / generate icons at the end of that line) over a surface card
-holding just the link, and its small expiry line, sits below the hairline, and a **"Done"**
-button closes the page back to the member list (as does adding friends), spaced clear of
-the link. (A modal was tried and rejected.)
+**Manage tab** — top to bottom: a **"Group name"** section title over a row holding the
+name in a disabled `TextField` (same pill field as everywhere else, just non-interactive)
+and a small pencil `IconButton` at its end; tapping the pencil is the only way to open the
+rename sheet — there is no separate "Rename" button any more. Then **"Members"**, a
+section title with the brand **"+ Invite"** text action at its end (the same shape as
+"+ Create" and "+ Add"), a small overline member count right-aligned just above the card,
+and the member list itself (avatar + name, an accent "Owner" tag on the owner — always
+the first row, whatever order the server listed them in) in its own surface card. Below
+that, the management actions. "+ Invite" **swaps the Manage tab's own content for the
+invite page** (`InvitePanel`) — no modal, no navigation; the banner and tabs stay, and
+picking any tab leaves it. Both ways in are on it, no menu between, told apart by a
+hairline. "Add friends" (overline section title) heads the friend picker, in the same
+surface card as the member list, headed by an overline count ("0 selected", "2 selected")
+where the member list says "n members". The card **always fills the room the link
+leaves** even with few friends, its list scrolling when it runs out; friends already in
+the group are listed too, ticked and disabled. "Add to group" closes the section, under
+the card. "Invitation link" (overline, its share / copy / generate icons at the end of
+that line) over a surface card holding just the link, and its small expiry line, sits
+below the hairline, and a **"Done"** button closes the page back to the member list (as
+does adding friends), spaced clear of the link. (A modal was tried and rejected.)
 
 **One screen for both kinds of group.** Transactions and sub-groups behave identically on
-a pair group. Every other management action is **absent**, not disabled, there, and the
-tab's closing line explains that it is just the two of them. For a standard group:
-"+ Invite" (gone when effectively archived, or when the group
-is `pairRooted`), "Rename" (gone only when the group's **own** flag is archived), "Archive
-group" / "Reopen group" (always available, always the group's own flag), "Leave group"
-(hidden for an owner who still has company or who solely owns a populated sub-group), and
-a red text-only "Delete this group" for the owner.
+a pair group; its name field still shows, just without the pencil — there is nothing to
+rename. Every other management action is **absent**, not disabled, there, and the tab's
+closing line explains that it is just the two of them. For a standard group: the rename
+pencil (gone only when the group's **own** flag is archived), "+ Invite" (gone when
+effectively archived, or when the group is `pairRooted`), "Leave group" (hidden for an
+owner who still has company or who solely owns a populated sub-group), "Archive group" /
+"Reopen group" (always available, always the group's own flag), and a bordered, outlined
+red **"Delete this group"** (`Button` `danger` variant) for the owner — in that order:
+Leave, then Archive/Reopen, then Delete, the least reversible action last.
 
 States: loading, "This group is gone" (no retry, just a way back), and a retryable
 connection error.

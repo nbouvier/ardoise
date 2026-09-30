@@ -20,7 +20,8 @@ export type IconName =
   | 'groups'
   | 'friends'
   | 'account'
-  | 'calendar';
+  | 'calendar'
+  | 'pencil';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
@@ -61,6 +62,8 @@ const paths: Record<IconName, string> = {
   // wall calendar hangs from — reads as "date" at a glance.
   calendar:
     'M4 5h16a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 10h18M8 3v4M16 3v4',
+  // A pencil at rest on its tip: the shaft, and the point it writes from.
+  pencil: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z',
 };
 
 export interface IconProps {

@@ -12,6 +12,7 @@ import { Card } from '@/components/card';
 import { DismissiblePage } from '@/components/dismissible-page';
 import { FavoriteStar } from '@/components/favorite-star';
 import { BackButton } from '@/components/back-button';
+import { IconButton } from '@/components/icon-button';
 import { MedallionBadge } from '@/components/medallion-badge';
 import { PageHero } from '@/components/page-hero';
 import { SheetModal } from '@/components/sheet-modal';
@@ -873,13 +874,34 @@ function ManageTab({
   onLeave: () => void;
   onDelete: () => void;
 }) {
+  const theme = useTheme();
+  // The owner is always first; everyone else keeps the order the server sent
+  // (alphabetical) — a stable sort only ever moves the one owner.
+  const orderedMembers = [...group.members].sort((a, b) =>
+    a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : 0,
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.manage}>
-      <Card style={styles.manageSection}>
-        <View style={styles.sectionHeader}>
-          <ThemedText type="overline" themeColor="textSecondary">
-            {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-          </ThemedText>
+      <View style={styles.manageHeader}>
+        <ThemedText type="sectionTitle">Group name</ThemedText>
+      </View>
+      <View style={styles.nameRow}>
+        <TextField value={group.name} editable={false} style={styles.nameField} />
+        {managed && !readOnly ? (
+          <IconButton
+            icon="pencil"
+            accessibilityLabel="Rename group"
+            color={theme.primary}
+            disabled={busy}
+            onPress={onRename}
+          />
+        ) : null}
+      </View>
+
+      <View>
+        <View style={styles.manageHeader}>
+          <ThemedText type="sectionTitle">Members</ThemedText>
           {managed && !readOnly && !pairRooted ? (
             <TextAction
               label="+ Invite"
@@ -889,12 +911,17 @@ function ManageTab({
             />
           ) : null}
         </View>
-        <View style={styles.members}>
-          {group.members.map((member) => (
-            <MemberRow key={member.id} member={member} />
-          ))}
-        </View>
-      </Card>
+        <ThemedText type="overline" themeColor="textSecondary" style={styles.memberCount}>
+          {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
+        </ThemedText>
+        <Card style={styles.manageSection}>
+          <View style={styles.members}>
+            {orderedMembers.map((member) => (
+              <MemberRow key={member.id} member={member} />
+            ))}
+          </View>
+        </Card>
+      </View>
 
       {managed ? (
         <View style={styles.actions}>
@@ -904,9 +931,10 @@ function ManageTab({
             </ThemedText>
           ) : null}
 
-          {readOnly ? null : (
-            <Button label="Rename" variant="secondary" disabled={busy} onPress={onRename} />
-          )}
+          {/* The owner cannot strand the others; alone, leaving is deleting. */}
+          {!isOwner || alone ? (
+            <Button label="Leave group" variant="secondary" disabled={busy} onPress={onLeave} />
+          ) : null}
 
           <Button
             label={ownArchived ? 'Reopen group' : 'Archive group'}
@@ -915,21 +943,13 @@ function ManageTab({
             onPress={onArchiveToggle}
           />
 
-          {/* The owner cannot strand the others; alone, leaving is deleting. */}
-          {!isOwner || alone ? (
-            <Button label="Leave group" variant="secondary" disabled={busy} onPress={onLeave} />
-          ) : null}
-
           {isOwner ? (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              label="Delete this group"
+              variant="danger"
               disabled={busy}
               onPress={onDelete}
-              style={({ pressed }) => [styles.delete, pressed && styles.pressed]}>
-              <ThemedText type="smallBold" themeColor="danger">
-                Delete this group
-              </ThemedText>
-            </Pressable>
+            />
           ) : null}
         </View>
       ) : (
@@ -1073,6 +1093,27 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: Spacing.four,
   },
+  // A block's own line inside Manage: its section title, and its "+" action
+  // at the end, when it has one.
+  manageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  nameField: {
+    flex: 1,
+  },
+  // Sits between the member count and the "+ Invite" line above it and the
+  // card below it — small and right-aligned, a detail rather than a heading.
+  memberCount: {
+    textAlign: 'right',
+    marginBottom: Spacing.one,
+  },
   manageSection: {
     gap: Spacing.three,
   },
@@ -1143,10 +1184,6 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
-  },
-  delete: {
-    alignSelf: 'center',
-    paddingVertical: Spacing.three,
   },
   pressed: {
     opacity: 0.6,
