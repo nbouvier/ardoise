@@ -299,11 +299,12 @@ describe('StatisticsScreen', () => {
     expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total income');
   });
 
-  it('explains an empty group rather than drawing an empty ring', async () => {
+  it('shows a placeholder ring alongside the explanation for an empty group', async () => {
     await renderScreen([]);
 
     expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
-    expect(screen.queryByTestId('donut-chart')).toBeNull();
+    expect(screen.getByTestId('donut-chart')).toBeTruthy();
+    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('0.00');
   });
 
   it('says that no income was recorded, not that there is nothing at all', async () => {
@@ -516,7 +517,7 @@ describe('StatisticsScreen', () => {
       expect(screen.getByRole('button', { name: 'From: Any' })).toBeTruthy();
     });
 
-    it('explains a date range with nothing in it, rather than drawing an empty ring', async () => {
+    it('explains a date range with nothing in it, alongside a placeholder ring', async () => {
       await renderScreen([
         transaction({ category: 'groceries', amountCents: 1000, occurredOn: '2026-01-01' }),
       ]);
@@ -529,6 +530,7 @@ describe('StatisticsScreen', () => {
       expect(
         await screen.findByText('Nothing spent in the selected date range.'),
       ).toBeTruthy();
+      expect(screen.getByTestId('donut-chart')).toBeTruthy();
     });
   });
 

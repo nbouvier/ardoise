@@ -173,6 +173,12 @@ its own.
   breakdown, consistently with balances, which also keep them.
 - **Failing to load the transactions**: the breakdown shows the same retryable error as
   the transaction list, never an empty chart that would read as "nothing spent".
+- **Any empty state that would otherwise show a category breakdown** (no transactions,
+  income-only with none recorded, a narrowed selection or date range with nothing in it):
+  the donut ring itself still renders, as a single muted, non-interactive arc holding a
+  zero total, with the explanatory sentence underneath — a blank space in place of the
+  chart would read as a loading state or a bug, where a placeholder ring reads as "there
+  is a chart here, it just has nothing to draw yet".
 - **A group with no sub-groups**: no scope toggle is shown at all — there is nothing for
   it to change, and showing a toggle that does nothing would be confusing rather than
   neutral.
@@ -217,8 +223,9 @@ its own.
 - [ ] A transaction with no explicit category counts under `Other`.
 - [ ] Tapping an arc or a legend row shows that category's amount and percentage in the
       centre of the donut; deselecting restores the total.
-- [ ] A group with no transactions, or only transfers, shows an explanatory empty state
-      rather than an empty chart.
+- [ ] A group with no transactions, or only transfers, shows a placeholder ring — a
+      single muted arc holding a zero total — with an explanatory sentence underneath,
+      rather than blank space or no chart at all.
 - [ ] Selecting Income on a group with no income shows an empty state specific to that
       view, and the viewer can switch back.
 - [ ] The statistics view is available on a pair group and on an archived group.

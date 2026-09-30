@@ -304,11 +304,21 @@ export function StatisticsScreen({
           </ThemedText>
         </View>
       ) : breakdown.slices.length === 0 ? (
-        <View style={styles.centeredBody}>
+        <ScrollView contentContainerStyle={styles.body}>
+          <DonutChart
+            size={CHART_SIZE}
+            thickness={CHART_THICKNESS}
+            slices={[{ key: 'empty', value: 1, color: theme.border, label: 'No data' }]}>
+            <Centre
+              label={`Total ${typeLabels[type].toLowerCase()}`}
+              amountCents={0}
+              percent={null}
+            />
+          </DonutChart>
           <ThemedText themeColor="textSecondary" style={styles.centeredText}>
             {emptyMessage(type, everyoneSelected, dateRangeActive)}
           </ThemedText>
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           <DonutChart

@@ -508,9 +508,11 @@ emoji, label, amount and percentage, fades the other arcs to 30%, and tints the 
 it came from. Tapping again, changing the type, or changing any selection — participants,
 sub-groups, or either date bound — returns to the total.
 
-States: a spinner, the same retryable connection error as the list, and empty states that
-say *which* combination is empty ("Nothing recorded as income yet.", "Nothing spent in the
-selected date range.") rather than a generic "nothing here".
+States: a spinner, the same retryable connection error as the list, and — when the
+breakdown has nothing to show — the donut chart stays on screen as a single muted, static
+arc holding a zero total, with a sentence underneath saying *which* combination is empty
+("Nothing recorded as income yet.", "Nothing spent in the selected date range.") rather
+than a generic "nothing here" or blank space where the chart would be.
 
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 
