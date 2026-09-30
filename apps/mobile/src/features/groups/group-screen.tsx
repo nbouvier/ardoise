@@ -1,8 +1,21 @@
 import type { GroupDetail, GroupMember, SubgroupSummary, Transaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
@@ -83,10 +96,10 @@ export function parseGroupTab(value: string | undefined): GroupTab | undefined {
  * Manage tab's "+ Invite"; `friends` (add friends) and `link` (the invitation
  * link) are launched from it and return to it. `transaction` is the
  * add/edit form, also reached from a suggested reimbursement — pre-filled.
- * `createSubgroup` is launched from the sub-groups section, and `rename`
- * from Manage.
+ * `createSubgroup` is launched from the sub-groups section. Renaming happens
+ * inline on the Manage tab's own name field, not as a sheet.
  */
-type Sheet = 'rename' | 'transaction' | 'createSubgroup' | null;
+type Sheet = 'transaction' | 'createSubgroup' | null;
 
 export interface GroupScreenProps {
   groupId: string;
@@ -232,6 +245,10 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
 
   function confirmArchive() {
     void run('archive', () => updateGroup(authorizedFetch, groupId, { archived: !ownArchived }));
+  }
+
+  function renameGroup(name: string) {
+    return run('rename', () => updateGroup(authorizedFetch, groupId, { name }));
   }
 
   function toggleFavorite() {
@@ -450,7 +467,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             alone={alone}
             busy={busy}
             onInvite={() => setInviting(true)}
-            onRename={() => setSheet('rename')}
+            onRename={renameGroup}
             onArchiveToggle={confirmArchive}
             onLeave={confirmLeave}
             onDelete={confirmDelete}
@@ -533,18 +550,6 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
         {sheet !== 'createSubgroup' ? (
           <ThemedView style={styles.container}>
             <SafeAreaView style={styles.container}>
-              {sheet === 'rename' ? (
-                <RenameSheet
-                  current={group.name}
-                  busy={busy}
-                  onCancel={() => setSheet(null)}
-                  onRename={(name) => {
-                    setSheet(null);
-                    void run('rename', () => updateGroup(authorizedFetch, groupId, { name }));
-                  }}
-                />
-              ) : null}
-
               {sheet === 'transaction' && viewerId ? (
                 <TransactionFormScreen
                   group={group}
@@ -869,12 +874,11 @@ function ManageTab({
   alone: boolean;
   busy: boolean;
   onInvite: () => void;
-  onRename: () => void;
+  onRename: (name: string) => Promise<boolean>;
   onArchiveToggle: () => void;
   onLeave: () => void;
   onDelete: () => void;
 }) {
-  const theme = useTheme();
   // The owner is always first; everyone else keeps the order the server sent
   // (alphabetical) — a stable sort only ever moves the one owner.
   const orderedMembers = [...group.members].sort((a, b) =>
@@ -883,25 +887,25 @@ function ManageTab({
 
   return (
     <ScrollView contentContainerStyle={styles.manage}>
-      <View style={styles.manageHeader}>
-        <ThemedText type="sectionTitle">Group name</ThemedText>
-      </View>
-      <View style={styles.nameRow}>
-        <TextField value={group.name} editable={false} style={styles.nameField} />
-        {managed && !readOnly ? (
-          <IconButton
-            icon="pencil"
-            accessibilityLabel="Rename group"
-            color={theme.primary}
-            disabled={busy}
-            onPress={onRename}
-          />
-        ) : null}
+      <View style={styles.manageBlock}>
+        <View style={styles.sectionHeader}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Group name
+          </ThemedText>
+        </View>
+        <GroupNameField
+          name={group.name}
+          editable={managed && !readOnly}
+          busy={busy}
+          onRename={onRename}
+        />
       </View>
 
-      <View>
-        <View style={styles.manageHeader}>
-          <ThemedText type="sectionTitle">Members</ThemedText>
+      <View style={styles.manageBlock}>
+        <View style={styles.sectionHeader}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            {`Members (${group.memberCount})`}
+          </ThemedText>
           {managed && !readOnly && !pairRooted ? (
             <TextAction
               label="+ Invite"
@@ -911,9 +915,6 @@ function ManageTab({
             />
           ) : null}
         </View>
-        <ThemedText type="overline" themeColor="textSecondary" style={styles.memberCount}>
-          {group.memberCount === 1 ? '1 member' : `${group.memberCount} members`}
-        </ThemedText>
         <Card style={styles.manageSection}>
           <View style={styles.members}>
             {orderedMembers.map((member) => (
@@ -944,12 +945,7 @@ function ManageTab({
           />
 
           {isOwner ? (
-            <Button
-              label="Delete this group"
-              variant="danger"
-              disabled={busy}
-              onPress={onDelete}
-            />
+            <Button label="Delete group" variant="danger" disabled={busy} onPress={onDelete} />
           ) : null}
         </View>
       ) : (
@@ -959,6 +955,113 @@ function ManageTab({
         </ThemedText>
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * The group's name, edited in place rather than on a page of its own: the
+ * pencil turns the field editable and focuses it (opening the keyboard),
+ * turning itself into a checkmark. Blurring the field — by tapping the
+ * checkmark or by moving on to anything else — commits a real change; the
+ * checkmark then flashes credit-green with a small tilt before settling back
+ * into a pencil, so a save reads as confirmed rather than silent
+ * (`docs/DESIGN.md`).
+ */
+function GroupNameField({
+  name,
+  editable,
+  busy,
+  onRename,
+}: {
+  name: string;
+  /** Whether the group can be renamed at all — absent, the field is purely informational. */
+  editable: boolean;
+  busy: boolean;
+  onRename: (name: string) => Promise<boolean>;
+}) {
+  const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
+  // Guards against `save` re-entering itself: blurring the field to dismiss
+  // the keyboard fires the same `onBlur` handler that calls it.
+  const savingRef = useRef(false);
+  const [editing, setEditing] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+    }
+  }, [editing]);
+
+  function startEditing() {
+    setDraft(name);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (savingRef.current) {
+      return;
+    }
+    savingRef.current = true;
+    try {
+      inputRef.current?.blur();
+      const trimmed = draft.trim();
+      if (trimmed.length === 0 || trimmed === name) {
+        setEditing(false);
+        return;
+      }
+      const success = await onRename(trimmed);
+      if (!success) {
+        setEditing(false);
+        return;
+      }
+      setConfirmed(true);
+      rotation.set(
+        withSequence(
+          withTiming(-12, { duration: 70 }),
+          withTiming(12, { duration: 100 }),
+          withTiming(0, { duration: 90 }),
+        ),
+      );
+      setTimeout(() => {
+        setEditing(false);
+        setConfirmed(false);
+      }, 650);
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.get()}deg` }],
+  }));
+
+  return (
+    <View style={styles.nameRow}>
+      <TextField
+        ref={inputRef}
+        value={editing ? draft : name}
+        onChangeText={setDraft}
+        editable={editing && !confirmed}
+        maxLength={60}
+        style={styles.nameField}
+        onBlur={editing ? () => void save() : undefined}
+        onSubmitEditing={editing ? () => void save() : undefined}
+      />
+      {editable ? (
+        <Animated.View style={iconStyle}>
+          <IconButton
+            icon={editing || confirmed ? 'check' : 'pencil'}
+            accessibilityLabel={editing || confirmed ? 'Save group name' : 'Rename group'}
+            color={confirmed ? theme.credit : theme.primary}
+            disabled={busy && !editing}
+            onPress={() => (editing ? void save() : startEditing())}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
@@ -977,42 +1080,6 @@ function MemberRow({ member }: { member: GroupMember }) {
         </View>
       ) : null}
     </View>
-  );
-}
-
-function RenameSheet({
-  current,
-  busy,
-  onRename,
-  onCancel,
-}: {
-  current: string;
-  busy: boolean;
-  onRename: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(current);
-
-  return (
-    <ThemedView style={styles.sheet}>
-      <ThemedText type="subtitle">Rename group</ThemedText>
-      <TextField
-        accessibilityLabel="Group name"
-        autoFocus
-        value={name}
-        onChangeText={setName}
-        maxLength={60}
-      />
-      <View style={styles.actions}>
-        <Button
-          label="Rename"
-          busy={busy}
-          disabled={name.trim().length === 0 || name.trim() === current}
-          onPress={() => onRename(name.trim())}
-        />
-        <Button label="Cancel" variant="ghost" onPress={onCancel} />
-      </View>
-    </ThemedView>
   );
 }
 
@@ -1093,12 +1160,10 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: Spacing.four,
   },
-  // A block's own line inside Manage: its section title, and its "+" action
-  // at the end, when it has one.
-  manageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // A block's own header-then-content spacing inside Manage — the same shape
+  // as `subgroups`, just not named after it.
+  manageBlock: {
+    gap: Spacing.two,
   },
   nameRow: {
     flexDirection: 'row',
@@ -1107,12 +1172,6 @@ const styles = StyleSheet.create({
   },
   nameField: {
     flex: 1,
-  },
-  // Sits between the member count and the "+ Invite" line above it and the
-  // card below it — small and right-aligned, a detail rather than a heading.
-  memberCount: {
-    textAlign: 'right',
-    marginBottom: Spacing.one,
   },
   manageSection: {
     gap: Spacing.three,
@@ -1194,13 +1253,5 @@ const styles = StyleSheet.create({
   },
   muted: {
     opacity: 0.55,
-  },
-  sheet: {
-    flex: 1,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    padding: Spacing.four,
-    gap: Spacing.three,
   },
 });

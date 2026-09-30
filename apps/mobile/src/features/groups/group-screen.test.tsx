@@ -100,6 +100,7 @@ const mockFriendList: unknown[] = [];
 const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchGroupInvite = jest.fn<() => Promise<Invite>>();
 const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
+const mockUpdateGroup = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 
@@ -115,7 +116,7 @@ jest.mock('@/features/auth/use-auth', () => ({
 jest.mock('@/lib/api/groups', () => ({
   fetchGroup: () => mockFetchGroup(),
   createGroup: jest.fn(),
-  updateGroup: jest.fn(),
+  updateGroup: (...args: unknown[]) => mockUpdateGroup(...args),
   deleteGroup: jest.fn(),
   addGroupMembers: jest.fn(),
   removeGroupMember: jest.fn(),
@@ -157,6 +158,7 @@ beforeEach(() => {
     expiresAt: '2026-09-30T12:00:00.000Z',
   });
   mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
+  mockUpdateGroup.mockReset().mockResolvedValue(trip);
   mockPush.mockReset();
   mockBack.mockReset();
 });
@@ -408,23 +410,77 @@ describe('GroupScreen', () => {
     await openTab('Manage');
 
     expect(await screen.findByText('Grace Hopper')).toBeTruthy();
+    expect(screen.getByText('Members (2)')).toBeTruthy();
     for (const action of [/invite/i, /rename/i, /archive group/i]) {
       expect(screen.getByRole('button', { name: action })).toBeTruthy();
     }
   });
 
-  it('shows the group name in a field of its own, editable only through the pencil', async () => {
+  it('shows the group name in a disabled field until the pencil is pressed', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
     expect(screen.getByText('Group name')).toBeTruthy();
-    const field = screen.getByDisplayValue('Corsica 2026');
-    expect(field.props.editable).toBe(false);
+    expect(screen.getByDisplayValue('Corsica 2026').props.editable).toBe(false);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
 
-    expect(await screen.findByText('Rename group')).toBeTruthy();
+    expect(screen.getByDisplayValue('Corsica 2026').props.editable).toBe(true);
+    expect(screen.getByRole('button', { name: 'Save group name' })).toBeTruthy();
+  });
+
+  it('saves the new name on the checkmark, then settles back into a pencil', async () => {
+    mockUpdateGroup.mockResolvedValue({ ...trip, name: 'Corsica Trip' });
+    // The background refetch that `groupsChanged` triggers races the direct
+    // `set()` from the rename response — give it the same fresh name, the
+    // way a real server would (see the favorite-toggle test above).
+    mockFetchGroup.mockResolvedValueOnce(trip).mockResolvedValue({ ...trip, name: 'Corsica Trip' });
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+    await fireEvent.changeText(screen.getByDisplayValue('Corsica 2026'), 'Corsica Trip');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save group name' }));
+
+    expect(mockUpdateGroup).toHaveBeenCalledWith(expect.anything(), trip.id, {
+      name: 'Corsica Trip',
+    });
+    expect(
+      await screen.findByRole('button', { name: 'Rename group' }, { timeout: 2000 }),
+    ).toBeTruthy();
+    expect(screen.getByDisplayValue('Corsica Trip')).toBeTruthy();
+  });
+
+  it('saves on blur too, when the name changed', async () => {
+    mockUpdateGroup.mockResolvedValue({ ...trip, name: 'Corsica Trip' });
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+    const field = screen.getByDisplayValue('Corsica 2026');
+    await fireEvent.changeText(field, 'Corsica Trip');
+    await fireEvent(field, 'blur');
+
+    expect(mockUpdateGroup).toHaveBeenCalledWith(expect.anything(), trip.id, {
+      name: 'Corsica Trip',
+    });
+  });
+
+  it('does not save when the name is unchanged or blank', async () => {
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Rename group' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save group name' }));
+
+    expect(mockUpdateGroup).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: 'Rename group' })).toBeTruthy();
   });
 
   it('lists the owner first regardless of the server’s own member order', async () => {
@@ -493,7 +549,7 @@ describe('GroupScreen', () => {
     await screen.findByText('Corsica 2026');
     await openTab('Manage');
 
-    expect(await screen.findByRole('button', { name: /delete this group/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /delete group/i })).toBeTruthy();
     // The owner cannot strand the others.
     expect(screen.queryByRole('button', { name: /leave group/i })).toBeNull();
   });
@@ -506,7 +562,7 @@ describe('GroupScreen', () => {
     await openTab('Manage');
 
     expect(await screen.findByRole('button', { name: /leave group/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /delete this group/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete group/i })).toBeNull();
   });
 
   it('hides "Add a transaction" and drops the membership actions of an archived group', async () => {
@@ -582,7 +638,7 @@ describe('GroupScreen', () => {
       /rename/i,
       /archive group/i,
       /leave group/i,
-      /delete this group/i,
+      /delete group/i,
     ]) {
       expect(screen.queryByRole('button', { name: action })).toBeNull();
     }
