@@ -86,6 +86,15 @@ own.
 - **`Fonts`** per platform: `sans`, `serif`, `rounded`, `mono`.
 - **Layout** — `MaxContentWidth` (800). The bottom tab bar takes its own room below the
   pages (it does not float over them), so a tab's content needs no bottom inset for it.
+- **Small caveat text** — any brief note that qualifies something above it rather than
+  standing as content of its own (an unsaved-change warning, a field's own validation
+  error, a disabled-row explanation, a list's own usage hint) keeps `type="small"`'s
+  weight and colour but overrides its `fontSize`/`lineHeight` down from 14/20 to **12/16**
+  — smaller than ordinary "small" text, since it is a caveat, not a message meant to
+  compete with whatever it is attached to. First used for the Manage tab's "Change not
+  saved yet" (`nameHintText`, `group-screen.tsx`) and the Balances tab's "Tap a row to
+  reimburse." (`tapHint`, `reimbursements-screen.tsx`); use the same 12/16 override for
+  any future text of this kind rather than plain "small".
 
 ## Theming
 
@@ -380,10 +389,8 @@ state: a brand card with a glyph and an explanation.
 regardless of amount (`forDisplay`, `reimbursements-screen.tsx`), then **"Reimbursements"**
 (the plan; see below). The viewer's own figure is their row in that list, marked with an
 accent **"Me"** tag the same shape as the "Owner" tag in Manage, rather than repeated in a
-card of its own. The "Tap a row to reimburse." note under the suggestions keeps `type="small"`
-but has its `fontSize`/`lineHeight` overridden down to 12/16 (`tapHint`,
-`reimbursements-screen.tsx`) — the same size as the Manage tab's "Change not saved yet" hint,
-for the same reason: a caveat under a list, not a message competing with it.
+card of its own. The "Tap a row to reimburse." note under the suggestions is the small
+caveat text size (`tapHint`, `reimbursements-screen.tsx`; see "Shape, space, type" above).
 
 **Statistics tab** — the breakdown, see "Group statistics" below.
 
@@ -420,11 +427,9 @@ exactly as typed, with a small note reading **"Change not saved yet"** under the
 long as it sits there unsaved and unfocused. The note itself waits a short delay
 (`NAME_UNSAVED_HINT_DELAY_MS`, 400ms) after that blur before showing, cancelled outright by a
 refocus, a discard or a commit that lands first — tapping straight back into the field to keep
-editing should never see it flash on the way past. It reads `type="small" themeColor="danger"`, with its
-`fontSize`/`lineHeight` further overridden down to 12/16 (see `nameHintText`,
-`group-screen.tsx`): deliberately smaller than "small" text elsewhere, since it's a field-level
-caveat, not a message meant to compete with the field's own contents. Keep any future name-field
-hint at that same smaller size rather than the ordinary "small" one. That note lives in its own
+editing should never see it flash on the way past. It reads `type="small" themeColor="danger"`,
+at the small caveat text size (`nameHintText`, `group-screen.tsx`; see "Shape, space, type"
+above). That note lives in its own
 fixed-height slot, always present whether or not the note itself is — the field's own row
 (`TextField` plus its icon overlay) is a separate block above it for the same reason, so neither
 the icon crossfade nor the note appearing or clearing ever changes the field's own height;
