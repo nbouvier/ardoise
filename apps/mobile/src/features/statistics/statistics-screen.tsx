@@ -15,6 +15,7 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Icon } from '@/components/icon';
+import { MeTag } from '@/components/me-tag';
 import { Pill } from '@/components/pill';
 import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
@@ -673,13 +674,7 @@ function ParticipantOption({
       <ThemedText style={styles.participantName} numberOfLines={1}>
         {member.name}
       </ThemedText>
-      {isViewer ? (
-        <View style={[styles.meTag, { backgroundColor: theme.accentSoft }]}>
-          <ThemedText type="overline" themeColor="onAccentSoft">
-            Me
-          </ThemedText>
-        </View>
-      ) : null}
+      {isViewer ? <MeTag /> : null}
       <View
         style={[
           styles.checkbox,
@@ -963,11 +958,6 @@ const styles = StyleSheet.create({
   },
   subgroupName: {
     flex: 1,
-  },
-  meTag: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
-    borderRadius: Radius.pill,
   },
   checkbox: {
     width: 24,

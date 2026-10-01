@@ -29,6 +29,7 @@ import { FavoriteStar } from '@/components/favorite-star';
 import { BackButton } from '@/components/back-button';
 import { IconButton } from '@/components/icon-button';
 import { MedallionBadge } from '@/components/medallion-badge';
+import { MeTag } from '@/components/me-tag';
 import { PageHero } from '@/components/page-hero';
 import { SheetModal } from '@/components/sheet-modal';
 import { Pager } from '@/components/pager';
@@ -94,14 +95,14 @@ export function parseGroupTab(value: string | undefined): GroupTab | undefined {
 }
 
 /**
- * What can be open above the page. `invite` is the hub reached from the
- * Manage tab's "+ Invite"; `friends` (add friends) and `link` (the invitation
- * link) are launched from it and return to it. `transaction` is the
- * add/edit form, also reached from a suggested reimbursement — pre-filled.
- * `createSubgroup` is launched from the sub-groups section. Renaming happens
- * inline on the Manage tab's own name field, not as a sheet.
+ * What can be open above the page, as a true page-sheet modal. `createSubgroup`
+ * is launched from the sub-groups section. The transaction form is not one of
+ * these any more — like "+ Invite" on the Manage tab, it swaps the Transactions
+ * tab's own content in place (`transactionOpen`, below) rather than sliding up
+ * over it. Renaming happens inline on the Manage tab's own name field, not as
+ * a sheet either.
  */
-type Sheet = 'transaction' | 'createSubgroup' | null;
+type Sheet = 'createSubgroup' | null;
 
 export interface GroupScreenProps {
   groupId: string;
@@ -120,14 +121,21 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   const tabPosition = useSharedValue(
     GROUP_TABS.findIndex((candidate) => candidate.key === initialTab),
   );
-  // "+ Invite" swaps the Manage tab's content for the invite page, in place.
+  // "+ Invite" swaps the Manage tab's content for the invite page, in place;
+  // `transactionOpen` does the same for the Transactions tab and the add/edit
+  // form.
   const [inviting, setInviting] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [transactionOpen, setTransactionOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  // Set only when the transaction sheet was opened from the reimbursement
-  // plan — it is both the form's starting values and how the sheet knows to
-  // hand control back to the plan afterwards.
+  // Set only when the transaction form was opened from the reimbursement
+  // plan — it is both the form's starting values and how closing it knows to
+  // hand control back to the plan's own tab afterwards (`returnTab`).
   const [prefill, setPrefill] = useState<TransactionPrefill | null>(null);
+  // The tab to come back to once this form closes — only set when it was
+  // opened from somewhere other than the Transactions tab itself (a suggested
+  // reimbursement, from Balances).
+  const [returnTab, setReturnTab] = useState<GroupTab | null>(null);
   const [busy, setBusy] = useState(false);
   // A sub-group's own favorite star toggles a different group than the one
   // this screen is showing, so it cannot ride the screen-wide `busy` flag —
@@ -339,20 +347,24 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   function openNewTransaction() {
     setEditingTransaction(null);
     setPrefill(null);
-    setSheet('transaction');
+    setReturnTab(null);
+    setTransactionOpen(true);
   }
 
   function openTransaction(transaction: Transaction) {
     setEditingTransaction(transaction);
     setPrefill(null);
-    setSheet('transaction');
+    setReturnTab(null);
+    setTransactionOpen(true);
   }
 
   /**
    * Record a suggested reimbursement: the transfer form, pre-filled, with
    * everything still editable — a partial payment is a changed amount
-   * (`docs/specs/reimbursements.md`). Saving or cancelling returns to the
-   * plan, which is then re-read.
+   * (`docs/specs/reimbursements.md`). This is reached from the Balances tab,
+   * so opening it also switches to the Transactions tab, where the form now
+   * lives; saving or cancelling returns to Balances, where the plan is then
+   * re-read.
    */
   function recordReimbursement(suggestion: Suggestion) {
     setEditingTransaction(null);
@@ -363,11 +375,22 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       payerId: suggestion.from.id,
       toUserId: suggestion.to.id,
     });
-    setSheet('transaction');
+    setReturnTab(tab);
+    setTab('transactions');
+    setTransactionOpen(true);
+  }
+
+  function closeTransaction() {
+    setTransactionOpen(false);
+    if (returnTab) {
+      setTab(returnTab);
+      setReturnTab(null);
+    }
   }
 
   function selectTab(next: GroupTab) {
     setInviting(false);
+    setTransactionOpen(false);
     setTab(next);
   }
 
@@ -375,7 +398,38 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   const renderTab = (page: GroupTab) => {
     switch (page) {
       case 'transactions':
-        return (
+        return transactionOpen && viewerId ? (
+          <TransactionFormScreen
+            group={group}
+            viewerId={viewerId}
+            initial={editingTransaction ?? undefined}
+            prefill={prefill ?? undefined}
+            onSaved={(transaction) => {
+              transactionsResult.upsert(transaction);
+              // Unlike the list, balances cannot be recomputed from one
+              // transaction — every member's share of it moved.
+              balancesResult.refresh();
+              // A friend's per-friend total on the Friends tab may depend on
+              // this transaction too; it has no other way to know.
+              friendsChanged.notify();
+              // And so do the home's two sections: the group's own balance on
+              // its favorited row, and the transaction itself in the latest
+              // list (`docs/specs/home.md`).
+              announceTransactionChange();
+              closeTransaction();
+            }}
+            onDeleted={() => {
+              if (editingTransaction) {
+                transactionsResult.remove(editingTransaction.id);
+              }
+              balancesResult.refresh();
+              friendsChanged.notify();
+              announceTransactionChange();
+              closeTransaction();
+            }}
+            onCancel={closeTransaction}
+          />
+        ) : (
           <>
             {/* Standard and pair groups can both have sub-groups — the pair
                 group's own Manage message covers the "no one new here"
@@ -535,62 +589,19 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
         />
       </View>
 
-      <SheetModal visible={sheet !== null} onClose={() => setSheet(null)}>
+      <SheetModal visible={sheet === 'createSubgroup'} onClose={() => setSheet(null)}>
         {/* The new-group page draws its own banner, right up to the top edge. */}
-        {sheet === 'createSubgroup' ? (
-          <CreateGroupScreen
-            parentId={groupId}
-            parentTrail={[...group.ancestors, { id: group.id, name: group.name }]}
-            pairRooted={pairRooted}
-            onCreated={(created) => {
-              groupsChanged.notify();
-              setSheet(null);
-              openGroup(created.id);
-            }}
-            onClose={() => setSheet(null)}
-          />
-        ) : null}
-        {sheet !== 'createSubgroup' ? (
-          <ThemedView style={styles.container}>
-            <SafeAreaView style={styles.container}>
-              {sheet === 'transaction' && viewerId ? (
-                <TransactionFormScreen
-                  group={group}
-                  viewerId={viewerId}
-                  initial={editingTransaction ?? undefined}
-                  prefill={prefill ?? undefined}
-                  onSaved={(transaction) => {
-                    transactionsResult.upsert(transaction);
-                    // Unlike the list, balances cannot be recomputed from one
-                    // transaction — every member's share of it moved.
-                    balancesResult.refresh();
-                    // A friend's per-friend total on the Friends tab may depend
-                    // on this transaction too; it has no other way to know.
-                    friendsChanged.notify();
-                    // And so do the home's two sections: the group's own
-                    // balance on its favorited row, and the transaction itself
-                    // in the latest list (`docs/specs/home.md`).
-                    announceTransactionChange();
-                    // The Balances tab it may have come from is still under the
-                    // sheet, re-read above, so the payment just recorded is
-                    // already gone from its plan.
-                    setSheet(null);
-                  }}
-                  onDeleted={() => {
-                    if (editingTransaction) {
-                      transactionsResult.remove(editingTransaction.id);
-                    }
-                    balancesResult.refresh();
-                    friendsChanged.notify();
-                    announceTransactionChange();
-                    setSheet(null);
-                  }}
-                  onCancel={() => setSheet(null)}
-                />
-              ) : null}
-            </SafeAreaView>
-          </ThemedView>
-        ) : null}
+        <CreateGroupScreen
+          parentId={groupId}
+          parentTrail={[...group.ancestors, { id: group.id, name: group.name }]}
+          pairRooted={pairRooted}
+          onCreated={(created) => {
+            groupsChanged.notify();
+            setSheet(null);
+            openGroup(created.id);
+          }}
+          onClose={() => setSheet(null)}
+        />
       </SheetModal>
 
       {dialog}
@@ -1188,13 +1199,7 @@ function MemberRow({ member, isViewer }: { member: GroupMember; isViewer: boolea
             </ThemedText>
           </View>
         ) : null}
-        {isViewer ? (
-          <View style={[styles.memberTag, { backgroundColor: theme.accentSoft }]}>
-            <ThemedText type="overline" themeColor="onAccentSoft">
-              Me
-            </ThemedText>
-          </View>
-        ) : null}
+        {isViewer ? <MeTag /> : null}
       </View>
     </View>
   );

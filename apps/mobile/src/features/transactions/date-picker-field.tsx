@@ -7,7 +7,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import {
-  formatOccurredOn,
+  formatOccurredOnShort,
   parseOccurredOn,
   toOccurredOn,
   type DatePickerFieldProps,
@@ -45,7 +45,7 @@ export function DatePickerField({ value, onChange }: DatePickerFieldProps) {
             styles.field,
             { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
           ]}>
-          <ThemedText>{formatOccurredOn(value)}</ThemedText>
+          <ThemedText numberOfLines={1}>{formatOccurredOnShort(value)}</ThemedText>
         </Pressable>
         {dialogOpen ? (
           <DateTimePicker

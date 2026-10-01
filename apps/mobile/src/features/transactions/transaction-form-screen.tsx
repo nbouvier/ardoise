@@ -9,15 +9,13 @@ import {
   type TransactionKind,
 } from '@splitcount/shared';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { Card } from '@/components/card';
-import { Pill } from '@/components/pill';
+import { DropdownMenu } from '@/components/dropdown-menu';
+import { SegmentedSwitch } from '@/components/segmented-switch';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useDialog } from '@/components/use-dialog';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
@@ -28,7 +26,7 @@ import { errorFields, logger } from '@/lib/logger';
 import { AmountInput } from './amount-input';
 import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
-import { MemberSelect } from './member-select';
+import { MemberDropdownField } from './member-dropdown-field';
 import { SplitEditor } from './split-editor';
 import { splitFrom } from './transaction-request';
 
@@ -190,24 +188,32 @@ export function TransactionFormScreen({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="subtitle">{initial ? 'Edit transaction' : 'Add a transaction'}</ThemedText>
+    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <SegmentedSwitch
+        options={[
+          { key: 'expense', label: kindLabels.expense },
+          { key: 'income', label: kindLabels.income },
+          { key: 'transfer', label: kindLabels.transfer },
+        ]}
+        value={kind}
+        onChange={setKind}
+      />
 
-      <View style={styles.kindRow}>
-        {(['expense', 'income', 'transfer'] as const).map((option) => (
-          <Pill
-            key={option}
-            label={kindLabels[option]}
-            selected={kind === option}
-            onPress={() => setKind(option)}
-            style={styles.kindPill}
-          />
-        ))}
-      </View>
-
-      {/* What the transaction is: its category, name, amount and date. */}
-      <Card style={styles.section}>
+      {/* What the transaction is: its name, category, amount and date. */}
+      <View style={styles.section}>
         <View style={styles.titleRow}>
+          <View style={styles.titleField}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Title
+            </ThemedText>
+            <TextField
+              accessibilityLabel="Title"
+              placeholder="Groceries, taxi, rent…"
+              value={title}
+              onChangeText={setTitle}
+              maxLength={80}
+            />
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Category: ${selectedCategory?.label ?? 'Other'}`}
@@ -218,14 +224,6 @@ export function TransactionFormScreen({
             ]}>
             <ThemedText style={styles.categoryEmoji}>{selectedCategory?.emoji ?? '🧾'}</ThemedText>
           </Pressable>
-          <TextField
-            accessibilityLabel="Title"
-            placeholder="Groceries, taxi, rent…"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={80}
-            style={styles.titleInput}
-          />
         </View>
 
         <View style={styles.fieldRow}>
@@ -243,49 +241,61 @@ export function TransactionFormScreen({
           </View>
         </View>
 
-        <TextField
-          accessibilityLabel="Comment"
-          placeholder="Comment (optional)"
-          value={comment}
-          onChangeText={setComment}
-          maxLength={500}
-          multiline
-        />
-      </Card>
+        <View style={styles.payerField}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            {kind === 'income' ? 'Who received it' : 'Who paid'}
+          </ThemedText>
+          <MemberDropdownField
+            accessibilityLabel={kind === 'income' ? 'Who received it' : 'Who paid'}
+            members={members}
+            selectedId={payerId}
+            onSelect={setPayerId}
+            viewerId={viewerId}
+          />
+        </View>
 
-      {/* Who it involves: the payer, then either a recipient or a split. */}
-      <Card style={styles.section}>
-        <ThemedText type="overline" themeColor="textSecondary">
-          {kind === 'income' ? 'Who received it' : 'Who paid'}
-        </ThemedText>
-        <MemberSelect members={members} selectedId={payerId} onSelect={setPayerId} />
+        <View style={styles.commentField}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Comment (optional)
+          </ThemedText>
+          <TextField
+            accessibilityLabel="Comment"
+            placeholder="Pizza night, don’t forget the tip"
+            value={comment}
+            onChangeText={setComment}
+            maxLength={500}
+            multiline
+            style={styles.comment}
+          />
+        </View>
+      </View>
 
+      {/* Who it involves: either a recipient (transfer) or a split. */}
+      <View style={styles.section}>
         {kind === 'transfer' ? (
-          <>
+          <View style={styles.payerField}>
             <ThemedText type="overline" themeColor="textSecondary">
               To
             </ThemedText>
-            <MemberSelect
+            <MemberDropdownField
+              accessibilityLabel="To"
               members={members}
               selectedId={toUserId}
               onSelect={setToUserId}
+              viewerId={viewerId}
               excludeId={payerId}
             />
-          </>
+          </View>
         ) : (
-          <>
-            <ThemedText type="overline" themeColor="textSecondary">
-              Who it concerns
-            </ThemedText>
-            <SplitEditor
-              members={members}
-              amountCents={amountCents ?? 0}
-              value={split}
-              onChange={setSplit}
-            />
-          </>
+          <SplitEditor
+            members={members}
+            amountCents={amountCents ?? 0}
+            value={split}
+            onChange={setSplit}
+            viewerId={viewerId}
+          />
         )}
-      </Card>
+      </View>
 
       {error ? (
         <ThemedText type="small" themeColor="danger">
@@ -294,8 +304,8 @@ export function TransactionFormScreen({
       ) : null}
 
       <View style={styles.actions}>
-        <Button label="Save" busy={busy} disabled={!canSubmit} onPress={() => void handleSave()} />
         <Button label="Cancel" variant="ghost" disabled={busy} onPress={onCancel} />
+        <Button label="Save" busy={busy} disabled={!canSubmit} onPress={() => void handleSave()} />
         {initial ? (
           <Pressable
             accessibilityRole="button"
@@ -309,27 +319,17 @@ export function TransactionFormScreen({
         ) : null}
       </View>
 
-      <Modal
-        visible={categoryPickerOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setCategoryPickerOpen(false)}>
-        <ThemedView style={styles.sheet}>
-          <SafeAreaView style={styles.sheet}>
-            <View style={styles.sheetContent}>
-              <ThemedText type="subtitle">Category</ThemedText>
-              <CategoryPicker
-                value={category}
-                onChange={(next) => {
-                  setCategory(next);
-                  setCategoryPickerOpen(false);
-                }}
-              />
-              <Button label="Close" variant="ghost" onPress={() => setCategoryPickerOpen(false)} />
-            </View>
-          </SafeAreaView>
-        </ThemedView>
-      </Modal>
+      {/* A dropdown over the form, the same popup language as a group's own
+          "⋮" menu — not a full page sheet of its own. */}
+      <DropdownMenu visible={categoryPickerOpen} onClose={() => setCategoryPickerOpen(false)}>
+        <CategoryPicker
+          value={category}
+          onChange={(next) => {
+            setCategory(next);
+            setCategoryPickerOpen(false);
+          }}
+        />
+      </DropdownMenu>
 
       {dialog}
     </ScrollView>
@@ -337,28 +337,24 @@ export function TransactionFormScreen({
 }
 
 const styles = StyleSheet.create({
+  // No horizontal padding of its own — this screen only ever renders as the
+  // Transactions tab's own content (`group-screen.tsx`), inside a page that
+  // already pads its sides; adding more here doubled up on the edges.
   container: {
     gap: Spacing.three,
-    padding: Spacing.four,
-  },
-  kindRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  kindPill: {
-    flex: 1,
-    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
   section: {
     gap: Spacing.three,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: Spacing.two,
   },
-  titleInput: {
+  titleField: {
     flex: 1,
+    gap: Spacing.one,
   },
   categoryBadge: {
     width: 52,
@@ -369,14 +365,6 @@ const styles = StyleSheet.create({
   },
   categoryEmoji: {
     fontSize: 20,
-  },
-  sheet: {
-    flex: 1,
-  },
-  sheetContent: {
-    flex: 1,
-    gap: Spacing.three,
-    padding: Spacing.four,
   },
   fieldRow: {
     flexDirection: 'row',
@@ -389,6 +377,18 @@ const styles = StyleSheet.create({
   dateField: {
     flex: 1,
     gap: Spacing.one,
+  },
+  payerField: {
+    gap: Spacing.one,
+  },
+  commentField: {
+    gap: Spacing.one,
+  },
+  // A paragraph's worth of room, not the generic multiline field's shorter
+  // default — a comment here still fits under Amount/Date/Who paid, but reads
+  // as more than a single aside line.
+  comment: {
+    minHeight: 88,
   },
   actions: {
     gap: Spacing.two,

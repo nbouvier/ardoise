@@ -13,12 +13,22 @@ const members = [ada, grace, alan];
 function Harness({
   initial,
   amountCents = 1000,
+  viewerId = null,
 }: {
   initial: SplitInput;
   amountCents?: number;
+  viewerId?: string | null;
 }) {
   const [value, setValue] = useState<SplitInput>(initial);
-  return <SplitEditor members={members} amountCents={amountCents} value={value} onChange={setValue} />;
+  return (
+    <SplitEditor
+      members={members}
+      amountCents={amountCents}
+      value={value}
+      onChange={setValue}
+      viewerId={viewerId}
+    />
+  );
 }
 
 const equalShares: SplitInput = {
@@ -30,39 +40,35 @@ const equalShares: SplitInput = {
 };
 
 describe('SplitEditor', () => {
-  it('checks exactly the currently selected participants', async () => {
+  it('shows every member, concerned or not, each with its own stepper', async () => {
     await render(<Harness initial={equalShares} />);
 
-    expect(screen.getByRole('checkbox', { name: 'Ada Lovelace' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: true }),
-    );
-    expect(screen.getByRole('checkbox', { name: 'Alan Turing' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: false }),
-    );
+    // Alan is not concerned yet, but his row (and stepper) still shows,
+    // starting at zero — fields stay visible rather than disappearing.
+    const values = screen.getAllByText('0');
+    expect(values).toHaveLength(1);
   });
 
-  it('adds a member at weight 1 when checked', async () => {
-    await render(<Harness initial={equalShares} />);
+  it('marks the viewer’s row "Me"', async () => {
+    await render(<Harness initial={equalShares} viewerId={grace.id} />);
 
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Alan Turing' }));
-
-    expect(screen.getByRole('checkbox', { name: 'Alan Turing' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: true }),
-    );
+    expect(screen.getByText('Me')).toBeTruthy();
   });
 
-  it('removes a member when unchecked', async () => {
-    await render(<Harness initial={equalShares} />);
+  it('pins the viewer’s row first, even when they are last in the member list', async () => {
+    const allAmounts: SplitInput = {
+      mode: 'amount',
+      participants: [
+        { userId: ada.id, amount: 300 },
+        { userId: grace.id, amount: 300 },
+        { userId: alan.id, amount: 400 },
+      ],
+    };
+    // Alan is third in `members`, but the viewer — his row should lead.
+    await render(<Harness initial={allAmounts} viewerId={alan.id} />);
 
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ada Lovelace' }));
-
-    expect(screen.getByRole('checkbox', { name: 'Ada Lovelace' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: false }),
-    );
+    const amountFields = screen.getAllByLabelText(/’s amount$/);
+    expect(amountFields[0]).toHaveProp('accessibilityLabel', 'Alan Turing’s amount');
   });
 
   it('recomputes the live preview when a weight changes', async () => {
@@ -79,17 +85,41 @@ describe('SplitEditor', () => {
     expect(screen.getByText('= 3.33')).toBeTruthy();
   });
 
-  it('does not let a weight drop below 1', async () => {
+  it('selects a member by raising their weight from zero', async () => {
+    await render(<Harness initial={equalShares} amountCents={1000} />);
+
+    // Alan is the third row, not concerned yet — his preview reads zero.
+    expect(screen.getByText('= 0.00')).toBeTruthy();
+
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[2]!);
+
+    // Now a three-way equal split: 3.34 / 3.33 / 3.33 (remainder to Ada).
+    expect(screen.queryByText('= 0.00')).toBeNull();
+  });
+
+  it('deselects a member by dropping their weight to zero, then blocks further decrease', async () => {
     await render(<Harness initial={equalShares} />);
 
     const decreaseButtons = screen.getAllByRole('button', { name: 'Decrease weight' });
-    expect(decreaseButtons[0]).toHaveProp('accessibilityState', expect.objectContaining({ disabled: true }));
+    // Ada starts at weight 1 — concerned — so decreasing is allowed.
+    expect(decreaseButtons[0]).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: false }),
+    );
+
+    await fireEvent.press(decreaseButtons[0]!);
+
+    // Dropped to zero: she is no longer concerned, and can't go lower.
+    expect(screen.getAllByRole('button', { name: 'Decrease weight' })[0]).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: true }),
+    );
   });
 
   it('seeds fixed amounts from the shares preview when switching modes', async () => {
     await render(<Harness initial={equalShares} amountCents={1000} />);
 
-    await fireEvent.press(screen.getByRole('button', { name: 'Fixed amounts' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Fixed' }));
 
     expect(screen.getAllByDisplayValue('5.00')).toHaveLength(2);
     expect(screen.getByText('Fully allocated')).toBeTruthy();
@@ -119,5 +149,20 @@ describe('SplitEditor', () => {
     await render(<Harness initial={overAmounts} amountCents={1000} />);
 
     expect(screen.getByText('2.00 over the total')).toBeTruthy();
+  });
+
+  it('deselects a member by clearing their fixed amount to zero', async () => {
+    const partialAmounts: SplitInput = {
+      mode: 'amount',
+      participants: [
+        { userId: ada.id, amount: 400 },
+        { userId: grace.id, amount: 600 },
+      ],
+    };
+    await render(<Harness initial={partialAmounts} amountCents={1000} />);
+
+    await fireEvent.changeText(screen.getByLabelText('Ada Lovelace’s amount'), '0');
+
+    expect(screen.getByText('4.00 left to allocate')).toBeTruthy();
   });
 });

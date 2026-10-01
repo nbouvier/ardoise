@@ -217,8 +217,9 @@ feature establishes, which that spec builds on.
 - [ ] A transaction can be given a category from the fixed preset list; leaving it unset
       records `Other`. An invalid or unknown category is refused, server-side.
 - [ ] Every transaction shows its category's emoji next to its title in the list. In the
-      add/edit form, a category badge to the left of the title opens the picker sheet and
-      updates on selection, without a separate save step for that field alone.
+      add/edit form, a category badge at the end of the title row opens a dropdown of
+      categories and updates on selection, without a separate save step for that field
+      alone.
 - [ ] A transaction recorded before categories existed, or before `Other` became the
       default, reads as `Other` — never as a missing or blank category.
 
@@ -285,20 +286,28 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 - **Balances** show on the **Balances** tab: each member's name next to their balance,
   coloured (owed to them / owing) rather than just signed, zero shown neutrally, under
   the reimbursement plan (`docs/specs/reimbursements.md`).
-- **Add transaction** is a sheet: kind, then a title row with a small square **category
-  badge** to the left of the title field, showing just the emoji (`Other` by default);
-  tapping it opens a small sheet with the category grid (emoji + label, single-select),
-  and picking one updates the badge and closes that sheet immediately — the transaction
-  itself is only saved when the form's own "Save" is pressed. Then amount, date, optional
-  comment, payer (defaulting to the signed-in member), a member picker for who it
-  concerns (all members pre-selected), and the split editor (shares with live-updating
-  computed amounts, or a toggle to fixed amounts with a running "remaining to allocate"
-  indicator). A transfer simplifies the same sheet to picking one other member instead of
-  a split editor. The date uses a native picker (inline on iOS, a dialog on Android); on
-  web, which has no native pickers, it stays a plain `YYYY-MM-DD` text field
-  (`docs/DESIGN.md`).
-- Tapping a transaction opens the same sheet pre-filled, with a destructive "Delete this
-  transaction" action, confirmed.
+- **Add transaction** swaps the Transactions tab's own content for the form, in place —
+  the same pattern as "+ Invite" on the Manage tab, not a sheet sliding up over it — with
+  no title of its own: a kind switch (Expense / Income / Transfer) sits where a heading
+  would. Then a title row: a labelled "Title" field with a small square **category badge**
+  at its end, showing just the emoji (`Other` by default); tapping it opens a dropdown over
+  the form (the same popup style as a group's own "⋮" menu) listing every category, and
+  picking one updates the badge and closes the dropdown immediately — the transaction
+  itself is only saved when the form's own "Save" is pressed. Then amount (with a small €
+  suffix) and date (short form, e.g. "11 Sep 2026") side by side, a "Who paid" dropdown
+  field (defaulting to the signed-in member, whose row is pinned first and marked "Me"),
+  and an optional comment under its own "Comment (optional)" label. Then, for an expense or
+  income, "Participants": a member picker where every member keeps a row whether or not
+  they are concerned, raising a weight or entering a non-zero amount adds them and bringing
+  either back to zero removes them, with a small Shares/Fixed switch next to its
+  own heading; for a transfer, a single "To" dropdown field instead, excluding the payer.
+  The date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
+  native pickers, it stays a plain `YYYY-MM-DD` text field. See `docs/DESIGN.md` for the
+  full layout.
+- Tapping a transaction opens the same form pre-filled, in place of the Transactions tab's
+  own content, with a destructive "Delete this transaction" action, confirmed. A suggested
+  reimbursement from the Balances tab opens the same form the same way, switching to the
+  Transactions tab to show it and switching back once it is saved or cancelled.
 - Empty state: an explanation and the same "Add a transaction" action as the
   "+ Add" in the group's "Transactions" section title (there is no separate large button).
 - On a pair group, the transaction list and "Add a transaction" are present exactly as on

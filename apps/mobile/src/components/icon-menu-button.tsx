@@ -1,8 +1,7 @@
 import { Fragment, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Card } from '@/components/card';
+import { DropdownMenu } from '@/components/dropdown-menu';
 import { Icon, type IconName } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -66,28 +65,22 @@ export function IconMenuButton({
         <Icon name="more" size={18} color={theme.textSecondary} filled />
       </Pressable>
 
-      <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
-        <SafeAreaView style={styles.safeArea}>
-          <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
-            <Card style={styles.menu}>
-              {options.map((option, index) => (
-                <Fragment key={option.label}>
-                  {index > 0 ? (
-                    <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
-                  ) : null}
-                  <MenuRow
-                    {...option}
-                    onPress={() => {
-                      setOpen(false);
-                      option.onPress();
-                    }}
-                  />
-                </Fragment>
-              ))}
-            </Card>
-          </Pressable>
-        </SafeAreaView>
-      </Modal>
+      <DropdownMenu visible={open} onClose={() => setOpen(false)}>
+        {options.map((option, index) => (
+          <Fragment key={option.label}>
+            {index > 0 ? (
+              <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+            ) : null}
+            <MenuRow
+              {...option}
+              onPress={() => {
+                setOpen(false);
+                option.onPress();
+              }}
+            />
+          </Fragment>
+        ))}
+      </DropdownMenu>
     </>
   );
 }
@@ -99,21 +92,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-  },
-  menu: {
-    width: '100%',
-    maxWidth: 360,
-    padding: Spacing.two,
-    gap: Spacing.one,
   },
   menuRow: {
     flexDirection: 'row',

@@ -9,7 +9,9 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
-import { Pill } from '@/components/pill';
+import { Card } from '@/components/card';
+import { MeTag } from '@/components/me-tag';
+import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,38 +25,35 @@ export interface SplitEditorProps {
   amountCents: number;
   value: SplitInput;
   onChange: (value: SplitInput) => void;
+  /** The signed-in member — marked "Me" in the member list. */
+  viewerId: string | null;
 }
 
-const MIN_WEIGHT = 1;
 const MAX_WEIGHT = 1000;
 
 /**
  * Who a transaction concerns, and how the amount is divided between them.
  * Defaulting to shares with everyone at weight 1 (an equal split) is the
  * caller's job — this component just edits whatever `value` it is given.
+ *
+ * Every member gets a row, whether or not they are currently concerned —
+ * their stepper or amount field just reads zero. Editing that field is the
+ * only way in or out of the split: raising a weight above zero, or typing a
+ * non-zero amount, adds the member; bringing either back down to zero
+ * removes them. There is no separate checkbox — the row's own background
+ * tint (`primarySoft` when concerned) is the only selection cue.
  */
-export function SplitEditor({ members, amountCents, value, onChange }: SplitEditorProps) {
-  const selectedIds = new Set(value.participants.map((p) => p.userId));
+export function SplitEditor({ members, amountCents, value, onChange, viewerId }: SplitEditorProps) {
+  // The viewer's own row is pinned first — the same ordering `MemberSelect`
+  // uses for "who paid" — since picking yourself first is the common case.
+  const orderedMembers = [...members].sort((a, b) =>
+    a.id === viewerId ? -1 : b.id === viewerId ? 1 : 0,
+  );
 
   const preview: Map<string, number> | null =
     value.mode === 'shares' && value.participants.length > 0
       ? new Map(splitByShares(amountCents, value.participants).map((s) => [s.userId, s.shareCents]))
       : null;
-
-  function toggleMember(userId: string) {
-    const isSelected = selectedIds.has(userId);
-    if (value.mode === 'shares') {
-      const participants: SharesSplitParticipant[] = isSelected
-        ? value.participants.filter((p) => p.userId !== userId)
-        : [...value.participants, { userId, weight: 1 }];
-      onChange({ mode: 'shares', participants });
-    } else {
-      const participants: AmountSplitParticipant[] = isSelected
-        ? value.participants.filter((p) => p.userId !== userId)
-        : [...value.participants, { userId, amount: 0 }];
-      onChange({ mode: 'amount', participants });
-    }
-  }
 
   function setMode(mode: 'shares' | 'amount') {
     if (mode === value.mode) {
@@ -75,27 +74,45 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
     }
   }
 
+  /** A weight of zero removes the member from the split entirely — the schema never persists one. */
   function setWeight(userId: string, weight: number) {
     if (value.mode !== 'shares') {
       return;
     }
-    const clamped = Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, weight));
-    onChange({
-      mode: 'shares',
-      participants: value.participants.map((p) =>
-        p.userId === userId ? { ...p, weight: clamped } : p,
-      ),
-    });
+    if (weight <= 0) {
+      onChange({
+        mode: 'shares',
+        participants: value.participants.filter((p) => p.userId !== userId),
+      });
+      return;
+    }
+    const clamped = Math.min(MAX_WEIGHT, weight);
+    const participants: SharesSplitParticipant[] = value.participants.some(
+      (p) => p.userId === userId,
+    )
+      ? value.participants.map((p) => (p.userId === userId ? { ...p, weight: clamped } : p))
+      : [...value.participants, { userId, weight: clamped }];
+    onChange({ mode: 'shares', participants });
   }
 
+  /** Same rule as `setWeight`: an amount of zero removes the member. */
   function setAmount(userId: string, amount: number) {
     if (value.mode !== 'amount') {
       return;
     }
-    onChange({
-      mode: 'amount',
-      participants: value.participants.map((p) => (p.userId === userId ? { ...p, amount } : p)),
-    });
+    if (amount <= 0) {
+      onChange({
+        mode: 'amount',
+        participants: value.participants.filter((p) => p.userId !== userId),
+      });
+      return;
+    }
+    const participants: AmountSplitParticipant[] = value.participants.some(
+      (p) => p.userId === userId,
+    )
+      ? value.participants.map((p) => (p.userId === userId ? { ...p, amount } : p))
+      : [...value.participants, { userId, amount }];
+    onChange({ mode: 'amount', participants });
   }
 
   const allocated =
@@ -104,68 +121,70 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
 
   return (
     <View style={styles.container}>
-      <View style={styles.modeToggle}>
-        <Pill label="Shares" selected={value.mode === 'shares'} onPress={() => setMode('shares')} />
-        <Pill
-          label="Fixed amounts"
-          selected={value.mode === 'amount'}
-          onPress={() => setMode('amount')}
+      <View style={styles.header}>
+        <ThemedText type="overline" themeColor="textSecondary">
+          Participants
+        </ThemedText>
+        <SegmentedSwitch
+          options={[
+            { key: 'shares', label: 'Shares' },
+            { key: 'amount', label: 'Fixed' },
+          ]}
+          value={value.mode}
+          onChange={setMode}
+          size="small"
         />
       </View>
 
-      <View style={styles.rows}>
+      <Card style={styles.rows}>
         {value.mode === 'shares'
-          ? members.map((member) => {
+          ? orderedMembers.map((member) => {
               const participant = value.participants.find((p) => p.userId === member.id);
+              const weight = participant?.weight ?? 0;
+              const previewCents = participant ? (preview?.get(member.id) ?? 0) : 0;
               return (
                 <MemberRow
                   key={member.id}
                   member={member}
-                  selected={participant !== undefined}
-                  onToggle={() => toggleMember(member.id)}>
-                  {participant ? (
-                    <View style={styles.shareControl}>
-                      <Stepper
-                        value={participant.weight}
-                        onChange={(w) => setWeight(member.id, w)}
-                      />
-                      <ThemedText
-                        type="small"
-                        themeColor="textSecondary"
-                        style={styles.previewAmount}>
-                        {preview ? `= ${centsToText(preview.get(member.id) ?? 0)}` : ''}
-                      </ThemedText>
-                    </View>
-                  ) : null}
+                  isViewer={member.id === viewerId}
+                  selected={participant !== undefined}>
+                  <View style={styles.shareControl}>
+                    <Stepper value={weight} onChange={(w) => setWeight(member.id, w)} />
+                    <ThemedText
+                      type="small"
+                      themeColor="textSecondary"
+                      style={styles.previewAmount}>
+                      {`= ${centsToText(previewCents)}`}
+                    </ThemedText>
+                  </View>
                 </MemberRow>
               );
             })
-          : members.map((member) => {
+          : orderedMembers.map((member) => {
               const participant = value.participants.find((p) => p.userId === member.id);
               return (
                 <MemberRow
                   key={member.id}
                   member={member}
-                  selected={participant !== undefined}
-                  onToggle={() => toggleMember(member.id)}>
-                  {participant ? (
-                    // Remounts only when the mode itself changes — not on
-                    // every keystroke, which would reset the cursor.
-                    <AmountInput
-                      key={`${member.id}-amount`}
-                      defaultValueCents={participant.amount}
-                      onChangeCents={(cents) => setAmount(member.id, cents ?? 0)}
-                      style={styles.amountControl}
-                      accessibilityLabel={`${member.name}’s amount`}
-                    />
-                  ) : null}
+                  isViewer={member.id === viewerId}
+                  selected={participant !== undefined}>
+                  <AmountInput
+                    key={`${member.id}-amount`}
+                    defaultValueCents={participant?.amount ?? 0}
+                    onChangeCents={(cents) => setAmount(member.id, cents ?? 0)}
+                    style={styles.amountControl}
+                    accessibilityLabel={`${member.name}’s amount`}
+                  />
                 </MemberRow>
               );
             })}
-      </View>
+      </Card>
 
       {remaining !== null ? (
-        <ThemedText type="smallBold" themeColor={remaining === 0 ? 'credit' : 'debit'}>
+        <ThemedText
+          type="small"
+          themeColor={remaining === 0 ? 'credit' : 'debit'}
+          style={styles.allocationStatus}>
           {remaining === 0
             ? 'Fully allocated'
             : remaining > 0
@@ -179,43 +198,27 @@ export function SplitEditor({ members, amountCents, value, onChange }: SplitEdit
 
 function MemberRow({
   member,
+  isViewer,
   selected,
-  onToggle,
   children,
 }: {
   member: FriendSummary;
+  isViewer: boolean;
   selected: boolean;
-  onToggle: () => void;
-  children?: ReactNode;
+  children: ReactNode;
 }) {
   const theme = useTheme();
 
   return (
     <View style={[styles.row, selected && { backgroundColor: theme.primarySoft }]}>
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected }}
-        accessibilityLabel={member.name}
-        onPress={onToggle}
-        style={({ pressed }) => [styles.memberPress, pressed && styles.pressed]}>
+      <View style={styles.memberInfo}>
         <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
         <ThemedText style={styles.name} numberOfLines={1}>
           {member.name}
         </ThemedText>
-        <View
-          style={[
-            styles.checkbox,
-            { borderColor: selected ? theme.primary : theme.border },
-            selected && { backgroundColor: theme.primary },
-          ]}>
-          {selected ? (
-            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
-              ✓
-            </ThemedText>
-          ) : null}
-        </View>
-      </Pressable>
-      {selected ? children : null}
+        {isViewer ? <MeTag /> : null}
+      </View>
+      {children}
     </View>
   );
 }
@@ -228,7 +231,8 @@ function Stepper({ value, onChange }: { value: number; onChange: (value: number)
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Decrease weight"
-        disabled={value <= MIN_WEIGHT}
+        accessibilityState={{ disabled: value <= 0 }}
+        disabled={value <= 0}
         onPress={() => onChange(value - 1)}
         style={({ pressed }) => [
           styles.stepperButton,
@@ -236,7 +240,7 @@ function Stepper({ value, onChange }: { value: number; onChange: (value: number)
             backgroundColor: pressed ? theme.primarySoft : theme.surface,
             borderColor: theme.border,
           },
-          value <= MIN_WEIGHT && styles.stepperDisabled,
+          value <= 0 && styles.stepperDisabled,
         ]}>
         <ThemedText type="smallBold" themeColor="primary">
           −
@@ -268,59 +272,59 @@ const styles = StyleSheet.create({
   container: {
     gap: Spacing.three,
   },
-  modeToggle: {
+  header: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   rows: {
     gap: Spacing.one,
   },
+  // Pulled up out of `container`'s own `gap` — a caption under the card it
+  // reports on reads as attached to it, not as a sibling block of its own.
+  allocationStatus: {
+    marginTop: -(Spacing.three - Spacing.one),
+  },
   row: {
-    gap: Spacing.one,
-    paddingVertical: Spacing.one,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    // Fixed rather than left to the tallest child: the stepper (shares mode)
+    // and the amount field (fixed-amount mode) aren't the same height, and a
+    // row that grew or shrank with the mode made every row jump when the
+    // Shares / Fixed switch was toggled.
+    minHeight: 48,
     paddingHorizontal: Spacing.two,
     borderRadius: Radius.medium,
   },
-  memberPress: {
+  memberInfo: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.one,
+    gap: Spacing.two,
+    minWidth: 0,
   },
   name: {
     flex: 1,
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   shareControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: Spacing.three,
-    paddingLeft: 44,
+    gap: Spacing.two,
   },
   previewAmount: {
-    minWidth: 56,
+    minWidth: 52,
     textAlign: 'right',
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
-  },
-  pressed: {
-    opacity: 0.6,
+    gap: Spacing.one,
   },
   stepperButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -329,12 +333,12 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   stepperValue: {
-    minWidth: 20,
+    minWidth: 18,
     textAlign: 'center',
   },
   amountControl: {
-    marginLeft: 44,
-    height: 44,
-    fontSize: 16,
+    width: 104,
+    height: 40,
+    fontSize: 15,
   },
 });

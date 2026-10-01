@@ -82,14 +82,9 @@ describe('TransactionFormScreen — recording', () => {
       />,
     );
 
-    expect(screen.getByRole('checkbox', { name: 'Ada Lovelace' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: true }),
-    );
-    expect(screen.getByRole('checkbox', { name: 'Grace Hopper' })).toHaveProp(
-      'accessibilityState',
-      expect.objectContaining({ checked: true }),
-    );
+    // Both members start concerned, each with their own (zero, until an
+    // amount is entered) live preview — neither row is missing.
+    expect(screen.getAllByText('= 0.00')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Save' })).toHaveProp(
       'accessibilityState',
       expect.objectContaining({ disabled: true }),
@@ -189,8 +184,9 @@ describe('TransactionFormScreen — recording', () => {
       expect.objectContaining({ disabled: true }),
     );
 
-    // Index 0 is the "Who paid" picker's Grace option; index 1 is "To"'s.
-    await fireEvent.press(screen.getAllByRole('radio', { name: 'Grace Hopper' })[1]!);
+    // "To" is a dropdown field: open it, then pick Grace from the list it pops up.
+    await fireEvent.press(screen.getByRole('button', { name: 'To' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     expect(mockCreateTransaction).toHaveBeenCalledWith(

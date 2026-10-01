@@ -54,7 +54,9 @@ All in `apps/mobile/src/constants/theme.ts`. Reach for a token, never a literal.
   (`src/features/transactions/balance-display.ts`) rather than testing the sign by hand.
 - **Destructive** — `danger`. A different meaning that happens to share a hue with
   `debit`; never write it inline.
-- **Scrim** — `scrim`, the violet-tinted dim behind a `ConfirmDialog`.
+- **Scrim** — `scrim`, the violet-tinted dim behind a `ConfirmDialog`; `dropdownScrim`,
+  the lighter violet tint behind a `DropdownMenu` (a tint rather than a dim) — read by
+  `DropdownScrim` for its gradient's peak alpha rather than rendered flat.
 
 Read them through `useTheme()`. `useIsDark()` exists only for the handful of tokens that
 are a function of the scheme rather than a colour (`cardShadow`, a medallion's two
@@ -120,10 +122,20 @@ or box**; a screen that styles its own is a bug in this document.
 - **`Pill`** — the selectable token: a mode toggle, a category, a member filter. Filled
   when selected, outlined when not. One shape, so a row of pills always means "pick from
   these".
-- **`SegmentedSwitch`** — a real two-way switch, its two options named inside a sliding
-  brand-filled thumb rather than drawn as two look-alike pills: used where the choice is
-  one setting with two positions (Spending / Income on Statistics), not a "pick one of
-  these tokens" row. Not for three or more options — that stays `Pill` or `TabBar`.
+- **`SegmentedSwitch`** — a real switch, its options named inside a sliding brand-filled
+  thumb rather than drawn as look-alike pills: used where the choice is one setting with a
+  fixed, small set of positions (Spending / Income on Statistics; Expense / Income /
+  Transfer on the transaction form), not a "pick one of these tokens" row — that stays
+  `Pill` or `TabBar`. Two options or more, no upper bound in principle, but it reads well
+  up to three or four. `size="small"` shrinks it for a switch sitting beside a section
+  title rather than taking its own line (Shares / Fixed on the split editor) — smaller
+  geometry and a quieter label size (12/16, a notch under `small`'s own 14/20), since it
+  reads as secondary to the title it sits beside rather than content of its own. Each
+  option is sized to its own label, measured via `onLayout`, rather than split evenly
+  across the track's width — a track with no explicit width of its own (beside a heading,
+  rather than alone on its own line) has nothing to divide equal-width options into, and
+  they silently collapse to nothing. Measuring each option avoids that regardless of what
+  row the switch sits in.
 - **`TextField`** — every text input: a filled, rounded field on `backgroundElement`,
   never a bare underline. `multiline` for a comment.
 - **`Avatar`** — someone's Google picture, falling back to their initial **on their own
@@ -132,6 +144,10 @@ or box**; a screen that styles its own is a bug in this document.
 - **`MedallionBadge`** — a coloured disc standing in for something with no picture: a
   group's initials, a category's emoji, a sub-group's `↳`. Takes an explicit `color` when
   the subject owns one (a category), a seed otherwise.
+- **`MeTag`** — the accent "Me" pill marking the viewer's own row in a member list, the
+  same shape as the brand-violet "Owner" tag in Manage. Used on the Manage tab's member
+  list, the statistics participant picker, and the transaction form's payer and split
+  rows — one component so "which one is me" always reads the same way.
 - **`BrandMark`** — the logo, drawn from the tokens.
 - **`Icon`** — the app's small glyph set (`plus`, `key`, `close`, `star`, `more`, `manage`,
   `archive`, `leave`, `trash`, `back`), drawn as strokes on a 24×24 grid rather than an icon font,
@@ -141,6 +157,22 @@ or box**; a screen that styles its own is a bug in this document.
   (the invitation card's share / copy / generate): a 32pt box, padded hit area, dimmed when
   disabled. Always given an `accessibilityLabel` in words; the caller passes the colour.
   Also in the `Icon` set now: `share`, `copy`, `refresh`, `check`.
+- **`DropdownMenu`** — the shared popup every dropdown list in the app opens into: a
+  `Card` of rows over `DropdownScrim`, a **light violet gradient**, not a flat dark dim —
+  anchored **a fifth of the way down the screen** (`paddingTop: '20%'`, proportional
+  rather than a fixed offset) rather than vertically centred, so it reads as attached to
+  the field or icon that opened it rather than a dialog floating mid-screen.
+  `DropdownScrim` is bled to the screen's actual edges (status bar and home-indicator
+  strips included) rather than sitting inside a `SafeAreaView`'s own insets — only the
+  menu's position respects the safe area, not the wash behind it — and fades softly
+  towards the very top and bottom the way `HeroWash` fades its own ellipses, instead of a
+  single flat alpha everywhere. Its `Card` is given a heavier-than-usual border (`1.5`
+  rather than the usual hairline) so its edge still reads clearly against that lighter
+  wash. `IconMenuButton`'s "⋮" sheet, the transaction form's category picker, and
+  `MemberDropdownField`'s options all render through it — one component, so every
+  dropdown opens, dims and sits the same way. `ConfirmDialog` is the deliberate exception
+  (see below): a yes/no question is a dialog, not a list, stays centred, and keeps the
+  darker, flat `scrim`.
 - **`ConfirmDialog`** — the app's own "are you sure": a card (title, message, a ghost
   Cancel and the confirming button — `danger` when `destructive`) centred over a `scrim`-dimmed
   screen, in place of the stock OS `Alert`. Tapping outside or the back gesture cancels.
@@ -193,9 +225,11 @@ or box**; a screen that styles its own is a bug in this document.
   otherwise it springs back. Off on iOS, where these pages are native sheets that already
   do this.
 - **`SheetModal`** — how a page opens *over* another from inside a screen ("New group",
-  "New friend", the transaction form): sliding up; a native page sheet on iOS, a
-  see-through window elsewhere so a `DismissiblePage` pulled down reveals what is under
-  it; with its own gesture root.
+  "New friend", a sub-group): sliding up; a native page sheet on iOS, a see-through
+  window elsewhere so a `DismissiblePage` pulled down reveals what is under it; with its
+  own gesture root. The transaction form is **not** one of these — like "+ Invite" on the
+  Manage tab, it swaps the Transactions tab's own content in place instead of sliding up
+  over it (see "Add / edit a transaction" below).
 - **`Pager`** — sibling pages side by side, swiped between: a group's own tabs, and the
   app's bottom tabs (through `PagerTabs`). The pages follow the finger one to one, so the
   next one is seen coming in; 40 % of the width, or a flick (800 pt/s) past 12 %, turns
@@ -225,8 +259,8 @@ or box**; a screen that styles its own is a bug in this document.
 - **`ListDivider`** — the padded hairline between the Groups and Friends lists' favorites
   and the rest.
 - **`IconMenuButton`** — a sheet of icon + label rows anchored to a
-  small "⋮" icon (the `more` glyph, filled), centred
-  on screen rather than docked to the bottom — for actions that belong to one row in a
+  small "⋮" icon (the `more` glyph, filled), opened through `DropdownMenu`
+  rather than docked to the bottom — for actions that belong to one row in a
   list, not to the screen as a whole. An option can be marked `destructive`, rendering its
   icon and label in `danger`.
 - **`GroupActionsMenu`** — the business logic behind a group's own `IconMenuButton`: given
@@ -253,6 +287,14 @@ or box**; a screen that styles its own is a bug in this document.
 - **Motion follows the finger** (see Motion below): a page that opened from the bottom
   closes back down, a banner can be pulled down to close its page, and siblings side by
   side (bottom tabs, a group's tabs) are one swipe apart.
+- **Every dropdown list opens through `DropdownMenu`**: anchored a fifth of the way down
+  the screen, never vertically centred, and washed behind, edge-to-edge, in
+  `DropdownScrim`'s light-violet gradient — a transparent overlay reads as the background
+  still being "live" underneath, which a list of options should not, and a wash that stops
+  short of the screen's actual top or bottom edge (e.g. one left inside a `SafeAreaView`'s
+  own insets) leaves a visible gap there. Centred, and the darker flat `scrim`, are
+  reserved for `ConfirmDialog` itself, a dialog asking a question rather than a list
+  offering choices.
 
 - One **primary** button per screen. Everything else is `secondary` or `ghost`.
 - A destructive action is a **red text button**, never a filled red one, and always
@@ -278,6 +320,12 @@ or box**; a screen that styles its own is a bug in this document.
 - A group named anywhere other than under its own parent carries a **`Breadcrumb`** above
   its name — the group list, the home's favorites, a group's own header. "Beach day" on
   its own is ambiguous between two trips; "Corsica 2026 › Beach day" is not.
+- **A field or label whose row has other content to protect never wraps to a second
+  line** — `numberOfLines={1}`, truncated with an ellipsis instead, so a long value never
+  pushes a row's other fields out of place or doubles its height. Established for the
+  transaction form's Title, Date and member rows (`docs/specs/transactions.md`); apply the
+  same rule to any field in a row where staying on one line matters more than showing the
+  value in full.
 
 ## Screens
 
@@ -381,9 +429,13 @@ opened; the group's balances and transactions are read once by the screen. A row
 
 **Transactions tab** — the sub-groups section, then a "Transactions" section of the same
 shape (overline title, "+ Add" text action at the end — absent when effectively archived)
-over the transaction list (`TransactionRow` cards). A row opens the same
-add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
-state: a brand card with a glyph and an explanation.
+over the transaction list (`TransactionRow` cards). "+ Add", or tapping a row, **swaps the
+tab's own content for the add/edit form** — the same in-place pattern as "+ Invite" on the
+Manage tab, not a sheet sliding up over it: the banner and tabs stay, and picking another
+tab leaves it. A suggested reimbursement from the Balances tab opens the same form the same
+way, switching to the Transactions tab to show it and switching back to Balances once it is
+saved or cancelled. When read-only, rows render but are not pressable. Empty state: a brand
+card with a glyph and an explanation.
 
 **Balances tab** — **"Balances"** first, always listing the viewer's own row first
 regardless of amount (`forDisplay`, `reimbursements-screen.tsx`), then **"Reimbursements"**
@@ -563,37 +615,100 @@ than a generic "nothing here" or blank space where the chart would be.
 
 ### Add / edit a transaction (`src/features/transactions/transaction-form-screen.tsx`)
 
-One sheet for recording and for editing. A **kind pill row** (Expense / Income /
-Transfer), then **two cards**:
+One form for recording and for editing, with no title of its own — the **kind switch**
+(`SegmentedSwitch`, Expense / Income / Transfer) sits where a heading would, exactly the
+same component and position as Statistics' own Spending / Income switch. It swaps the
+Transactions tab's own content in place (see "Transactions tab" above) rather than opening
+as a sheet, with **no padding of its own on the sides** — it fills the page it replaces,
+which already pads its edges, and a form padded again on top of that read as more
+indented than the ordinary Transactions tab it stands in for. Its scroll indicator is
+hidden too: a long form scrolling in place of a tab's own content should feel like part of
+the tab, not a sheet with its own chrome. Below the kind switch, **two plain sections, not
+cards** — the form itself is not a list of objects, so the usual `Card` boxing would just
+be padding around padding; the only `Card` left in it is the split editor's own member
+list (below), the one place that *is* a list:
 
-1. *What it is* — a square **category badge** (the emoji, tappable, opens a sheet holding
-   just the `CategoryPicker`; picking one closes it immediately, though the transaction is
-   only persisted on "Save"), the title field beside it, then amount and date side by
-   side under `overline` labels, then an optional multiline comment.
-2. *Who it involves* — "Who paid" (`MemberSelect`), then either a single "To" picker
-   (transfer, excluding the payer) or "Who it concerns" (`SplitEditor`).
+1. *What it is* — a **Title** field (`overline` label above it, like Amount and Date)
+   beside a square **category badge** at its end (the emoji, tappable, opens a **`DropdownMenu`**
+   over the form — the same popup language as a group's own "⋮" menu, not a full page
+   sheet — holding the `CategoryPicker`'s rows; picking one closes it immediately, though
+   the transaction is only persisted on "Save"), bottom-aligned with the field so the row
+   reads as one line even though the label sits above the text field alone. Then amount
+   and date side by side under their own `overline` labels: Amount carries a small **€**
+   suffix inside the field, at its end; Date shows the short form ("11 Sep 2026", never
+   "11 September 2026") and never wraps (see "A field or label… never wraps" above) — the
+   same short format and single-line rule as the statistics date range field, including
+   its iOS limitation (the native inline widget owns its own label once a date is set).
+   Then **"Who paid" / "Who received it"** (`MemberDropdownField`), under Amount/Date and
+   above the comment — every kind has a payer, whatever else it needs. Then an optional
+   comment, under its own **"Comment (optional)"** `overline` label (the placeholder is a
+   short example, not an instruction, now that the label says what the field is for).
+2. *Who it involves* — either a single **"To"** dropdown (transfer, `MemberDropdownField`
+   excluding the payer) or **"Participants"** (`SplitEditor`).
 
-Then primary "Save" (disabled until title, amount, date and split are all valid — the
-category always has a value, so it never blocks saving), ghost "Cancel", and when editing
-a red text-only "Delete this transaction".
+Then, stacked full width: ghost "Cancel", then primary "Save" (disabled until title,
+amount, date and split are all valid — the category always has a value, so it never
+blocks saving) — ghost before primary, the same order `ConfirmDialog` uses for its own
+Cancel and confirming button. When editing, a red text-only "Delete this transaction"
+follows.
 
 ### Member / friend selection
 
-`MemberSelect` (single-select) and `FriendPicker` (multi-select) both render a **filled
-row in `primarySoft` when selected**, not just a filled dot — what the eye lands on first
-when reopening a pre-filled form. The dot or checkbox is the confirmation, not the signal.
-The friend picker deliberately shows **no balance**: it is a selection list, and a money
-figure there is noise.
+`MemberDropdownField` (single-select) and `FriendPicker` (multi-select) both render a
+**filled row in `primarySoft` when selected**, not just a filled dot — what the eye lands
+on first when reopening a pre-filled form. The dot or checkbox is the confirmation, not
+the signal. `MemberDropdownField` is a field like any other in the form — avatar, name,
+`MeTag` and a chevron, the `collapse` icon — that opens its options through **`DropdownMenu`**
+rather than a row of options sitting inline in the form itself: a form with "who paid", "to" and a split editor
+all showing every member inline at once read as far busier than the choices it actually
+asks for. Its dropdown additionally pins the viewer's own row **first** — picking yourself
+(as payer, or as a transfer's recipient) is the common case, so it is the row nobody has to
+scroll or search for. The friend picker deliberately shows **no balance**: it is a
+selection list, and a money figure there is noise.
 
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 
-Every member as a checkbox row (selected rows filled in `primarySoft`), plus a **Shares /
-Fixed amounts** pill toggle. In shares mode each checked member gets a −/+ stepper
-(default 1 — an equal split is everyone at the same weight) and a live "= 12.34" preview
-using the server's own rounding. In fixed-amount mode each gets an amount field and a
-running "X left to allocate" / "X over the total" line — `credit` when it balances,
-`debit` otherwise. Switching modes seeds fixed amounts from the shares preview and resets
-shares to equal weights, rather than losing the selection.
+Every member always has a row — concerned or not — so the layout never reflows as people
+are added or dropped; a concerned row is tinted `primarySoft`, the only selection cue
+(there is no checkbox). The viewer's own row is pinned **first**, the same ordering
+`MemberDropdownField` uses. Its own header — the "Participants" `overline` paired with a
+**small `SegmentedSwitch`** (`size="small"`) for **Shares / Fixed**, at the
+title's end, the same "label left, control right" row as "Members (n)" / "+ Invite" on
+Manage — sits plain, **outside** any `Card`; only the rows themselves sit in one, the same
+"header outside, `Card` around just the list" shape as Manage's own member list.
+
+A row is one line: avatar, name (truncated — see "never wraps" above — to leave room for
+the row's other fields), `MeTag` on the viewer's own row, then the mode's own control at
+the row's end. In shares mode that is a −/+ stepper (an equal split is everyone at the
+same weight) and a live "= 12.34" preview using the server's own rounding, both with less
+padding than the stand-alone stepper elsewhere, to stay compact on one line. In
+fixed-amount mode it is an amount field carrying the same **€** suffix as the
+transaction's own Amount field. **Every row is the same fixed height regardless of mode**
+— the stepper and the amount field aren't naturally the same height, and a row sized to
+its own content made every row jump when the Shares / Fixed switch was toggled.
+
+**A field is the selection**, not a separate control: raising a weight above zero, or
+typing a non-zero amount, is what adds a member to the split; bringing either back down to
+exactly zero removes them — the schema never persists a weight or amount of zero, so a
+"zero" row is simply not a participant. A not-yet-concerned row still shows its stepper or
+amount field, just resting at zero, rather than appearing once picked some other way.
+
+In fixed-amount mode, the "Fully allocated" / "x.xx left to allocate" / "x.xx over the
+total" line below the member `Card` reads as a **caption on that card**, not a sibling
+block of its own: `small` type (not `smallBold`) and pulled up out of the section's own
+`gap` so it sits close under the rows it reports on.
+
+### Amount fields (`AmountInput`, `src/features/transactions/amount-input.tsx`)
+
+A field still reading **zero** clears itself the moment it gains focus, so typing a sum is
+never preceded by deleting a "0.00" that was never a real value — a non-zero amount is a
+real edit in progress and is left as-is on focus. Used by the transaction's own Amount
+field and every participant's fixed-amount field in `SplitEditor`.
+
+A running "X left to allocate" / "X over the total" line sits under the rows in
+fixed-amount mode — `credit` when it balances, `debit` otherwise. Switching modes seeds
+fixed amounts from the shares preview and resets shares to equal weights, rather than
+losing the selection.
 
 ### Date field (`src/features/transactions/date-picker-field.tsx`)
 

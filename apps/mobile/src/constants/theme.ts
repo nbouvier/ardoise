@@ -36,7 +36,17 @@ export interface Theme {
   danger: string;
   /** The dim laid over a screen behind a dialog — violet-tinted, never plain black. */
   scrim: string;
+  /** The lighter wash behind a `DropdownMenu` — a tint, not a dim, so the
+   *  screen behind reads as "stepped back" rather than darkened. */
+  dropdownScrim: string;
 }
+
+/**
+ * `dropdownScrim`'s own alpha for each scheme, exported so `DropdownScrim`
+ * can build its gradient's peak from the same number instead of a second,
+ * separately maintained constant.
+ */
+export const DropdownScrimAlpha = { light: 0.22, dark: 0.3 } as const;
 
 export const Colors: Record<'light' | 'dark', Theme> = {
   light: {
@@ -72,6 +82,7 @@ export const Colors: Record<'light' | 'dark', Theme> = {
     /** Destructive actions. A different meaning that happens to share a hue. */
     danger: '#D6334B',
     scrim: 'rgba(36, 28, 74, 0.45)',
+    dropdownScrim: `rgba(107, 78, 246, ${DropdownScrimAlpha.light})`,
   },
   dark: {
     text: '#F2EEFF',
@@ -94,6 +105,7 @@ export const Colors: Record<'light' | 'dark', Theme> = {
     debit: '#FF7A8F',
     danger: '#FF6B7F',
     scrim: 'rgba(8, 5, 24, 0.65)',
+    dropdownScrim: `rgba(157, 134, 255, ${DropdownScrimAlpha.dark})`,
   },
 };
 

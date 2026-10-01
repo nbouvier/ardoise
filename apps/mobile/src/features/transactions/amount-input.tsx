@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, type TextInputProps } from 'react-native';
+import { StyleSheet, View, type TextInputProps } from 'react-native';
 
 import { TextField } from '@/components/text-field';
+import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
 
 export interface AmountInputProps {
   /**
@@ -56,23 +58,58 @@ export function AmountInput({
     onChangeCents(parseAmount(next));
   }
 
+  /** Tapping a field still reading zero clears it, so typing a sum doesn't
+   * first require deleting the "0.00" that was never a real value anyway. A
+   * non-zero amount is a real edit in progress and is left alone. */
+  function handleFocus() {
+    if (parseAmount(text) === 0) {
+      setText('');
+    }
+  }
+
   return (
-    <TextField
-      accessibilityLabel={accessibilityLabel}
-      testID={testID}
-      keyboardType="decimal-pad"
-      value={text}
-      onChangeText={handleChange}
-      placeholder="0.00"
-      style={[styles.input, style]}
-    />
+    <View style={styles.wrapper}>
+      <TextField
+        accessibilityLabel={accessibilityLabel}
+        testID={testID}
+        keyboardType="decimal-pad"
+        value={text}
+        onChangeText={handleChange}
+        onFocus={handleFocus}
+        placeholder="0.00"
+        style={[styles.input, styles.fieldWithSuffix, style]}
+      />
+      {/* Decorative — the field's own accessibility label already says "amount". */}
+      <View pointerEvents="none" style={styles.suffix}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.suffixText}>
+          €
+        </ThemedText>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  /** A figure, not prose: bigger and heavier than a name field. */
+  wrapper: {
+    position: 'relative',
+  },
+  /** A figure, not prose: heavier than a name field, but not a headline. */
   input: {
-    fontSize: 20,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  fieldWithSuffix: {
+    paddingRight: Spacing.five,
+  },
+  suffix: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: Spacing.three,
+    justifyContent: 'center',
+  },
+  suffixText: {
+    fontSize: 16,
     fontWeight: '700',
   },
 });
