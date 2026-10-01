@@ -8,7 +8,7 @@ import type {
   TransactionsListResponse,
 } from '@splitcount/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
@@ -321,7 +321,7 @@ describe('GroupScreen', () => {
     await openTab('Balances');
 
     expect(await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' })).toBeTruthy();
-    expect(screen.getByText('Where everyone stands')).toBeTruthy();
+    expect(screen.getByText('Reimbursements')).toBeTruthy();
   });
 
   it('pre-fills a transfer from a suggested reimbursement', async () => {
@@ -634,6 +634,29 @@ describe('GroupScreen', () => {
     expect(names[1]).toHaveTextContent('Grace Hopper');
   });
 
+  it('tags the owner and the viewer separately on the member list', async () => {
+    mockFetchGroup.mockResolvedValue({
+      ...trip,
+      members: [
+        { ...grace, role: 'owner' },
+        { ...ada, role: 'member' },
+      ],
+      viewerRole: 'member',
+    });
+
+    await render(<GroupScreen groupId={trip.id} />);
+    await screen.findByText('Corsica 2026');
+    await openTab('Manage');
+
+    const graceRow = (await screen.findByText('Grace Hopper')).parent!;
+    expect(within(graceRow).getByText('Owner')).toBeTruthy();
+    expect(within(graceRow).queryByText('Me')).toBeNull();
+
+    const adaRow = screen.getByText('Ada Lovelace').parent!;
+    expect(within(adaRow).getByText('Me')).toBeTruthy();
+    expect(within(adaRow).queryByText('Owner')).toBeNull();
+  });
+
   it('puts the friend picker and the invitation link on one "+ Invite" page', async () => {
     mockFetchGroupInvite.mockResolvedValue({
       code: 'abc',
@@ -727,7 +750,7 @@ describe('GroupScreen', () => {
     expect(await screen.findByRole('button', { name: /add a transaction/i })).toBeTruthy();
   });
 
-  it('marks the viewer’s own row “Me” in “Where everyone stands”', async () => {
+  it('marks the viewer’s own row “Me” in the Balances section', async () => {
     mockFetchGroup.mockResolvedValue(trip);
     mockFetchBalances.mockResolvedValue(balances);
 
@@ -735,7 +758,7 @@ describe('GroupScreen', () => {
     await screen.findByText('Corsica 2026');
     await openTab('Balances');
 
-    await screen.findByText('Where everyone stands');
+    await screen.findByText('Reimbursements');
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
     expect(screen.getByText('Me')).toBeTruthy();
     expect(screen.getByText('+21.25')).toBeTruthy();

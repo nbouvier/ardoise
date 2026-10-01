@@ -81,10 +81,11 @@ function blockedReason(
   return null;
 }
 
-/** Owed first, owing next, settled last — and stable between reads. */
-function forDisplay(balances: readonly Balance[]): Balance[] {
+/** The viewer's own row first, then owed, owing, settled last — stable between reads. */
+function forDisplay(balances: readonly Balance[], viewerId: string | null): Balance[] {
   return [...balances].sort(
     (a, b) =>
+      Number(a.userId !== viewerId) - Number(b.userId !== viewerId) ||
       Number(a.amountCents === 0) - Number(b.amountCents === 0) ||
       b.amountCents - a.amountCents ||
       (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0),
@@ -155,10 +156,10 @@ export function ReimbursementsScreen({
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.section}>
             <ThemedText type="overline" themeColor="textSecondary">
-              Where everyone stands
+              Balances
             </ThemedText>
             <Card style={styles.standings}>
-              {forDisplay(loaded).map((balance) => (
+              {forDisplay(loaded, viewerId).map((balance) => (
                 <BalanceRow
                   key={balance.userId}
                   party={partyOf(balance.userId, byId)}
@@ -171,7 +172,7 @@ export function ReimbursementsScreen({
 
           <View style={styles.section}>
             <ThemedText type="overline" themeColor="textSecondary">
-              Suggested reimbursements
+              Reimbursements
             </ThemedText>
             {suggestions.map((suggestion) => (
               <SuggestionRow
@@ -182,8 +183,8 @@ export function ReimbursementsScreen({
                 onPress={() => onRecord(suggestion)}
               />
             ))}
-            <ThemedText type="small" themeColor="textSecondary">
-              Tap to reimburse.
+            <ThemedText type="small" themeColor="textSecondary" style={styles.tapHint}>
+              Tap a row to reimburse.
             </ThemedText>
           </View>
         </ScrollView>
@@ -323,6 +324,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     borderRadius: Radius.pill,
+  },
+  // Matches the group name field's own "Change not saved yet" hint in size
+  // (`nameHintText`, `group-screen.tsx`) — a caveat under a list, not a
+  // message that should compete with it (`docs/DESIGN.md`).
+  tapHint: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   pressed: {
     opacity: 0.6,

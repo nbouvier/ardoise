@@ -15,7 +15,7 @@ The palette is deliberately small:
 | Role | Hue | What it is for |
 | --- | --- | --- |
 | **Brand** | violet | primary actions, active states, links, the app's own identity |
-| **Accent** | tangerine | emphasis that is *not* an action (badges, the "Owner" tag) — used sparingly |
+| **Accent** | tangerine | emphasis that is *not* an action (badges, the "Me" tag) — used sparingly |
 | **Credit / debit** | green / red | money owed to you, money you owe — nothing else |
 | **Danger** | red | destructive actions |
 
@@ -376,10 +376,14 @@ over the transaction list (`TransactionRow` cards). A row opens the same
 add/edit sheet, pre-filled; when read-only, rows render but are not pressable. Empty
 state: a brand card with a glyph and an explanation.
 
-**Balances tab** — "Where everyone stands" first, then the reimbursement plan (see
-"Reimbursements" below); the viewer's own figure is their row in that list, marked with an
+**Balances tab** — **"Balances"** first, always listing the viewer's own row first
+regardless of amount (`forDisplay`, `reimbursements-screen.tsx`), then **"Reimbursements"**
+(the plan; see below). The viewer's own figure is their row in that list, marked with an
 accent **"Me"** tag the same shape as the "Owner" tag in Manage, rather than repeated in a
-card of its own.
+card of its own. The "Tap a row to reimburse." note under the suggestions keeps `type="small"`
+but has its `fontSize`/`lineHeight` overridden down to 12/16 (`tapHint`,
+`reimbursements-screen.tsx`) — the same size as the Manage tab's "Change not saved yet" hint,
+for the same reason: a caveat under a list, not a message competing with it.
 
 **Statistics tab** — the breakdown, see "Group statistics" below.
 
@@ -433,9 +437,10 @@ read a rename as a "credit"), held a moment before both icons fade away.
 A blank name, or one identical to the saved one, is treated the same as tapping discard rather
 than sent. Then an overline **"Members (n)"** label — the count lives inside the label itself,
 not a separate line — with the brand **"+ Invite"** text action at its end (the same shape
-as "+ Create" and "+ Add"), and the member list itself (avatar + name, an accent "Owner"
-tag on the owner — always the first row, whatever order the server listed them in) in its
-own surface card. Below that, the management actions. "+ Invite" **swaps the Manage tab's
+as "+ Create" and "+ Add"), and the member list itself (avatar + name, a brand-violet "Owner"
+tag on the owner — always the first row, whatever order the server listed them in, plus an
+accent **"Me"** tag on the viewer's own row, independent of it — both can land on the same
+row) in its own surface card. Below that, the management actions. "+ Invite" **swaps the Manage tab's
 own content for the invite page** (`InvitePanel`) — no modal, no navigation; the banner
 and tabs stay, and picking any tab leaves it. Both ways in are on it, no menu between,
 told apart by a hairline. "Add friends" (overline section title) heads the friend picker,

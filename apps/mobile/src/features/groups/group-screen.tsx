@@ -468,6 +468,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             isOwner={isOwner}
             alone={alone}
             busy={busy}
+            viewerId={viewerId}
             onInvite={() => setInviting(true)}
             onRename={renameGroup}
             onArchiveToggle={confirmArchive}
@@ -858,6 +859,7 @@ function ManageTab({
   isOwner,
   alone,
   busy,
+  viewerId,
   onInvite,
   onRename,
   onArchiveToggle,
@@ -875,6 +877,7 @@ function ManageTab({
   isOwner: boolean;
   alone: boolean;
   busy: boolean;
+  viewerId: string | null;
   onInvite: () => void;
   onRename: (name: string) => Promise<boolean>;
   onArchiveToggle: () => void;
@@ -924,7 +927,7 @@ function ManageTab({
         <Card style={styles.manageSection}>
           <View style={styles.members}>
             {orderedMembers.map((member) => (
-              <MemberRow key={member.id} member={member} />
+              <MemberRow key={member.id} member={member} isViewer={member.id === viewerId} />
             ))}
           </View>
         </Card>
@@ -1170,20 +1173,29 @@ function GroupNameField({
   );
 }
 
-function MemberRow({ member }: { member: GroupMember }) {
+function MemberRow({ member, isViewer }: { member: GroupMember; isViewer: boolean }) {
   const theme = useTheme();
 
   return (
     <View style={styles.memberRow}>
       <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
       <ThemedText style={styles.memberName}>{member.name}</ThemedText>
-      {member.role === 'owner' ? (
-        <View style={[styles.ownerTag, { backgroundColor: theme.accentSoft }]}>
-          <ThemedText type="overline" themeColor="onAccentSoft">
-            Owner
-          </ThemedText>
-        </View>
-      ) : null}
+      <View style={styles.memberTags}>
+        {member.role === 'owner' ? (
+          <View style={[styles.memberTag, { backgroundColor: theme.primarySoft }]}>
+            <ThemedText type="overline" themeColor="onPrimarySoft">
+              Owner
+            </ThemedText>
+          </View>
+        ) : null}
+        {isViewer ? (
+          <View style={[styles.memberTag, { backgroundColor: theme.accentSoft }]}>
+            <ThemedText type="overline" themeColor="onAccentSoft">
+              Me
+            </ThemedText>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -1361,7 +1373,11 @@ const styles = StyleSheet.create({
   memberName: {
     flex: 1,
   },
-  ownerTag: {
+  memberTags: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+  },
+  memberTag: {
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     borderRadius: Radius.pill,

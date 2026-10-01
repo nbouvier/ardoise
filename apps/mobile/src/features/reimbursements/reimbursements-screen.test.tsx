@@ -46,7 +46,7 @@ describe('ReimbursementsScreen', () => {
 
     // Grace is at zero overall, so she is not asked to pay or be paid.
     expect(screen.getByRole('button', { name: 'You pay Alan Turing 10.00' })).toBeTruthy();
-    expect(screen.getByText('Tap to reimburse.')).toBeTruthy();
+    expect(screen.getByText('Tap a row to reimburse.')).toBeTruthy();
     expect(screen.queryByLabelText(/Grace Hopper pays/)).toBeNull();
   });
 
@@ -110,7 +110,7 @@ describe('ReimbursementsScreen', () => {
     });
 
     expect(screen.getByText('You’re all settled up')).toBeTruthy();
-    expect(screen.queryByText('Suggested reimbursements')).toBeNull();
+    expect(screen.queryByText('Reimbursements')).toBeNull();
   });
 
   it('shows where everyone stands, the viewer marked “Me”', async () => {
@@ -121,6 +121,15 @@ describe('ReimbursementsScreen', () => {
     expect(screen.getByText('−10.00')).toBeTruthy();
     expect(screen.getByText('+10.00')).toBeTruthy();
     expect(screen.getByText('settled up')).toBeTruthy();
+  });
+
+  it('always puts the viewer’s own row first in the balances list, however it owes', async () => {
+    // Alan is owed the most (1000), so the amount-only order would put him
+    // first — but Ada is the viewer here, and should lead regardless.
+    await renderScreen();
+
+    const names = screen.getAllByText(/Lovelace|Hopper|Turing/).map((node) => node.props.children);
+    expect(names[0]).toBe('Ada Lovelace');
   });
 
   it('covers this group only, with no sub-group scope to choose', async () => {
