@@ -816,7 +816,9 @@ the tab bar, from the bottom (see Motion); the tabs live in `app/(tabs)/_layout.
 (`PagerTabs`). Four tabs, in order: **Home**, **Groups**, **Friends**, **Account**. The tab
 bar is a **surface**, not the canvas, and the active tab carries the brand hue — its icon,
 its label and the pill behind the icon — the one place navigation says which app this
-is. On web the tab list is a floating pill bar with the
+is. The **Account tab's icon is the signed-in person's own avatar** (24, initial on a
+medallion when Google gave no picture) inside a thin ring that takes the tab's colour —
+brand when active, invisible otherwise — so it is always clear whose account is open. On web the tab list is a floating pill bar with the
 "SplitCount" wordmark in brand violet.
 
 The home is the index of that group, so its URL is `/`; the groups list sits at

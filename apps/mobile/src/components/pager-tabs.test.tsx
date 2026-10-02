@@ -1,11 +1,20 @@
-import { describe, expect, it } from '@jest/globals';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { describe, expect, it, jest } from '@jest/globals';
+import { act, fireEvent, screen, within } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 import { Dimensions, Text } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import AppTabs from './app-tabs';
+
+jest.mock('@/features/auth/use-auth', () => ({
+  useAuth: () => ({
+    state: {
+      status: 'signedIn',
+      user: { id: 'u1', email: 'ada@example.com', name: 'Ada Lovelace', picture: null },
+    },
+  }),
+}));
 
 function renderTabs() {
   return renderRouter(
@@ -55,5 +64,13 @@ describe('the bottom tabs', () => {
 
     expect(await screen.findByText('Groups page')).toBeTruthy();
     expect(selected('Groups')).toBe(true);
+  });
+
+  it('shows the signed-in person as the Account tab’s icon', async () => {
+    await renderTabs();
+
+    // No picture on this profile, so the avatar falls back to the initial.
+    const account = screen.getByRole('tab', { name: 'Account' });
+    expect(within(account).getByText('A')).toBeTruthy();
   });
 });

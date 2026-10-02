@@ -10,6 +10,7 @@ import {
   type TabNavigationState,
   type TabRouterOptions,
 } from 'expo-router/react-navigation';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -28,6 +29,8 @@ export interface PagerTabsOptions {
   /** The tab's label in the bar. */
   title?: string;
   icon?: IconName;
+  /** Draws something other than a glyph in the icon's slot — the Account tab's own avatar. */
+  renderIcon?: (props: { color: string; active: boolean }) => ReactNode;
 }
 
 type PagerTabsProps = DefaultNavigatorOptions<
@@ -90,7 +93,12 @@ function PagerTabsNavigator({
         <BottomBar
           tabs={state.routes.map((route) => {
             const { options } = descriptors[route.key]!;
-            return { key: route.key, title: options.title ?? route.name, icon: options.icon };
+            return {
+              key: route.key,
+              title: options.title ?? route.name,
+              icon: options.icon,
+              renderIcon: options.renderIcon,
+            };
           })}
           index={state.index}
           position={position}
@@ -107,7 +115,12 @@ function BottomBar({
   position,
   onSelect,
 }: {
-  tabs: { key: string; title: string; icon?: IconName }[];
+  tabs: {
+    key: string;
+    title: string;
+    icon?: IconName;
+    renderIcon?: PagerTabsOptions['renderIcon'];
+  }[];
   index: number;
   position: SharedValue<number>;
   onSelect: (index: number) => void;
@@ -168,7 +181,9 @@ function BottomBar({
                         ]}
                       />
                     ) : null}
-                    {tab.icon ? (
+                    {tab.renderIcon ? (
+                      tab.renderIcon({ color, active })
+                    ) : tab.icon ? (
                       <Icon
                         name={tab.icon}
                         size={24}
