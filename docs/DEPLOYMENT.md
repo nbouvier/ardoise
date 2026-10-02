@@ -23,9 +23,31 @@ When `NODE_ENV=production`, on top of the variables that are always required
 | ----------------- | ----------------------------------------------------------------- | --- |
 | `DATABASE_URL`    | Required.                                                         | Unset means an embedded in-memory PGlite: the server would start fine and lose every write at the next restart. |
 | `PUBLIC_BASE_URL` | Required, and must not be `localhost` / a loopback / `0.0.0.0`.   | Invitation links are built from it and sent to other people's phones. |
+| `TRUST_PROXY`     | Required (`false` when no proxy is in front).                     | See [Behind a load balancer](#behind-a-load-balancer): both silent defaults are wrong in production. |
 
-Outside production both stay optional (`DATABASE_URL` → embedded PGlite,
-`PUBLIC_BASE_URL` → `http://localhost:3000`).
+Outside production they stay optional (`DATABASE_URL` → embedded PGlite,
+`PUBLIC_BASE_URL` → `http://localhost:3000`, `TRUST_PROXY` → `false`).
+
+## Behind a load balancer
+
+The server is meant to run behind a load balancer. The balancer opens the connection to the
+server, so without help `request.ip` is the balancer's address for every client; the real
+one arrives in the `X-Forwarded-For` header, which a client can also set itself.
+`TRUST_PROXY` tells Fastify whose `X-Forwarded-For` entries to believe (`trustProxy` in
+`apps/server/src/app.ts`):
+
+| Value                   | Meaning                                                              | Use when |
+| ----------------------- | -------------------------------------------------------------------- | -------- |
+| `false`                 | Ignore `X-Forwarded-For`; `request.ip` is the socket peer.           | The server is reachable directly, no proxy. |
+| a number, e.g. `1`      | Trust that many proxy hops, counting from the server.                | The number of proxies is fixed and known (one load balancer → `1`). **Preferred.** |
+| CIDRs, e.g. `10.0.0.0/8`| Trust proxies at those addresses (also `loopback`, `linklocal`, `uniquelocal`). | The balancer has a stable address range. |
+| `true`                  | Trust every hop, so the leftmost `X-Forwarded-For` entry wins.       | Avoid: any client can forge its address and slip past per-IP rate limits. |
+
+It is **required** in production because neither guess is safe: `false` behind a balancer
+puts every user in one rate-limit bucket (and every log line on one address), `true`
+without one lets clients choose their own address. Make sure the balancer *overwrites or
+appends to* `X-Forwarded-For` rather than passing a client-supplied value through
+untouched; with a hop count that is what makes the count meaningful.
 
 ## Error responses
 

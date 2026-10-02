@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadEnv } from './env.js';
+import { loadEnv, parseTrustProxy } from './env.js';
 
 /** The variables that are required whatever the environment. */
 const base = {
@@ -13,6 +13,7 @@ const production = {
   NODE_ENV: 'production',
   DATABASE_URL: 'postgres://user:pass@db.internal:5432/splitcount',
   PUBLIC_BASE_URL: 'https://api.splitcount.app',
+  TRUST_PROXY: '1',
 };
 
 describe('loadEnv', () => {
@@ -22,6 +23,7 @@ describe('loadEnv', () => {
 
       expect(env.DATABASE_URL).toBeUndefined();
       expect(env.PUBLIC_BASE_URL).toBe('http://localhost:3000');
+      expect(env.TRUST_PROXY).toBe(false);
     });
   });
 
@@ -55,6 +57,19 @@ describe('loadEnv', () => {
       );
     });
 
+    it('refuses to start without TRUST_PROXY, since neither default is right behind a load balancer', () => {
+      const source: Record<string, string | undefined> = { ...production };
+      delete source.TRUST_PROXY;
+
+      expect(() => loadEnv(source)).toThrow(
+        'TRUST_PROXY: is required when NODE_ENV=production',
+      );
+    });
+
+    it('accepts TRUST_PROXY=false explicitly, for a server with no proxy in front', () => {
+      expect(loadEnv({ ...production, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false);
+    });
+
     it.each([
       'http://localhost:3000',
       'http://127.0.0.1:3000',
@@ -69,8 +84,37 @@ describe('loadEnv', () => {
 
     it('reports every problem at once', () => {
       expect(() => loadEnv({ ...base, NODE_ENV: 'production' })).toThrow(
-        /DATABASE_URL.*PUBLIC_BASE_URL/,
+        /DATABASE_URL.*TRUST_PROXY.*PUBLIC_BASE_URL/,
       );
     });
   });
+
+  it('rejects a TRUST_PROXY that is not understood, in any environment', () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: 'development', TRUST_PROXY: 'yes' })).toThrow(
+      /TRUST_PROXY: must be true, false/,
+    );
+  });
+});
+
+describe('parseTrustProxy', () => {
+  it.each([
+    ['true', true],
+    ['false', false],
+    [' FALSE ', false],
+    ['1', 1],
+    ['2', 2],
+    ['10.0.0.0/8', ['10.0.0.0/8']],
+    ['10.0.0.0/8, 192.168.1.5', ['10.0.0.0/8', '192.168.1.5']],
+    ['2001:db8::/32', ['2001:db8::/32']],
+    ['loopback,uniquelocal', ['loopback', 'uniquelocal']],
+  ])('parses %j', (raw, expected) => {
+    expect(parseTrustProxy(raw)).toEqual(expected);
+  });
+
+  it.each(['', 'yes', '-1', '1.5', '10.0.0.0/33', '10.0.0.0/8/9', 'example.com', '10.0.0.0/8,,'])(
+    'rejects %j',
+    (raw) => {
+      expect(parseTrustProxy(raw)).toBeUndefined();
+    },
+  );
 });

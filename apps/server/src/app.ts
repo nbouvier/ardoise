@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { env } from './config/env.js';
+import { env, type TrustProxy } from './config/env.js';
 import { dbPlugin, type DbPluginOptions } from './db/plugin.js';
 import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
 import { friendsPlugin } from './features/friends/plugin.js';
@@ -16,6 +16,8 @@ import { registerHealthRoutes } from './routes/health.js';
 export interface BuildAppOptions {
   /** Database plugin overrides. Tests pass a pre-created in-memory handle here. */
   db?: DbPluginOptions;
+  /** Override `TRUST_PROXY` (tests). */
+  trustProxy?: TrustProxy | undefined;
   /** Auth plugin overrides. Tests pass fake Google / token services here. */
   auth?: AuthPluginOptions;
   /** Invite plugin overrides. Tests pass a fake clock / short invite TTL here. */
@@ -27,12 +29,24 @@ export interface BuildAppOptions {
 }
 
 /**
+ * Fastify's runtime accepts a hop count, its typings do not: spell the count
+ * out as the function it stands for (trust the first `hops` addresses, counting
+ * from the socket).
+ */
+function toFastifyTrustProxy(
+  trustProxy: TrustProxy,
+): boolean | string[] | ((address: string, hop: number) => boolean) {
+  return typeof trustProxy === 'number' ? (_address, hop) => hop < trustProxy : trustProxy;
+}
+
+/**
  * Build a fully configured Fastify instance without starting the network
  * listener, so tests can drive it through `app.inject`. Async setup (database
  * connection, migrations) resolves during `app.ready()`.
  */
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
+    trustProxy: toFastifyTrustProxy(options.trustProxy ?? env.TRUST_PROXY),
     logger: {
       level: env.LOG_LEVEL,
       transport:

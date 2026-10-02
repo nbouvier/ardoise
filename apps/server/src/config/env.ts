@@ -1,4 +1,47 @@
+import { isIP } from 'node:net';
+
 import { z } from 'zod';
+
+/** What Fastify's `trustProxy` option accepts, as far as this project uses it. */
+export type TrustProxy = boolean | number | string[];
+
+const PROXY_KEYWORDS = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+function isProxyAddress(entry: string): boolean {
+  if (PROXY_KEYWORDS.has(entry)) {
+    return true;
+  }
+  const [address = '', prefix, ...rest] = entry.split('/');
+  const family = isIP(address);
+  if (family === 0 || rest.length > 0) {
+    return false;
+  }
+  if (prefix === undefined) {
+    return true;
+  }
+  return /^\d{1,3}$/.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128);
+}
+
+/**
+ * Parse `TRUST_PROXY`: `true` / `false`, a number of proxy hops, or a
+ * comma-separated list of proxy addresses / CIDR ranges (`10.0.0.0/8`) and
+ * the keywords `loopback`, `linklocal`, `uniquelocal`. `undefined` when the
+ * value is none of those.
+ */
+export function parseTrustProxy(raw: string): TrustProxy | undefined {
+  const value = raw.trim().toLowerCase();
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  if (/^\d+$/.test(value)) {
+    return Number(value);
+  }
+  const entries = value.split(',').map((entry) => entry.trim());
+  return entries.every(isProxyAddress) ? entries : undefined;
+}
 
 const envSchema = z.object({
   /**
@@ -57,6 +100,29 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(7 * 24 * 60 * 60),
+  /**
+   * Which proxies in front of the server to trust, so `request.ip` is the real
+   * client rather than the load balancer (rate limiting and logs key on it).
+   * `true` trusts every hop, a number trusts that many hops from the server, a
+   * comma-separated list trusts those addresses / CIDR ranges. Required when
+   * `NODE_ENV=production` (`false` for a server with no proxy in front);
+   * elsewhere it defaults to `false`. See `docs/DEPLOYMENT.md`.
+   */
+  TRUST_PROXY: z
+    .string()
+    .transform((raw, ctx) => {
+      const parsed = parseTrustProxy(raw);
+      if (parsed === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'must be true, false, a number of hops, or a comma-separated list of proxy addresses / CIDR ranges',
+        });
+        return z.NEVER;
+      }
+      return parsed;
+    })
+    .optional(),
   /** App Store listing, shown on the invitation landing page. Unset until published. */
   APP_STORE_URL: z.url().optional(),
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
@@ -82,6 +148,17 @@ const envChecked = envSchema
         message: 'is required when NODE_ENV=production',
       });
     }
+    // Neither default is safe behind a load balancer: `false` makes every
+    // client look like the balancer (one shared rate-limit bucket, useless
+    // logs), `true` without one lets any client forge its address. Make the
+    // operator say which.
+    if (value.TRUST_PROXY === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TRUST_PROXY'],
+        message: 'is required when NODE_ENV=production (use false if no proxy is in front)',
+      });
+    }
     if (!value.PUBLIC_BASE_URL) {
       ctx.addIssue({
         code: 'custom',
@@ -100,6 +177,7 @@ const envChecked = envSchema
   .transform((value) => ({
     ...value,
     PUBLIC_BASE_URL: value.PUBLIC_BASE_URL ?? 'http://localhost:3000',
+    TRUST_PROXY: value.TRUST_PROXY ?? false,
   }));
 
 /** Whether a URL hostname designates the machine itself (`localhost`, loopback). */
