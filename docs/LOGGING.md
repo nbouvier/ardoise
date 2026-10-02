@@ -27,7 +27,7 @@ Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 | Event                   | Level | Fields                       | Meaning |
 | ----------------------- | ----- | ---------------------------- | ------- |
 | `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. The only place the cause is visible. |
-| `http.request.rejected` | info  | `status`, `code`             | Fastify rejected the request before a handler ran (malformed JSON, body too large, unsupported content type). |
+| `http.request.rejected` | info  | `status`, `code`             | A request was refused before or outside a route's own handling: malformed JSON, body too large, unsupported content type, or `429` for rate limiting (`status: 429`). A burst of 429s from one address is how abuse of `/auth/*` shows up. |
 
 The error is logged as a plain `error` object rather than under pino's `err` key: that
 serializer copies every property, and a Postgres error's `detail` holds the offending

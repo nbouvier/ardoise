@@ -36,6 +36,8 @@ apps/
       app.ts       buildApp() factory — a configured Fastify instance, no listener.
       config/      Typed environment loading (env.ts, Zod-validated, with the
                    production-only requirements — see docs/DEPLOYMENT.md).
+      http/        Cross-cutting HTTP behaviour wired in app.ts: error handler, rate
+                   limiting.
       routes/      Cross-cutting HTTP routes (health). Feature routes live under features/.
       features/    One folder per product feature: routes, services, repository, tests.
       db/          Drizzle schema (schema.ts), client/driver selection (client.ts),
@@ -179,6 +181,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | A suggested payment carries no source group, and positions carry no per-group breakdown | Both were artefacts of the sub-tree scope. Within one group there is nothing to attribute: the group's own transaction list is the breakdown |
 | 2026-09-12 | Recording a suggested payment reuses `POST /groups/:groupId/transactions` with `kind: "transfer"` and a client-side `TransactionPrefill`, with no settlement record and no "mark as settled" | The ledger stays the single source of truth: a settled flag nothing backs would drift from the transactions that define every balance in this product |
 | 2026-10-02 | `NODE_ENV` defaults to `production`; in production `DATABASE_URL` and a non-local `PUBLIC_BASE_URL` are mandatory, checked at startup in `config/env.ts` | The previous defaults (development, optional database, localhost base URL) let a misconfigured deployment start cleanly on an in-memory PGlite and lose all data at restart, or mail out invitation links pointing at `localhost`. A server that cannot be configured correctly now fails fast, with every problem listed. Local development already needs a `.env` (Google client IDs, JWT secret), which sets `NODE_ENV=development` |
+| 2026-10-02 | `TRUST_PROXY` is required in production; the client address (`request.ip`) is the one rate limits and logs key on | Behind a load balancer, `false` collapses every client onto the balancer's address and `true` lets clients forge theirs. The operator must state which one applies |
+| 2026-10-02 | Rate limiting uses `@fastify/rate-limit` with in-process counters, in three tiers (global / `/auth/*` / public invitation routes) assigned by route in `http/rate-limit.ts` | Protects sign-in and invitation-code guessing, the only unauthenticated surface, without new infrastructure. Per-instance counters are accepted: the limits guard against abuse, not billing. A shared (Redis) store is the upgrade if exact limits across instances ever matter |
 
 ## Open items
 

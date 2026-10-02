@@ -49,6 +49,31 @@ without one lets clients choose their own address. Make sure the balancer *overw
 appends to* `X-Forwarded-For` rather than passing a client-supplied value through
 untouched; with a hop count that is what makes the count meaningful.
 
+## Rate limiting
+
+Per client address (see [Behind a load balancer](#behind-a-load-balancer) — the limits
+are only as good as `TRUST_PROXY`), in three tiers, implemented in
+`apps/server/src/http/rate-limit.ts`:
+
+| Tier | Routes | Variable | Default / min |
+| ---- | ------ | -------- | ------------- |
+| global | everything else | `RATE_LIMIT_GLOBAL_PER_MINUTE` | 300 |
+| auth | every `/auth/*` route, **one shared budget** | `RATE_LIMIT_AUTH_PER_MINUTE` | 30 |
+| public invitations | `GET /invites/:code` and `GET /i/:code`, one shared budget | `RATE_LIMIT_PUBLIC_PER_MINUTE` | 30 |
+
+- `GET /health` is exempt, so load balancer probes are never throttled.
+- A route's tier comes from its URL, so a new `/auth/*` route is covered automatically. A
+  route that must be exempt sets `config: { rateLimit: false }`.
+- Over the limit: `429 { "error": "rate_limited" }` plus `Retry-After`.
+- The defaults are first guesses; tune them from the logs (`http.request.rejected`
+  with `status: 429`). Many users can legitimately share one address (office, mobile
+  carrier NAT), which is why the global limit is generous.
+- Counters are in memory, **per server process**: with N instances the effective limit is
+  up to N times the configured one, and a restart resets them. Acceptable for abuse
+  protection; move to a shared store (Redis) if exact limits are ever needed.
+- The tests set the three limits very high in `vitest.config.ts` (every test shares one
+  address); `rate-limit.test.ts` passes small ones through `buildApp({ rateLimit })`.
+
 ## Error responses
 
 An unexpected failure never reaches the client as-is: `apps/server/src/http/error-handler.ts`

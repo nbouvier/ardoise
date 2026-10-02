@@ -11,6 +11,7 @@ import {
   type TransactionsPluginOptions,
 } from './features/transactions/plugin.js';
 import { registerErrorHandler } from './http/error-handler.js';
+import { rateLimitPlugin, type RateLimitPluginOptions } from './http/rate-limit.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -18,6 +19,8 @@ export interface BuildAppOptions {
   db?: DbPluginOptions;
   /** Override `TRUST_PROXY` (tests). */
   trustProxy?: TrustProxy | undefined;
+  /** Rate limits (tests pass small ones to reach them). Default: from the environment. */
+  rateLimit?: Partial<RateLimitPluginOptions> | undefined;
   /** Auth plugin overrides. Tests pass fake Google / token services here. */
   auth?: AuthPluginOptions;
   /** Invite plugin overrides. Tests pass a fake clock / short invite TTL here. */
@@ -55,6 +58,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   registerErrorHandler(app);
+
+  // Before any route: it limits the routes registered after it.
+  app.register(rateLimitPlugin, {
+    globalPerMinute: env.RATE_LIMIT_GLOBAL_PER_MINUTE,
+    authPerMinute: env.RATE_LIMIT_AUTH_PER_MINUTE,
+    publicPerMinute: env.RATE_LIMIT_PUBLIC_PER_MINUTE,
+    ...options.rateLimit,
+  });
 
   app.register(dbPlugin, {
     databaseUrl: env.DATABASE_URL,

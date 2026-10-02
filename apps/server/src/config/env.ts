@@ -123,6 +123,16 @@ const envSchema = z.object({
       return parsed;
     })
     .optional(),
+  /**
+   * Requests per minute and client address. Counted in each server process's
+   * memory, so with several instances the effective limit is up to N times
+   * these. `GLOBAL` covers the whole API; `AUTH` is shared by every `/auth/*`
+   * route and `PUBLIC` by the unauthenticated invitation routes, where the
+   * client has nothing to lose by hammering. See `docs/DEPLOYMENT.md`.
+   */
+  RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(300),
+  RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  RATE_LIMIT_PUBLIC_PER_MINUTE: z.coerce.number().int().positive().default(30),
   /** App Store listing, shown on the invitation landing page. Unset until published. */
   APP_STORE_URL: z.url().optional(),
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
