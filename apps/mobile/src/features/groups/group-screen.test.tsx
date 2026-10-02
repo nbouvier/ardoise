@@ -7,13 +7,14 @@ import type {
   Transaction,
   TransactionsListResponse,
 } from '@splitcount/shared';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
+import { mockBackButton } from '@/test-utils/back-button';
 
 import { GroupScreen } from './group-screen';
 import { groupsChanged } from './groups-changed';
@@ -819,6 +820,85 @@ describe('GroupScreen', () => {
 
     expect(await screen.findByText(/couldn’t load this group/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy();
+  });
+
+  describe('hardware back', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('closes the add-transaction form instead of leaving the group', async () => {
+      const pressBack = mockBackButton();
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Corsica 2026');
+      await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
+      await screen.findByLabelText('Title');
+
+      expect(await pressBack()).toBe(true);
+
+      expect(screen.queryByLabelText('Title')).toBeNull();
+      expect(screen.getByRole('button', { name: /add a transaction/i })).toBeTruthy();
+      expect(screen.getByText('Corsica 2026')).toBeTruthy();
+    });
+
+    it('closes the edit form of an existing transaction too', async () => {
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [groceries],
+        excludedSubgroupCount: 0,
+      });
+      const pressBack = mockBackButton();
+      await render(<GroupScreen groupId={trip.id} />);
+      await fireEvent.press(await screen.findByText('Groceries'));
+      await screen.findByLabelText('Title');
+
+      expect(await pressBack()).toBe(true);
+
+      expect(screen.queryByLabelText('Title')).toBeNull();
+      expect(screen.getByText('Groceries')).toBeTruthy();
+    });
+
+    it('closes the "+ Invite" page back to the Manage tab', async () => {
+      const pressBack = mockBackButton();
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
+      await screen.findByRole('button', { name: /add to group/i });
+
+      expect(await pressBack()).toBe(true);
+
+      expect(await screen.findByRole('button', { name: 'Invite' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /add to group/i })).toBeNull();
+    });
+
+    it('goes back to the plan when a reimbursement form is dismissed', async () => {
+      mockFetchBalances.mockResolvedValue(balances);
+      const pressBack = mockBackButton();
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Corsica 2026');
+      await openTab('Balances');
+      await fireEvent.press(
+        await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' }),
+      );
+      await screen.findByLabelText('Title');
+
+      expect(await pressBack()).toBe(true);
+
+      expect(await screen.findByRole('button', { name: 'Grace Hopper pays you 21.25' })).toBeTruthy();
+      expect(mockCreateTransaction).not.toHaveBeenCalled();
+    });
+
+    it('leaves the press to the route when nothing is open over a tab', async () => {
+      const pressBack = mockBackButton();
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Corsica 2026');
+
+      expect(await pressBack()).toBe(false);
+
+      // Once the form has been closed again, too.
+      await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
+      await screen.findByLabelText('Title');
+      await pressBack();
+      expect(await pressBack()).toBe(false);
+    });
   });
 
   describe('sub-groups', () => {

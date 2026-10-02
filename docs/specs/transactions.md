@@ -308,6 +308,10 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   own content, with a destructive "Delete this transaction" action, confirmed. A suggested
   reimbursement from the Balances tab opens the same form the same way, switching to the
   Transactions tab to show it and switching back once it is saved or cancelled.
+- **Android's back button closes the form** (add or edit) rather than leaving the group,
+  exactly like the form's own cancel — what was typed is discarded, nothing is saved, and
+  a form opened from a suggested reimbursement returns to the Balances tab. With the form
+  closed, back leaves the group as usual. The same holds for the Manage tab's invite page.
 - Empty state: an explanation and the same "Add a transaction" action as the
   "+ Add" in the group's "Transactions" section title (there is no separate large button).
 - On a pair group, the transaction list and "Add a transaction" are present exactly as on

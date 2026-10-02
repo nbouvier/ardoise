@@ -1,8 +1,9 @@
 import type { GroupDetail, GroupMember, SubgroupSummary, Transaction } from '@splitcount/shared';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Pressable,
   ScrollView,
@@ -148,6 +149,33 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   // refreshes it from wherever the form was opened, and the tab is not
   // mounted while another one is showing.
   const balancesResult = useBalances(groupId);
+
+  const closeTransaction = useCallback(() => {
+    setTransactionOpen(false);
+    if (returnTab) {
+      setTab(returnTab);
+      setReturnTab(null);
+    }
+  }, [returnTab]);
+
+  // The form and the invite page are this screen's own state, not routes, so
+  // Android's back button would otherwise pop the whole group out from under
+  // them. While either is open it closes that instead, exactly like its own
+  // cancel; with neither open there is no listener and back leaves the group.
+  useEffect(() => {
+    if (!transactionOpen && !inviting) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (transactionOpen) {
+        closeTransaction();
+      } else {
+        setInviting(false);
+      }
+      return true;
+    });
+    return () => subscription.remove();
+  }, [transactionOpen, inviting, closeTransaction]);
 
   /**
    * Run a change, keep the screen in sync, and surface a failure plainly.
@@ -378,14 +406,6 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
     setReturnTab(tab);
     setTab('transactions');
     setTransactionOpen(true);
-  }
-
-  function closeTransaction() {
-    setTransactionOpen(false);
-    if (returnTab) {
-      setTab(returnTab);
-      setReturnTab(null);
-    }
   }
 
   function selectTab(next: GroupTab) {

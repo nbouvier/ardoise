@@ -295,6 +295,16 @@ or box**; a screen that styles its own is a bug in this document.
   own insets) leaves a visible gap there. Centred, and the darker flat `scrim`, are
   reserved for `ConfirmDialog` itself, a dialog asking a question rather than a list
   offering choices.
+- **A view that replaces a tab's content in place closes on the hardware back button.**
+  "+ Invite" (Manage) and the add/edit transaction form (Transactions) are screen state, not
+  routes, so Android's back would otherwise pop the whole group from under them. While one
+  is open, back closes just that — exactly like its own Cancel/Done, discarding nothing it
+  would not already discard — and a form opened from elsewhere (a suggested reimbursement)
+  returns there.
+  Implemented as a `BackHandler` listener (`hardwareBackPress`) that exists only while the
+  view is open, so with nothing open back still leaves the group. A new in-place view
+  does the same. A popup opened over it (`DropdownMenu`, `ConfirmDialog`) is a `Modal`
+  and takes the first press itself, so back unwinds one layer at a time.
 
 - One **primary** button per screen. Everything else is `secondary` or `ghost`.
 - A destructive action is a **red text button**, never a filled red one, and always
