@@ -12,6 +12,7 @@ import {
 } from './features/transactions/plugin.js';
 import { registerErrorHandler } from './http/error-handler.js';
 import { rateLimitPlugin, type RateLimitPluginOptions } from './http/rate-limit.js';
+import { securityHeadersPlugin } from './http/security-headers.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -58,6 +59,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   registerErrorHandler(app);
+
+  app.register(securityHeadersPlugin);
 
   // Before any route: it limits the routes registered after it.
   app.register(rateLimitPlugin, {

@@ -18,6 +18,8 @@ route is added, changed or removed.
   every response carries `X-RateLimit-Limit` / `X-RateLimit-Remaining` /
   `X-RateLimit-Reset`. `GET /health` is never limited. The mobile client should treat
   a `429` as "try again later", not as a failure of the request itself.
+- Every response carries security headers (`docs/DEPLOYMENT.md`). The API sets no CORS
+  headers: it is called by the native app, not from a browser page.
 - Every error body is `{ "error": "<code>" }`. Failures the server did not anticipate
   (any 5xx) always answer `{ "error": "internal_error" }`: the underlying message — which
   may carry a constraint name or a fragment of data — is logged, never sent. Failures

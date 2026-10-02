@@ -74,6 +74,31 @@ are only as good as `TRUST_PROXY`), in three tiers, implemented in
 - The tests set the three limits very high in `vitest.config.ts` (every test shares one
   address); `rate-limit.test.ts` passes small ones through `buildApp({ rateLimit })`.
 
+## Security headers
+
+Set on **every** response, errors and `429`s included, by `@fastify/helmet`
+(`apps/server/src/http/security-headers.ts`):
+
+| Header | Value | Why |
+| ------ | ----- | --- |
+| `Content-Security-Policy` | `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` | A JSON API: nothing it returns should be rendered, framed or scripted. |
+| `X-Content-Type-Options` | `nosniff` | A response is never reinterpreted as another type. |
+| `Referrer-Policy` | `no-referrer` | The invitation code is in the landing page URL; it must not leak to the store links on that page. |
+| `Strict-Transport-Security` | `max-age=15552000` (180 days), no `includeSubDomains` | Only meaningful over HTTPS, i.e. once the load balancer terminates TLS. Not applied to subdomains: the API host's siblings are not ours to impose it on. |
+| `X-Frame-Options`, `Cross-Origin-*-Policy`, `X-DNS-Prefetch-Control`… | helmet defaults | |
+| `X-Powered-By` | removed | |
+
+The invitation landing page (`GET /i/:code`) is the one HTML document and overrides the
+CSP for its own response: `default-src 'none'` plus its single inline `<style>` and
+`<script>` allowed **by SHA-256 hash**, computed from the response body by
+`contentSecurityPolicyFor` (`features/invites/landing.ts`) — per response, because the
+script contains the invitation code. There is no `unsafe-inline`. If you add an inline
+block or an external resource to the page, the policy follows automatically for inline
+`<style>` / `<script>`; anything else (an image, a font) needs the policy extended there.
+
+The API sets no CORS headers; add them deliberately if a browser client (the Expo web
+target) ever needs to call it.
+
 ## Error responses
 
 An unexpected failure never reaches the client as-is: `apps/server/src/http/error-handler.ts`

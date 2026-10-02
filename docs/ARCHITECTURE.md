@@ -37,7 +37,7 @@ apps/
       config/      Typed environment loading (env.ts, Zod-validated, with the
                    production-only requirements — see docs/DEPLOYMENT.md).
       http/        Cross-cutting HTTP behaviour wired in app.ts: error handler, rate
-                   limiting.
+                   limiting, security headers.
       routes/      Cross-cutting HTTP routes (health). Feature routes live under features/.
       features/    One folder per product feature: routes, services, repository, tests.
       db/          Drizzle schema (schema.ts), client/driver selection (client.ts),
@@ -183,6 +183,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-02 | `NODE_ENV` defaults to `production`; in production `DATABASE_URL` and a non-local `PUBLIC_BASE_URL` are mandatory, checked at startup in `config/env.ts` | The previous defaults (development, optional database, localhost base URL) let a misconfigured deployment start cleanly on an in-memory PGlite and lose all data at restart, or mail out invitation links pointing at `localhost`. A server that cannot be configured correctly now fails fast, with every problem listed. Local development already needs a `.env` (Google client IDs, JWT secret), which sets `NODE_ENV=development` |
 | 2026-10-02 | `TRUST_PROXY` is required in production; the client address (`request.ip`) is the one rate limits and logs key on | Behind a load balancer, `false` collapses every client onto the balancer's address and `true` lets clients forge theirs. The operator must state which one applies |
 | 2026-10-02 | Rate limiting uses `@fastify/rate-limit` with in-process counters, in three tiers (global / `/auth/*` / public invitation routes) assigned by route in `http/rate-limit.ts` | Protects sign-in and invitation-code guessing, the only unauthenticated surface, without new infrastructure. Per-instance counters are accepted: the limits guard against abuse, not billing. A shared (Redis) store is the upgrade if exact limits across instances ever matter |
+| 2026-10-02 | Security headers come from `@fastify/helmet` with a deny-everything default CSP; the invitation landing page overrides it per response with a hash-pinned CSP (`contentSecurityPolicyFor`), not `unsafe-inline` | The API serves JSON only, so nothing needs to be allowed. The landing page is the one HTML document and needs its inline style and script; its script embeds the invitation code, so the hash is computed per response. `Referrer-Policy: no-referrer` also keeps the code (in the URL) from leaking to the store links |
 
 ## Open items
 

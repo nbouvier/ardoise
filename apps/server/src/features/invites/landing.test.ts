@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -95,6 +97,42 @@ describe('GET /i/:code', () => {
     const code = await friendInviteCodeFor('ada');
     const response = await app.inject({ method: 'GET', url: `/i/${code}` });
     expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  describe('Content-Security-Policy', () => {
+    /** The hash CSP expects for an inline block's text. */
+    const hashOf = (text: string) =>
+      `'sha256-${createHash('sha256').update(text).digest('base64')}'`;
+    const inlineBlock = (html: string, tag: 'script' | 'style') =>
+      (tag === 'script'
+        ? /<script>([\s\S]*?)<\/script>/
+        : /<style>([\s\S]*?)<\/style>/
+      ).exec(html)?.[1] ?? '';
+
+    it('allows only the inline script and style of the page itself, pinned by hash', async () => {
+      const code = await friendInviteCodeFor('ada');
+
+      const response = await app.inject({ method: 'GET', url: `/i/${code}` });
+      const policy = response.headers['content-security-policy'] as string;
+
+      expect(policy).toContain("default-src 'none'");
+      expect(policy).toContain(`script-src ${hashOf(inlineBlock(response.body, 'script'))}`);
+      expect(policy).toContain(`style-src ${hashOf(inlineBlock(response.body, 'style'))}`);
+      expect(policy).toContain("frame-ancestors 'none'");
+      expect(policy).not.toContain('unsafe-inline');
+    });
+
+    it('allows no script on the "no longer valid" page, which has none', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/i/does-not-exist-0123456789',
+      });
+      const policy = response.headers['content-security-policy'] as string;
+
+      expect(response.statusCode).toBe(404);
+      expect(policy).toContain(`style-src ${hashOf(inlineBlock(response.body, 'style'))}`);
+      expect(policy).not.toContain('script-src');
+    });
   });
 
   it('escapes an inviter name containing markup', async () => {
