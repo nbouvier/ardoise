@@ -25,7 +25,7 @@ without managing another password**.
 - Choosing a Google account and completing Google's consent returns the user to the app,
   now signed in, landing on the app's main screens.
 - A signed-in user has an **Account** area showing their Google profile (name, email,
-  avatar) and a **Sign out** action.
+  avatar) with **Switch account** and **Sign out** actions.
 - After signing in, fully closing and reopening the app leaves the user **signed in**
   (subject to the session lifetime below) without any Google interaction.
 - Signing out returns the user to the sign-in screen and clears the local session. The
@@ -86,7 +86,10 @@ without managing another password**.
 - [ ] Cancelling the Google dialog returns to the sign-in screen with no error shown.
 - [ ] A sign-in attempt with an ID token the server cannot verify shows a generic failure
       and creates no session (server responds 401).
-- [ ] The Account area shows the signed-in user's Google name, email and avatar.
+- [ ] The Account area shows the signed-in user's Google name, email and avatar in a
+      Profile row, and the Account tab's icon is that avatar.
+- [ ] Tapping the Profile row offers "Switch account" and "Sign out"; "Switch account"
+      signs out and opens the Google chooser, and dismissing the chooser shows no error.
 - [ ] After a successful sign-in, killing and relaunching the app leaves the user signed
       in without any Google interaction.
 - [ ] Signing out returns to the sign-in screen; the just-revoked refresh token can no
@@ -141,8 +144,12 @@ Client persistence: the refresh token is stored in the OS secure store
 - **Sign-in screen**: full-screen, centered, product name/logo + one primary "Continue
   with Google" button; error text appears inline below the button on failure (not for
   user cancellation).
-- **Account tab**: a third bottom tab. Shows avatar, name, email, and a clearly separated
-  "Sign out" button.
+- **Account tab**: a bottom tab whose icon is the signed-in user's Google avatar (their
+  initial when there is no picture), so the active account is visible from anywhere. Its
+  page has a **Profile** section: one row — avatar, name, email beneath — with no card
+  around it. Tapping the row opens a menu with **Switch account** (signs out, then opens
+  the Google account chooser straight away; dismissing it leaves the user on the sign-in
+  screen) and **Sign out**.
 - Light and dark themes via existing `ThemedText` / `ThemedView` / `Colors`.
 - Web: the button is visibly disabled with a short "Web sign-in coming soon" caption.
 

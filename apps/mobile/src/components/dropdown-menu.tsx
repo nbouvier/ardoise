@@ -63,7 +63,12 @@ export function DropdownMenu({ visible, onClose, children }: DropdownMenuProps) 
   const theme = useTheme();
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+    <Modal
+      testID="dropdown-menu"
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose}>
         <DropdownScrim />
         <SafeAreaView style={styles.safeArea} pointerEvents="box-none">

@@ -21,7 +21,8 @@ export interface IconMenuButtonProps {
   disabled?: boolean;
 }
 
-function MenuRow({ icon, label, destructive = false, onPress }: IconMenuOption) {
+/** One icon + label row of a `DropdownMenu` — also used by menus that open from something other than a "⋮". */
+export function MenuRow({ icon, label, destructive = false, onPress }: IconMenuOption) {
   const theme = useTheme();
   const color = destructive ? theme.danger : theme.text;
 

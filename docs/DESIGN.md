@@ -353,9 +353,11 @@ on user cancellation). On web the button is disabled with a "coming soon" captio
 
 ### Account (`src/features/auth/account-screen.tsx`)
 
-`ScreenHeader` with `wash`, then one brand-toned identity card — avatar, name, email — and
-a secondary "Sign out" at the bottom. The screen has exactly one piece of content below
-the header, so it gets exactly one card.
+`ScreenHeader` with `wash`, then a **Profile** section: an uppercase `overline` label and,
+under it, one bare row — no card — of the Google avatar (48), the name in `smallBold` with
+the email beneath in secondary `small`, and a down chevron. The row is the one control:
+pressing it opens a `DropdownMenu` with **Switch account** and, in the danger colour,
+**Sign out**. Further sections (preferences, …) join under it as the page grows.
 
 ### Home (`src/features/home/home-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
