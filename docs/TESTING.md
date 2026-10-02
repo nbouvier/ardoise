@@ -199,6 +199,10 @@ concern.
 
 ### Gotchas
 
+- Each database-backed test file starts its own PGlite (WASM, memory-hungry). When the
+  machine is short on memory, workers die with `Array buffer allocation failed` /
+  `Worker exited unexpectedly` and unrelated files fail at random — that is memory, not a
+  regression. Re-run with fewer workers: `npx vitest run --maxWorkers=3`.
 - Rate limits are set to a million per minute in `apps/server/vitest.config.ts`: every
   test shares one client address. A test that needs to hit a limit passes small ones
   (`createTestApp({ rateLimit: { authPerMinute: 3 } })`) and uses a fresh

@@ -74,6 +74,14 @@ are only as good as `TRUST_PROXY`), in three tiers, implemented in
 - The tests set the three limits very high in `vitest.config.ts` (every test shares one
   address); `rate-limit.test.ts` passes small ones through `buildApp({ rateLimit })`.
 
+## Database connection errors
+
+When Postgres restarts or a connection drops while idle, `pg.Pool` emits an `error` event.
+With no listener Node turns that into an uncaught exception and the API process dies;
+`attachPoolErrorHandler` (`apps/server/src/db/client.ts`) listens and logs `db.pool.error`
+instead. The pool drops the broken connection and opens a new one on the next query, so a
+database restart costs the requests that were in flight, not the process.
+
 ## Shutdown
 
 On `SIGTERM` (deploy, scale-down, container stop) or `SIGINT` (Ctrl+C), the server drains

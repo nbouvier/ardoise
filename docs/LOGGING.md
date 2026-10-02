@@ -34,6 +34,12 @@ serializer copies every property, and a Postgres error's `detail` holds the offe
 value. The `message` is kept — it is what makes the failure diagnosable — but some
 driver messages quote the value that was rejected, so treat these logs as sensitive.
 
+### Database events
+
+| Event           | Level | Fields                               | Meaning |
+| --------------- | ----- | ------------------------------------ | ------- |
+| `db.pool.error` | error | `error` (`type`, `message`, `code`)  | The Postgres pool reported an error on an idle connection (database restart, failover, network drop). The broken connection is discarded and replaced on the next query; queries that were running on it fail and surface as `http.request.failed`. Repeated occurrences mean the database is unstable. |
+
 ### Lifecycle events
 
 | Event                       | Level | Fields                    | Meaning |
