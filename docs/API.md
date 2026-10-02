@@ -13,6 +13,12 @@ route is added, changed or removed.
   short-lived (~15 min) HS256 JWT; the client refreshes it with the rotating refresh
   token. Auth failures return `401` with `{ "error": "<code>" }`; validation failures
   return `400 { "error": "invalid_request" }`.
+- Every error body is `{ "error": "<code>" }`. Failures the server did not anticipate
+  (any 5xx) always answer `{ "error": "internal_error" }`: the underlying message — which
+  may carry a constraint name or a fragment of data — is logged, never sent. Failures
+  raised by Fastify before a handler runs (malformed JSON, body over the limit, wrong
+  content type) keep their 4xx status with `invalid_request` (`400`),
+  `payload_too_large` (`413`) or `unsupported_media_type` (`415`).
 
 ## Base URL
 

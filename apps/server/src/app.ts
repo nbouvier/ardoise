@@ -10,6 +10,7 @@ import {
   transactionsPlugin,
   type TransactionsPluginOptions,
 } from './features/transactions/plugin.js';
+import { registerErrorHandler } from './http/error-handler.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -38,6 +39,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
     },
   });
+
+  registerErrorHandler(app);
 
   app.register(dbPlugin, {
     databaseUrl: env.DATABASE_URL,

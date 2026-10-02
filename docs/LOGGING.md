@@ -22,6 +22,18 @@ current setup and state.
 
 Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
+### HTTP events
+
+| Event                   | Level | Fields                       | Meaning |
+| ----------------------- | ----- | ---------------------------- | ------- |
+| `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. The only place the cause is visible. |
+| `http.request.rejected` | info  | `status`, `code`             | Fastify rejected the request before a handler ran (malformed JSON, body too large, unsupported content type). |
+
+The error is logged as a plain `error` object rather than under pino's `err` key: that
+serializer copies every property, and a Postgres error's `detail` holds the offending
+value. The `message` is kept — it is what makes the failure diagnosable — but some
+driver messages quote the value that was rejected, so treat these logs as sensitive.
+
 ### Group and transaction events
 
 | Event                        | Level | Fields                                                    | Meaning |

@@ -26,3 +26,12 @@ When `NODE_ENV=production`, on top of the variables that are always required
 
 Outside production both stay optional (`DATABASE_URL` → embedded PGlite,
 `PUBLIC_BASE_URL` → `http://localhost:3000`).
+
+## Error responses
+
+An unexpected failure never reaches the client as-is: `apps/server/src/http/error-handler.ts`
+answers any 5xx with `{ "error": "internal_error" }` and logs the cause server-side
+(`http.request.failed`, see `docs/LOGGING.md`). To investigate a report of an
+`internal_error`, find that log line by time and request id. Before this existed,
+Fastify's default handler sent `error.message` to the client, so a Postgres error could
+leak a constraint name or part of a row.
