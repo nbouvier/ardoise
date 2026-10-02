@@ -8,12 +8,20 @@ import {
   type TransactionsListScope,
 } from '@splitcount/shared';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { DropdownMenu } from '@/components/dropdown-menu';
 import { Icon } from '@/components/icon';
 import { MeTag } from '@/components/me-tag';
 import { Pill } from '@/components/pill';
@@ -113,8 +121,6 @@ export function StatisticsScreen({
     () => new Set(members.map((member) => member.id)),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
-  const [pickingParticipants, setPickingParticipants] = useState(false);
-  const [pickingSubgroups, setPickingSubgroups] = useState(false);
   // `null` means "no bound" — the breakdown covers every date, same as before
   // this existed. `occurredOn` is `YYYY-MM-DD`, so a plain string comparison
   // is a correct date comparison too.
@@ -203,48 +209,25 @@ export function StatisticsScreen({
     setSelectedMemberIds(ids);
   }
 
-  if (pickingParticipants) {
-    return (
-      <ParticipantsPicker
-        members={members}
-        viewerId={viewerId}
-        selectedMemberIds={selectedMemberIds}
-        onToggle={toggleMember}
-        onSetAll={setAllMembers}
-        onDone={() => setPickingParticipants(false)}
-      />
-    );
-  }
-
-  if (pickingSubgroups) {
-    return (
-      <SubgroupsPicker
-        subgroups={subgroups}
-        selectedSubgroupIds={selectedSubgroupIds}
-        onToggle={toggleSubgroup}
-        onSetAll={setAllSubgroups}
-        onDone={() => setPickingSubgroups(false)}
-      />
-    );
-  }
-
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
 
   return (
     <View style={styles.panel}>
       <View style={styles.optionsSection}>
-        <SegmentedSwitch
-          options={[
-            { key: 'spending', label: typeLabels.spending },
-            { key: 'income', label: typeLabels.income },
-          ]}
-          value={type}
-          onChange={changeType}
-        />
-        <MoreOptionsToggle
-          open={moreOptionsOpen}
-          onPress={() => setMoreOptionsOpen((open) => !open)}
-        />
+        <View style={styles.switchRow}>
+          <SegmentedSwitch
+            options={[
+              { key: 'spending', label: typeLabels.spending },
+              { key: 'income', label: typeLabels.income },
+            ]}
+            value={type}
+            onChange={changeType}
+          />
+          <FiltersToggle
+            open={moreOptionsOpen}
+            onPress={() => setMoreOptionsOpen((open) => !open)}
+          />
+        </View>
         <Collapsible open={moreOptionsOpen}>
           <View style={styles.toggles}>
             <View style={styles.fieldsRow}>
@@ -254,8 +237,10 @@ export function StatisticsScreen({
                 </ThemedText>
                 <ParticipantsField
                   members={members}
+                  viewerId={viewerId}
                   selectedMemberIds={selectedMemberIds}
-                  onPress={() => setPickingParticipants(true)}
+                  onToggle={toggleMember}
+                  onSetAll={setAllMembers}
                 />
               </View>
               {hasSubgroups ? (
@@ -266,7 +251,8 @@ export function StatisticsScreen({
                   <SubgroupsField
                     subgroups={subgroups}
                     selectedSubgroupIds={selectedSubgroupIds}
-                    onPress={() => setPickingSubgroups(true)}
+                    onToggle={toggleSubgroup}
+                    onSetAll={setAllSubgroups}
                   />
                 </View>
               ) : null}
@@ -374,35 +360,22 @@ export function StatisticsScreen({
 }
 
 /**
- * "More options", its chevron turning from pointing right to pointing down —
- * `collapse`'s own path is already a down-chevron, so closed is just that
- * rotated back a quarter turn (`docs/specs/group-statistics.md`).
+ * The "Filters" icon at the right end of the type switch's row: opens and
+ * closes the participants / sub-groups / date fields. Icon only; open, it is
+ * tinted brand so it reads as "on" (`docs/specs/group-statistics.md`).
  */
-function MoreOptionsToggle({ open, onPress }: { open: boolean; onPress: () => void }) {
+function FiltersToggle({ open, onPress }: { open: boolean; onPress: () => void }) {
   const theme = useTheme();
-  const progress = useSharedValue(open ? 1 : 0);
-
-  useEffect(() => {
-    progress.set(withTiming(open ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }));
-  }, [open, progress]);
-
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${-90 + progress.get() * 90}deg` }],
-  }));
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
-      accessibilityLabel="More options"
+      accessibilityLabel="Filters"
+      hitSlop={6}
       onPress={onPress}
-      style={styles.moreOptionsButton}>
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        More options
-      </ThemedText>
-      <Animated.View style={chevronStyle}>
-        <Icon name="collapse" size={16} color={theme.textSecondary} />
-      </Animated.View>
+      style={[styles.filtersButton, open && { backgroundColor: theme.primarySoft }]}>
+      <Icon name="filters" size={20} color={open ? theme.primary : theme.textSecondary} />
     </Pressable>
   );
 }
@@ -489,22 +462,87 @@ function participantsLabel(
     .join(', ');
 }
 
+/**
+ * Who the breakdown counts: a labelled, fixed-size pill naming the pick,
+ * opening a multi-select dropdown (`DropdownMenu`) — the presets first, then a
+ * checkbox row per member — rather than a row of chips that would not fit a
+ * group of any size (`docs/specs/group-statistics.md`). The menu stays open
+ * while ticking, so several members can be picked in one go; tapping outside
+ * closes it.
+ */
 function ParticipantsField({
   members,
+  viewerId,
   selectedMemberIds,
-  onPress,
+  onToggle,
+  onSetAll,
 }: {
   members: readonly GroupMember[];
+  viewerId: string | null;
   selectedMemberIds: ReadonlySet<string>;
+  onToggle: (memberId: string) => void;
+  onSetAll: (ids: ReadonlySet<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = participantsLabel(members, selectedMemberIds);
+  const preset = selectionPreset(members, selectedMemberIds, viewerId);
+
+  return (
+    <>
+      <SelectField
+        accessibilityLabel={`Participants: ${label}`}
+        label={label}
+        onPress={() => setOpen(true)}
+      />
+      <DropdownMenu visible={open} onClose={() => setOpen(false)}>
+        <View style={styles.menuPresets}>
+          <Pill
+            label="Everybody"
+            selected={preset === 'all'}
+            onPress={() => onSetAll(new Set(members.map((member) => member.id)))}
+          />
+          {viewerId ? (
+            <Pill
+              label="Only you"
+              selected={preset === 'onlyMe'}
+              onPress={() => onSetAll(new Set([viewerId]))}
+            />
+          ) : null}
+          <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
+        </View>
+
+        <MenuOptions>
+          {members.map((member) => (
+            <ParticipantOption
+              key={member.id}
+              member={member}
+              isViewer={member.id === viewerId}
+              selected={selectedMemberIds.has(member.id)}
+              onPress={() => onToggle(member.id)}
+            />
+          ))}
+        </MenuOptions>
+      </DropdownMenu>
+    </>
+  );
+}
+
+/** The pill-shaped field that opens a dropdown — the same shape for both selectors. */
+function SelectField({
+  accessibilityLabel,
+  label,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  label: string;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const label = participantsLabel(members, selectedMemberIds);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Participants: ${label}`}
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       style={({ pressed }) => [
         styles.selectField,
@@ -515,6 +553,20 @@ function ParticipantsField({
       </ThemedText>
       <Icon name="collapse" size={16} color={theme.textSecondary} />
     </Pressable>
+  );
+}
+
+/**
+ * A dropdown's option rows. Scrolls past half the screen's height, so a long
+ * list stays inside the menu — and the menu inside the screen.
+ */
+function MenuOptions({ children }: { children: ReactNode }) {
+  const { height } = useWindowDimensions();
+
+  return (
+    <ScrollView style={{ maxHeight: height * 0.5 }} contentContainerStyle={styles.menuList}>
+      {children}
+    </ScrollView>
   );
 }
 
@@ -534,40 +586,6 @@ function subgroupsLabel(
     .join(', ');
 }
 
-/**
- * Same field shape as the participants selector — a labelled, fixed-size
- * pill naming which of the group's direct sub-groups count towards the
- * breakdown. Tapping it opens the same kind of full-page picker
- * (`docs/specs/group-statistics.md`).
- */
-function SubgroupsField({
-  subgroups,
-  selectedSubgroupIds,
-  onPress,
-}: {
-  subgroups: readonly SubgroupSummary[];
-  selectedSubgroupIds: ReadonlySet<string>;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  const label = subgroupsLabel(subgroups, selectedSubgroupIds);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Subgroups: ${label}`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.selectField,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-      ]}>
-      <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
-        {label}
-      </ThemedText>
-      <Icon name="collapse" size={16} color={theme.textSecondary} />
-    </Pressable>
-  );
-}
 
 type SelectionPreset = 'all' | 'onlyMe' | 'none' | null;
 
@@ -586,64 +604,6 @@ function selectionPreset(
     return 'onlyMe';
   }
   return null;
-}
-
-/**
- * Who the breakdown counts, picked on a page of its own — swapped in for the
- * chart the way "+ Invite" swaps in `InvitePanel` on the Manage tab — rather
- * than a row of chips that would not fit a group of any size
- * (`docs/specs/group-statistics.md`).
- */
-function ParticipantsPicker({
-  members,
-  viewerId,
-  selectedMemberIds,
-  onToggle,
-  onSetAll,
-  onDone,
-}: {
-  members: readonly GroupMember[];
-  viewerId: string | null;
-  selectedMemberIds: ReadonlySet<string>;
-  onToggle: (memberId: string) => void;
-  onSetAll: (ids: ReadonlySet<string>) => void;
-  onDone: () => void;
-}) {
-  const preset = selectionPreset(members, selectedMemberIds, viewerId);
-
-  return (
-    <View style={styles.pickerPanel}>
-      <View style={styles.pickerPresets}>
-        <Pill
-          label="Everybody"
-          selected={preset === 'all'}
-          onPress={() => onSetAll(new Set(members.map((member) => member.id)))}
-        />
-        {viewerId ? (
-          <Pill
-            label="Only you"
-            selected={preset === 'onlyMe'}
-            onPress={() => onSetAll(new Set([viewerId]))}
-          />
-        ) : null}
-        <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
-      </View>
-
-      <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerList}>
-        {members.map((member) => (
-          <ParticipantOption
-            key={member.id}
-            member={member}
-            isViewer={member.id === viewerId}
-            selected={selectedMemberIds.has(member.id)}
-            onPress={() => onToggle(member.id)}
-          />
-        ))}
-      </ScrollView>
-
-      <Button label="Done" variant="secondary" onPress={onDone} />
-    </View>
-  );
 }
 
 function ParticipantOption({
@@ -703,49 +663,54 @@ function subgroupsPreset(
 }
 
 /**
- * Which of the group's direct sub-groups count, picked on a page of its own
- * the same way `ParticipantsPicker` is — checking one in includes it and
- * everything nested under it (`docs/specs/group-statistics.md`).
+ * Which of the group's direct sub-groups count — the same field and dropdown
+ * as `ParticipantsField`, with "All" / "None" for presets. Ticking one
+ * includes it and everything nested under it (`docs/specs/group-statistics.md`).
  */
-function SubgroupsPicker({
+function SubgroupsField({
   subgroups,
   selectedSubgroupIds,
   onToggle,
   onSetAll,
-  onDone,
 }: {
   subgroups: readonly SubgroupSummary[];
   selectedSubgroupIds: ReadonlySet<string>;
   onToggle: (subgroupId: string) => void;
   onSetAll: (ids: ReadonlySet<string>) => void;
-  onDone: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const label = subgroupsLabel(subgroups, selectedSubgroupIds);
   const preset = subgroupsPreset(subgroups, selectedSubgroupIds);
 
   return (
-    <View style={styles.pickerPanel}>
-      <View style={styles.pickerPresets}>
-        <Pill
-          label="All"
-          selected={preset === 'all'}
-          onPress={() => onSetAll(new Set(subgroups.map((subgroup) => subgroup.id)))}
-        />
-        <Pill label="None" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
-      </View>
-
-      <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerList}>
-        {subgroups.map((subgroup) => (
-          <SubgroupOption
-            key={subgroup.id}
-            subgroup={subgroup}
-            selected={selectedSubgroupIds.has(subgroup.id)}
-            onPress={() => onToggle(subgroup.id)}
+    <>
+      <SelectField
+        accessibilityLabel={`Subgroups: ${label}`}
+        label={label}
+        onPress={() => setOpen(true)}
+      />
+      <DropdownMenu visible={open} onClose={() => setOpen(false)}>
+        <View style={styles.menuPresets}>
+          <Pill
+            label="All"
+            selected={preset === 'all'}
+            onPress={() => onSetAll(new Set(subgroups.map((subgroup) => subgroup.id)))}
           />
-        ))}
-      </ScrollView>
+          <Pill label="None" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
+        </View>
 
-      <Button label="Done" variant="secondary" onPress={onDone} />
-    </View>
+        <MenuOptions>
+          {subgroups.map((subgroup) => (
+            <SubgroupOption
+              key={subgroup.id}
+              subgroup={subgroup}
+              selected={selectedSubgroupIds.has(subgroup.id)}
+              onPress={() => onToggle(subgroup.id)}
+            />
+          ))}
+        </MenuOptions>
+      </DropdownMenu>
+    </>
   );
 }
 
@@ -872,12 +837,19 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingBottom: Spacing.three,
   },
-  moreOptionsButton: {
-    flexDirection: 'row',
+  // The switch stays centred; the filters button is pinned to the right edge
+  // out of the flow, so it never pushes the switch off-centre.
+  switchRow: {
+    justifyContent: 'center',
+  },
+  filtersButton: {
+    position: 'absolute',
+    right: 0,
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: Spacing.one,
-    paddingVertical: Spacing.one,
+    justifyContent: 'center',
   },
   collapsible: {
     overflow: 'hidden',
@@ -919,22 +891,17 @@ const styles = StyleSheet.create({
   selectFieldLabel: {
     flexShrink: 1,
   },
-  pickerPanel: {
-    flex: 1,
-    gap: Spacing.three,
-    paddingBottom: Spacing.six,
-  },
-  pickerPresets: {
+  // The presets, at the head of a dropdown, inset like its option rows.
+  menuPresets: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingTop: Spacing.one,
+    paddingBottom: Spacing.one,
   },
-  pickerScroll: {
-    flex: 1,
-  },
-  pickerList: {
+  menuList: {
     gap: Spacing.one,
-    paddingBottom: Spacing.four,
   },
   participantRow: {
     flexDirection: 'row',

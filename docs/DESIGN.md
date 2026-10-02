@@ -562,12 +562,12 @@ The plan is **derived from the balances the group screen already loaded**
 
 The group's Statistics tab. A real **Spending / Income switch** — the two words drawn
 inside a sliding brand-filled thumb, not a pair of look-alike pills — sits on its own line
-at the very top, centred, always visible. Below it, a **"More options"** disclosure:
-small text plus a chevron, closed by default. The chevron points right closed and rotates
-to point down open; both that rotation and the section's own reveal beneath it are
-animated (`react-native-reanimated`), not instant.
+at the very top, centred, always visible. At the far right of that same line, out of the
+flow so the switch stays centred, a small **"Filters"** icon button (sliders glyph, no
+text) discloses the fields below, closed by default; open, it is tinted brand over a soft
+wash. The section's reveal beneath is animated (`react-native-reanimated`), not instant.
 
-Inside "More options": a row of **labelled fields**, each a small uppercase caption above
+Inside the filters: a row of **labelled fields**, each a small uppercase caption above
 a fixed-size pill that never changes size with its content — a **participants field**
 (showing "Everybody" or the selected members' first names, ellipsized rather than
 wrapped) and, only for a group with any sub-groups, a **subgroups field** beside it
@@ -583,8 +583,8 @@ instead. When some sub-group in scope is left out because the viewer has not joi
 small line under the fields says how many rather than presenting a partial sum as the
 whole tree's.
 
-The line that used to separate the controls from the chart is gone — "More options"
-itself is that boundary now — but the padding it gave the chart stays, carried by the
+The line that used to separate the controls from the chart is gone — the switch
+row itself is that boundary now — but the padding it gave the chart stays, carried by the
 section above instead of a divider between the two.
 
 The short form, ellipsis and calendar icon are fully controlled on Android, which also
@@ -593,21 +593,21 @@ draws its own label once a date is set — a platform limit, not a missed detail
 the field still shows "Any" first the same way, but a set bound falls back to the OS's own
 formatting.
 
-Tapping either field **swaps the tab's own content for a picker of its own**, exactly the
-way "+ Invite" swaps the Manage tab's content for `InvitePanel` — not a sheet stacked on
-top. Each picker gives its "Done" button room to breathe below the last row rather than
-sitting flush against the screen's bottom edge, the same way `InvitePanel`'s own does.
+Tapping either field **opens a multi-select dropdown** (`DropdownMenu`, the rule above) over
+the chart — the chart is not swapped out. The menu stays open while ticking, so several
+rows can be picked in one go, and closes on a tap outside it or Android's back; there is
+no "Done" button. Its option list scrolls past half the screen's height.
 
-- The **participants picker**: presets **"Everybody", "Only you", "Nobody"**, in that
+- The **participants dropdown**: presets **"Everybody", "Only you", "Nobody"**, in that
   order, each reading as selected when the current selection already matches it, above a
-  scrolling list — one row per member, an avatar, a checkbox, and the viewer's own row
-  marked **"Me"** the same tag shape as "Owner" in Manage. Everyone is checked by default.
-- The **subgroups picker**: presets **"All"** and **"None"**, above a scrolling list — one
-  row per *direct* sub-group, just its name and a checkbox. Every direct sub-group is
-  checked by default; checking one back in brings its own nested sub-groups along with it,
-  since there is no separate row for a grandchild.
+  list — one row per member, an avatar, a checkbox, and the viewer's own row marked
+  **"Me"** the same tag shape as "Owner" in Manage. Everyone is checked by default.
+- The **subgroups dropdown**: presets **"All"** and **"None"**, above a list — one row per
+  *direct* sub-group, just its name and a checkbox. Every direct sub-group is checked by
+  default; checking one back in brings its own nested sub-groups along with it, since
+  there is no separate row for a grandchild.
 
-Either picker applies each row or preset immediately; "Done" only returns to the chart.
+Each row or preset applies immediately, and the field behind the menu updates with it.
 
 Under that a **donut chart** (220pt, 44pt ring — thick enough that a small share reads as
 an arc, not a line), one arc per category in that category's own colour, and a legend card

@@ -21,7 +21,8 @@ export type IconName =
   | 'friends'
   | 'account'
   | 'calendar'
-  | 'pencil';
+  | 'pencil'
+  | 'filters';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
@@ -64,6 +65,8 @@ const paths: Record<IconName, string> = {
     'M4 5h16a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 10h18M8 3v4M16 3v4',
   // A pencil at rest on its tip: the shaft, and the point it writes from.
   pencil: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z',
+  // Three sliders with their knobs at different heights: narrow what is shown.
+  filters: 'M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1M15 5v4M9 10v4M17 15v4',
 };
 
 export interface IconProps {

@@ -245,12 +245,13 @@ its own.
 - [ ] The participants field names who is selected — "Everybody", or the selected
       members' first names — and opens its picker when tapped; the subgroups field names
       which branches are selected the same way — "All", "None", or the selected
-      sub-groups' own names — and opens its own picker when tapped.
+      sub-groups' own names — and opens its own dropdown when tapped.
 - [ ] The participants field and, when shown, the subgroups field are each labelled by a
       small caption above them and stay the same size regardless of their content.
-- [ ] The participants picker's presets read, in order, "Everybody", "Only you", "Nobody".
-      The subgroups picker's presets read "All" and "None".
-- [ ] Neither picker's "Done" button sits flush against the bottom edge of the screen.
+- [ ] The participants dropdown's presets read, in order, "Everybody", "Only you", "Nobody".
+      The subgroups dropdown's presets read "All" and "None".
+- [ ] Either dropdown stays open while rows are ticked, leaves the chart in place behind it,
+      and closes on a tap outside it or Android's back button, keeping the picks.
 - [ ] Setting a "from" date recomputes the breakdown over transactions on or after it;
       setting a "to" date, on or before it; setting both narrows to that inclusive range.
 - [ ] Clearing a date bound restores every transaction on that side, recomputing the
@@ -260,10 +261,10 @@ its own.
 - [ ] A "from" later than a "to" is accepted as entered, not corrected or rejected, and
       shows the same empty-range state as any other range with nothing in it.
 - [ ] The type switch is visible without opening anything; participants, sub-groups and
-      the date range are hidden behind "More options", closed by default, and revealed by
-      tapping it.
-- [ ] "More options" states whether it is open or closed in a way assistive technology can
-      read, independent of its own visual chevron.
+      the date range are hidden behind a "Filters" icon button, closed by default, and
+      revealed by tapping it.
+- [ ] The "Filters" button states whether it is open or closed in a way assistive technology
+      can read, independent of its own tint.
 - [ ] Once a date bound is set, the field itself stays the same size; a "Clear" text next
       to that field's own label — not an icon inside the field — removes it.
 
@@ -306,7 +307,7 @@ its own.
 - **The date fields' own short-form wording** is worth asserting directly, the same way
   the participants field's wording is: a set bound reads a short month name, not the long
   one the rest of the app uses for a single transaction's date.
-- **"More options" starting closed** means every test that reaches the participants
+- **The filters starting closed** means every test that reaches the participants
   field, the subgroups field, or either date bound must open it first — a test that
   doesn't would only be passing because the collapsed section stays mounted (for a smooth
   reveal) rather than because a real person could reach it collapsed.
@@ -363,12 +364,12 @@ its own.
   brand-filled thumb, not two pills that could as well be read as independent options.
   It is the one control that always matters, so it is never hidden behind a disclosure.
 - **Everything that narrows the breakdown — participants, sub-groups, the date range —
-  sits behind a "More options" disclosure**, closed by default, right under the type
-  switch: a small text label with a chevron that reads right when closed and rotates to
-  point down when open, both the chevron's turn and the section's own reveal animated
-  rather than snapping. Collapsed by default because narrowing is the exception, not the
+  sits behind a "Filters" icon button**, closed by default: a small sliders icon at the
+  far right of the type switch's own row (no text), tinted brand over a soft wash when
+  open, the switch itself staying centred; the section's reveal is animated rather than
+  snapping. Collapsed by default because narrowing is the exception, not the
   common case — most visits want the whole group's total.
-- **Inside "More options"**, top to bottom: a row of one or two **labelled fields** (a
+- **Inside the filters**, top to bottom: a row of one or two **labelled fields** (a
   **participants field** and, only for a group with sub-groups, a **subgroups field**
   beside it, each a small caption above a fixed-size pill so neither shifts size as its
   content changes), then a second row of two more labelled fields, **From** and **To**,
@@ -386,26 +387,26 @@ its own.
   bound is set, **the field itself never shrinks to make room for a clear control** — a
   "Clear" text appears at the far right of that field's own caption instead, beside
   "From" or "To", the way a form field's own inline error or hint sits next to its label
-  rather than inside the field. Neither field is a full-page picker — a single date is a
+  rather than inside the field. Neither field is a dropdown list — a single date is a
   small enough choice that the native picker is the whole interaction, unlike
   participants and sub-groups.
 - **The divider that used to separate the controls from the chart is gone** now that
-  "More options" itself marks that boundary, but the padding it gave the chart is kept —
+  the switch row itself marks that boundary, but the padding it gave the chart is kept —
   removing the line did not mean removing the breathing room.
-- Tapping either the participants or the subgroups field **swaps the tab's content for a
-  picker of its own**, the same way
-  "+ Invite" swaps the Manage tab's content for its own page: quick presets, then one row
-  per item with a checkbox, confirmed by a "Done" button that returns to the chart. Not a
-  sheet stacked over the chart: the picker *is* the tab's content while it is open.
-  - **The participants picker**: presets in order **"Everybody", "Only you", "Nobody"**,
+- Tapping either the participants or the subgroups field **opens a multi-select dropdown
+  over the chart** (the app's dropdown popup, `docs/DESIGN.md`): quick presets, then one
+  row per item with a checkbox. The menu stays open while rows are ticked, so several can
+  be picked in one go, and closes on a tap outside it or Android's back button — there is
+  no "Done" button, and the chart stays in place behind it.
+  - **The participants dropdown**: presets in order **"Everybody", "Only you", "Nobody"**,
     then one row per member with an avatar and a checkbox, the viewer's own row marked
     "Me" the same way "Owner" marks a member in Manage (`docs/specs/balances.md`) —
     everyone checked by default.
-  - **The subgroups picker**: presets **"All"** and **"None"**, then one row per direct
+  - **The subgroups dropdown**: presets **"All"** and **"None"**, then one row per direct
     sub-group with just its name and a checkbox — every direct sub-group checked by
     default, checking one in bringing along everything nested under it.
-  - Either picker's changes take effect as each row or preset is tapped; the "Done" button
-    only returns to the chart, it does not itself apply anything.
+  - A change takes effect as each row or preset is tapped, and the field behind the menu
+    names the new selection straight away. A long list scrolls inside the menu.
 - The **ring is noticeably thick** relative to its diameter, so a category holding a small
   share still reads as a real arc rather than a thin line.
 - The chart must be **legible without colour alone**: every legend row carries the
@@ -422,13 +423,11 @@ its own.
   money formatting.
 - The **subgroups field** described above is present only for a group that has sub-groups.
   When the current selection excludes at least one unjoined sub-group, a single small line
-  inside "More options", under the fields, states how many — worded plainly ("n
+  inside the filters, under the fields, states how many — worded plainly ("n
   sub-groups you're not in aren't included"), not as a warning. This can happen even with
   every direct sub-group selected, since a nested one further down could still be one the
   viewer has not joined.
-  - A "Done" button that ends up flush against the bottom edge of the screen is a defect,
-    not a style choice — both pickers give it room to breathe below the last row, the same
-    way `InvitePanel`'s own "Done" already does.
+
 
 ## Observability
 
