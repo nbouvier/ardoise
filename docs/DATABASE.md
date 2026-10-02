@@ -20,7 +20,7 @@ it and never sees connection strings or credentials.
 
 | Variable          | Purpose                                                             |
 | ----------------- | ------------------------------------------------------------------ |
-| `DATABASE_URL`    | Postgres connection string. Unset → embedded PGlite. Required in production. |
+| `DATABASE_URL`    | Postgres connection string. Unset → embedded PGlite. **Required when `NODE_ENV=production`**: the server refuses to start without it (an in-memory database would lose every write at the next restart). |
 | `PGLITE_DATA_DIR` | Directory for the PGlite data in development (default `.pglite`, git-ignored). |
 
 ## Migrations

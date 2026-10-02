@@ -34,7 +34,8 @@ apps/
     src/
       index.ts     Process entrypoint: builds the app and starts listening.
       app.ts       buildApp() factory — a configured Fastify instance, no listener.
-      config/      Typed environment loading (env.ts, Zod-validated).
+      config/      Typed environment loading (env.ts, Zod-validated, with the
+                   production-only requirements — see docs/DEPLOYMENT.md).
       routes/      Cross-cutting HTTP routes (health). Feature routes live under features/.
       features/    One folder per product feature: routes, services, repository, tests.
       db/          Drizzle schema (schema.ts), client/driver selection (client.ts),
@@ -177,6 +178,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | The plan is greedy (exact matches first, then largest debtor against largest creditor), documented as "at most n−1 payments", never as minimal | A provably minimal set of payments is NP-hard; the product needs a short, deterministic, explainable plan, and a claim of optimality would be false |
 | 2026-09-12 | A suggested payment carries no source group, and positions carry no per-group breakdown | Both were artefacts of the sub-tree scope. Within one group there is nothing to attribute: the group's own transaction list is the breakdown |
 | 2026-09-12 | Recording a suggested payment reuses `POST /groups/:groupId/transactions` with `kind: "transfer"` and a client-side `TransactionPrefill`, with no settlement record and no "mark as settled" | The ledger stays the single source of truth: a settled flag nothing backs would drift from the transactions that define every balance in this product |
+| 2026-10-02 | `NODE_ENV` defaults to `production`; in production `DATABASE_URL` and a non-local `PUBLIC_BASE_URL` are mandatory, checked at startup in `config/env.ts` | The previous defaults (development, optional database, localhost base URL) let a misconfigured deployment start cleanly on an in-memory PGlite and lose all data at restart, or mail out invitation links pointing at `localhost`. A server that cannot be configured correctly now fails fast, with every problem listed. Local development already needs a `.env` (Google client IDs, JWT secret), which sets `NODE_ENV=development` |
 
 ## Open items
 
