@@ -74,6 +74,32 @@ are only as good as `TRUST_PROXY`), in three tiers, implemented in
 - The tests set the three limits very high in `vitest.config.ts` (every test shares one
   address); `rate-limit.test.ts` passes small ones through `buildApp({ rateLimit })`.
 
+## Shutdown
+
+On `SIGTERM` (deploy, scale-down, container stop) or `SIGINT` (Ctrl+C), the server drains
+instead of dying mid-request (`apps/server/src/shutdown.ts`):
+
+1. Stops accepting connections; a request arriving on an already-open keep-alive connection
+   gets a `503` with `Connection: close`, so the load balancer retries it elsewhere.
+2. Lets in-flight requests finish and closes each connection as soon as it goes idle.
+3. Closes the database pool, then exits `0`.
+
+If that has not finished after `SHUTDOWN_TIMEOUT_SECONDS` (default 25), it logs
+`server.shutdown.timeout` and exits `1` — a deploy that hangs is worse than one request cut
+short. **Keep this below the platform's kill timeout** (30s by default on Kubernetes and ECS)
+so that log line, not a `SIGKILL`, explains the exit. The events are listed in
+`docs/LOGGING.md`.
+
+The server cannot know when the load balancer stops routing to it: the usual arrangement
+is for the platform to deregister the instance first (or wait a few seconds before sending
+`SIGTERM`), so that nothing new arrives while it drains. A health probe that does reach a
+draining server (on a connection that is still open) gets the same `503`, which is what
+tells the balancer to stop sending traffic.
+
+Signals are a POSIX concept: on Windows `SIGTERM` terminates the process outright, so this
+path only runs on the Linux host / container the API is deployed to. The behaviour is
+covered by tests that stand in for `process` (`shutdown.test.ts`).
+
 ## Security headers
 
 Set on **every** response, errors and `429`s included, by `@fastify/helmet`

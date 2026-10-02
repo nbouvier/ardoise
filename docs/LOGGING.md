@@ -34,6 +34,16 @@ serializer copies every property, and a Postgres error's `detail` holds the offe
 value. The `message` is kept — it is what makes the failure diagnosable — but some
 driver messages quote the value that was rejected, so treat these logs as sensitive.
 
+### Lifecycle events
+
+| Event                       | Level | Fields                    | Meaning |
+| --------------------------- | ----- | ------------------------- | ------- |
+| `server.start.failed`       | error | —                         | The process could not start (bad port, migration failure…); it exits 1. |
+| `server.shutdown.started`   | info  | `signal`, `timeoutMs`     | SIGTERM / SIGINT received: the server stopped accepting connections and is draining. |
+| `server.shutdown.completed` | info  | —                         | Drained and database closed; the process exits 0. |
+| `server.shutdown.timeout`   | error | `timeoutMs`               | In-flight requests did not finish in time; the process exits 1 anyway. Something is holding a request open. |
+| `server.shutdown.failed`    | error | error                     | Closing raised (database pool, hook); the process exits 1. |
+
 ### Group and transaction events
 
 | Event                        | Level | Fields                                                    | Meaning |

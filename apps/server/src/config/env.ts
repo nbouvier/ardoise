@@ -133,6 +133,11 @@ const envSchema = z.object({
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(30),
   RATE_LIMIT_PUBLIC_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  /**
+   * How long a shutdown (SIGTERM / SIGINT) waits for in-flight requests before
+   * exiting anyway. Keep it below the platform's kill timeout (30s on most).
+   */
+  SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().positive().default(25),
   /** App Store listing, shown on the invitation landing page. Unset until published. */
   APP_STORE_URL: z.url().optional(),
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
