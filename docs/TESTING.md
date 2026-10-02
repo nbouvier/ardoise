@@ -90,6 +90,15 @@ concern.
 
 ## Current state
 
+- `apps/server` hardening (`docs/DEPLOYMENT.md`): `src/config/env.test.ts` (production
+  startup requirements, `TRUST_PROXY` parsing — `loadEnv` takes a plain object, no
+  process env to fiddle with); `src/http/` — `error-handler` (no internal message ever
+  reaches the client, the cause is logged), `trust-proxy` (`request.ip` under each
+  setting, via `app.inject({ remoteAddress })`), `rate-limit` (tiers, shared budgets,
+  per-address isolation, `/health` exempt — with small limits passed through
+  `createTestApp({ rateLimit })`) and `security-headers`; `src/shutdown.test.ts` drives
+  `installGracefulShutdown` with a fake `process` against a really listening app, so
+  it covers draining, the timeout and the idle-connection sweep over real sockets.
 - `apps/server`: `GET /health` integration test; database migration tests
   (`src/db/client.test.ts`); auth unit + integration tests (`src/features/auth/`);
   invitation code and landing-page tests (`src/features/invites/`), including HTML
@@ -189,6 +198,14 @@ concern.
   viewer).
 
 ### Gotchas
+
+- Rate limits are set to a million per minute in `apps/server/vitest.config.ts`: every
+  test shares one client address. A test that needs to hit a limit passes small ones
+  (`createTestApp({ rateLimit: { authPerMinute: 3 } })`) and uses a fresh
+  `remoteAddress` per test so counters never carry over.
+- Hooks (`onClose`, …) must be added before `app.listen()`; a test that listens on a real
+  port and needs one takes it through a `configure` callback. An `onClose` hook that
+  throws *synchronously* escapes as an uncaught exception — reject asynchronously.
 
 - When faking `useAuth`, return **the same object on every render**. The real context
   memoises its value, so `authorizedFetch` is stable; a fresh `jest.fn()` per render makes
