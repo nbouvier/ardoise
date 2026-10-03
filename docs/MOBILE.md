@@ -126,6 +126,28 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 | `EXPO_PUBLIC_API_BASE_URL`        | SplitCount API base URL (default `http://localhost:3000`). |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
+| `APP_ID`                          | Application id: the Android package and the iOS bundle identifier (not `EXPO_PUBLIC_`: read at build time only). Optional — defaults to the id in `app.json`. See "Application id". |
+
+### Application id
+
+The id (`com.…`) is **permanent once the app is published** — on the Play Store it can
+never change — and the product name is not final, so it is a single value: `APP_ID`, read by
+`app.config.ts`, applied to both the Android `package` and the iOS `bundleIdentifier`.
+`app.json` still carries the Expo template's `com.anonymous.splitcount`, which is fine to
+develop under but must never ship.
+
+- It must look like `com.example.app` (dot-separated, each part starting with a letter,
+  letters/digits/underscores only); anything else fails the config with a message.
+- An EAS build whose profile name starts with `production` **fails** while the id is still
+  the `com.anonymous…` placeholder. Set `APP_ID` (an EAS environment variable, see "Builds
+  and updates (EAS)") before the first production build.
+- Changing it later, before publishing, is cheap: change `APP_ID`, create the matching
+  Google OAuth **Android** client (it is matched by package name + signing SHA-1), rebuild.
+  Native projects must be regenerated (`npm run prebuild --workspace @splitcount/mobile`),
+  and an installed build under the old id is a different app.
+- The tests are in `src/lib/app-config.test.ts`. They live under `src/` deliberately:
+  next to `app.config.ts`, `@jest/globals` becomes the first file `tsc` sees and flips which
+  global `fetch` typing wins, breaking the typecheck of every test that mocks `fetch`.
 
 Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
 `src/features/auth/google.ts`).
@@ -169,7 +191,7 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
   `npm run prebuild --workspace @splitcount/mobile`, then rebuild (`npm run
   mobile:android` / `mobile:ios`).
 - **Android**: the OAuth Android client is matched by package name
-  (`com.anonymous.splitcount`) + the signing certificate SHA-1. For a debug build, add the
+  (`APP_ID`, `com.anonymous.splitcount` until it is chosen) + the signing certificate SHA-1. For a debug build, add the
   debug keystore SHA-1 (`cd android && ./gradlew signingReport`) to the Google Cloud
   Android client, or sign-in fails silently.
 - Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual
