@@ -1,8 +1,8 @@
 name: CI
 
 # Every pull request and every merge to main runs the checks and builds the
-# server image. A merge to main also publishes the image (and, once added,
-# deploys it to staging). See docs/OPERATIONS.md.
+# server image. A merge to main also publishes the image and deploys it to
+# staging. See docs/OPERATIONS.md.
 
 on:
   push:
@@ -92,7 +92,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      # The exact image to deploy: immutable `sha-` tag, plus its digest.
+      # The image to deploy, by its `sha-` tag (one per commit, never moved).
       reference: ${{ steps.reference.outputs.value }}
     env:
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -132,3 +132,40 @@ jobs:
 
       - id: reference
         run: echo "value=${{ steps.name.outputs.image }}:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    # Staging runs every merge to main. Production is promoted by hand from here:
+    # .github/workflows/deploy-production.yml.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.PUBLIC_URL }}
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/deploy
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          directory: /opt/splitcount/staging
+          image: ${{ needs.image.outputs.reference }}
+          registry-user: ${{ github.actor }}
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Through the proxy and TLS, as a client sees it: the container being healthy
+      # does not prove the domain, the certificate and the proxy are.
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+            "${{ vars.PUBLIC_URL }}/health"

@@ -107,6 +107,52 @@ refused connections (the old one drains its requests first, the new one must pas
 healthcheck). Acceptable for now; zero-downtime would need two replicas behind the proxy,
 which the per-instance rate limits (`docs/DEPLOYMENT.md`) already tolerate.
 
+## Automated deploys (GitHub Actions)
+
+```
+pull request ──► verify (lint, typecheck, tests, deploy scripts, compose files)
+                 └─► image (built, not published)
+
+merge to main ─► verify ─► image (published: ghcr.io/<owner>/splitcount-server:sha-<7>)
+                             └─► deploy-staging ─► smoke test (GET <staging>/health)
+
+"Deploy to production" (Actions tab, by hand, image_tag = sha-<7>)
+                  └─► [reviewer approves] ─► deploy ─► smoke test
+```
+
+`.github/workflows/ci.yml` does the first two; `deploy-production.yml` the last. Both
+deploy through the composite action `.github/actions/deploy`: it copies the scripts to
+the environment's directory, logs the machine into GHCR with the job's own short-lived
+token (and logs out again), and runs `deploy.sh` over SSH.
+
+Production never builds: you give it the `sha-…` tag shown in the `image` job of a
+staging run that you have looked at, and it deploys those exact bytes. The tag is
+checked (`sha-` + hex) before use. The scripts it syncs are those of the branch you run
+the workflow on — main, normally.
+
+### GitHub configuration (once)
+
+In the repository's **Settings → Environments**, create `staging` and `production`. In
+each:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| secret | `DEPLOY_HOST` | the machine's address |
+| secret | `DEPLOY_USER` | the deploy user |
+| secret | `DEPLOY_SSH_KEY` | the private key of a key pair generated for the CI only (`ssh-keygen -t ed25519 -N ''`); the public half goes in that user's `authorized_keys` |
+| secret | `DEPLOY_KNOWN_HOSTS` | the machine's host key: run `ssh-keyscan -t ed25519 <host>` **from a network you trust and compare the fingerprint with the provider's console** — the deploy refuses any other key, which is what protects the registry token |
+| variable | `PUBLIC_URL` | `https://<that environment's domain>` (no trailing slash), used for the smoke test |
+
+On `production`, enable **Required reviewers** (yourself is fine for a solo project: it
+turns a stray click into a deliberate second one) and restrict it to the `main` branch.
+On the repository: after the first image is published, check the package
+(`splitcount-server`, under the account's Packages) is **private** and linked to the
+repository, so the job token can read it. Use repository-level secrets instead if
+staging and production share a machine and you prefer one copy.
+
+If a secret or variable is missing the job fails at the SSH step with an empty host:
+that is the symptom of an unconfigured environment.
+
 ## Rolling back
 
 ```bash
