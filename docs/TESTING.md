@@ -114,8 +114,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   - `src/shutdown.test.ts` drives `installGracefulShutdown` with a fake `process` against
     a really listening app: draining, the timeout and the idle-connection sweep over real
     sockets.
-  - Database: migrations (`src/db/client.test.ts`) and the pool error handler
-    (`src/db/pool.test.ts`).
+  - Database: migrations (`src/db/client.test.ts`, including the pending-migration count
+    the production startup check relies on), the pool error handler
+    (`src/db/pool.test.ts`) and the three plugin modes `apply` / `verify` / `skip`
+    (`src/db/plugin.test.ts`).
 - **Auth** (`src/features/auth/`): unit and integration tests.
 - **Invitations** (`src/features/invites/`): invitation codes and the landing page,
   including HTML escaping of both an inviter name and a group name.

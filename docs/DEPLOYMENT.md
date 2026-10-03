@@ -28,6 +28,35 @@ When `NODE_ENV=production`, on top of the variables that are always required
 Outside production they stay optional (`DATABASE_URL` → embedded PGlite,
 `PUBLIC_BASE_URL` → `http://localhost:3000`, `TRUST_PROXY` → `false`).
 
+## Database migrations
+
+In production the server **does not migrate**. Migrations run once per release, in a
+separate step, and every server instance only checks the result:
+
+1. **Release step** — `node apps/server/dist/scripts/migrate.js` (from the repo,
+   `npm run migrate:deploy --workspace @splitcount/server`). Needs only `DATABASE_URL`
+   (`config/migrate-env.ts`) — not the Google IDs or the JWT secret. Idempotent; exits
+   `1` and logs `db.migrate.failed` on any error, which must stop the release before
+   any new container starts.
+2. **Startup check** — with `NODE_ENV=production` the database plugin runs
+   `assertMigrated`: if any migration in `apps/server/drizzle` is newer than the latest
+   one recorded in the database, the process exits `1` (`server.start.failed`: "N database
+   migration(s) pending"). A new image started against an un-migrated database therefore
+   fails loudly instead of at the first query that touches a missing column. A database
+   that is *ahead* of the image (a rollback) is accepted.
+
+Why not at startup: with several instances starting together — a rolling deploy, a
+restart policy — each would try to apply the same migrations concurrently.
+
+Consequence for writing migrations: they run **before** the new version starts, so for a
+moment the previous version serves traffic on the new schema, and a rollback leaves old
+code on it. Make every migration backward compatible (see `docs/DATABASE.md`). The step
+must run **once at a time**: the deploy scripts serialise it; do not run it by hand while
+a deploy is in progress.
+
+Outside production (`development`, `test`) the server still migrates on startup, which
+is what a developer with an embedded PGlite expects.
+
 ## Behind a load balancer
 
 The server is meant to run behind a load balancer. The balancer opens the connection to the

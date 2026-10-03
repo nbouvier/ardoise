@@ -34,13 +34,23 @@ npm run migrate --workspace @splitcount/server            # apply pending migrat
 ```
 
 - `migrate:generate` only reads the schema file; no database needed.
-- The running server applies pending migrations automatically on startup (PGlite in
-  development; against `DATABASE_URL` in production, where `npm run migrate` in the deploy
-  step is preferred so a failed migration blocks the release).
+- **Development and tests:** the server applies pending migrations itself on startup
+  (embedded PGlite, or whatever `DATABASE_URL` points at when `NODE_ENV=development`).
+- **Production:** the server never migrates. A release step runs
+  `npm run migrate:deploy --workspace @splitcount/server` (`node dist/scripts/migrate.js`
+  from the built output, which has no drizzle-kit) **once** per release, and the server
+  refuses to start while a migration is pending. See "Database migrations" in
+  `docs/DEPLOYMENT.md`. `npm run migrate` (drizzle-kit) stays for a developer's machine.
 - Tests apply migrations to a fresh in-memory PGlite per test file
   (`src/test/database.ts`).
 - All schema changes go through drizzle-kit migrations — never ad-hoc edits.
 - Each migration should leave the schema valid and be reversible where practical.
+- **Write migrations so the previous release still works on the new schema** (expand
+  first, contract in a later release): add a column nullable or with a default rather
+  than renaming or dropping one in the same step. The release step migrates *before*
+  the new containers start, so the old version serves traffic against the new schema for
+  a moment, and a rollback to the previous image runs old code on the new schema. A
+  breaking change is split in two releases.
 
 ## Schema
 
