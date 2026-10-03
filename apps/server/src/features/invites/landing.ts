@@ -11,6 +11,8 @@
  * recipient installs the app and types the code in.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { InvitePreview } from '@splitcount/shared';
 
 /** The mobile app's URL scheme. Must match `scheme` in `apps/mobile/app.json`. */
@@ -114,6 +116,32 @@ export function describeInvite(preview: InvitePreview): { headline: string; blur
     headline: `${preview.inviter.name} invited you to SplitCount`,
     blurb: 'Share expenses with the people you split with.',
   };
+}
+
+/**
+ * The Content-Security-Policy to send with one of these pages: nothing is
+ * allowed except the page's own inline `<style>` and `<script>`, pinned by
+ * hash, so even markup that slipped past `escapeHtml` could not run a script
+ * or load anything. The script varies with the invitation code, hence a hash
+ * per response rather than a constant.
+ */
+export function contentSecurityPolicyFor(html: string): string {
+  const hashes = (blocks: RegExp): string =>
+    [...html.matchAll(blocks)]
+      .map((match) => `'sha256-${createHash('sha256').update(match[1] ?? '').digest('base64')}'`)
+      .join(' ');
+
+  const directives = ["default-src 'none'"];
+  const style = hashes(/<style>([\s\S]*?)<\/style>/g);
+  const script = hashes(/<script>([\s\S]*?)<\/script>/g);
+  if (style) {
+    directives.push(`style-src ${style}`);
+  }
+  if (script) {
+    directives.push(`script-src ${script}`);
+  }
+  directives.push("base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'");
+  return directives.join('; ');
 }
 
 /** The page shown for a usable invitation. */

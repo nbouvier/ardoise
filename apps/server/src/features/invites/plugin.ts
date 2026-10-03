@@ -7,7 +7,12 @@ import { env } from '../../config/env.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { InviteError, type InviteErrorReason } from './codes.js';
-import { renderExpiredPage, renderInvitePage, type LandingLinks } from './landing.js';
+import {
+  contentSecurityPolicyFor,
+  renderExpiredPage,
+  renderInvitePage,
+  type LandingLinks,
+} from './landing.js';
 import { createInvitesRepository } from './repository.js';
 import { createInvitesService, type InvitesService } from './service.js';
 
@@ -78,10 +83,16 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
       // The code is a capability: never let a proxy or the browser keep it.
       reply.header('cache-control', 'no-store').type('text/html; charset=utf-8');
 
+      const sendPage = (html: string, status = 200) =>
+        reply
+          .code(status)
+          .header('content-security-policy', contentSecurityPolicyFor(html))
+          .send(html);
+
       if (params.success) {
         try {
           const preview = await invites.preview(params.data.code);
-          return reply.send(
+          return sendPage(
             renderInvitePage({ preview, code: params.data.code, ...storeLinks }),
           );
         } catch (error) {
@@ -91,7 +102,7 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
         }
       }
 
-      return reply.code(404).send(renderExpiredPage(storeLinks));
+      return sendPage(renderExpiredPage(storeLinks), 404);
     });
 
     // Unauthenticated on purpose: the recipient must see who is inviting them,

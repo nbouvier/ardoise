@@ -171,6 +171,7 @@ deep linking.
 
 For local testing, `PUBLIC_BASE_URL` on the server must be an address the device can reach
 — with a USB device, keep `http://localhost:3000` and run `adb reverse tcp:3000 tcp:3000`.
+In production it is required and must not be a local address (`docs/DEPLOYMENT.md`).
 
 ## Google sign-in
 

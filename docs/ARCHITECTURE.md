@@ -32,9 +32,14 @@ apps/
     metro.config.js  Monorepo-aware Metro config (watches the repo root).
   server/          Node / Fastify / TypeScript API.
     src/
-      index.ts     Process entrypoint: builds the app and starts listening.
+      index.ts     Process entrypoint: builds the app, starts listening, installs
+                   graceful shutdown.
+      shutdown.ts  SIGTERM / SIGINT handling: drain, close the database, exit.
       app.ts       buildApp() factory — a configured Fastify instance, no listener.
-      config/      Typed environment loading (env.ts, Zod-validated).
+      config/      Typed environment loading (env.ts, Zod-validated, with the
+                   production-only requirements — see docs/DEPLOYMENT.md).
+      http/        Cross-cutting HTTP behaviour wired in app.ts: error handler, rate
+                   limiting, security headers.
       routes/      Cross-cutting HTTP routes (health). Feature routes live under features/.
       features/    One folder per product feature: routes, services, repository, tests.
       db/          Drizzle schema (schema.ts), client/driver selection (client.ts),
@@ -177,6 +182,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | The plan is greedy (exact matches first, then largest debtor against largest creditor), documented as "at most n−1 payments", never as minimal | A provably minimal set of payments is NP-hard; the product needs a short, deterministic, explainable plan, and a claim of optimality would be false |
 | 2026-09-12 | A suggested payment carries no source group, and positions carry no per-group breakdown | Both were artefacts of the sub-tree scope. Within one group there is nothing to attribute: the group's own transaction list is the breakdown |
 | 2026-09-12 | Recording a suggested payment reuses `POST /groups/:groupId/transactions` with `kind: "transfer"` and a client-side `TransactionPrefill`, with no settlement record and no "mark as settled" | The ledger stays the single source of truth: a settled flag nothing backs would drift from the transactions that define every balance in this product |
+| 2026-10-02 | `NODE_ENV` defaults to `production`; in production `DATABASE_URL` and a non-local `PUBLIC_BASE_URL` are mandatory, checked at startup in `config/env.ts` | The previous defaults (development, optional database, localhost base URL) let a misconfigured deployment start cleanly on an in-memory PGlite and lose all data at restart, or mail out invitation links pointing at `localhost`. A server that cannot be configured correctly now fails fast, with every problem listed. Local development already needs a `.env` (Google client IDs, JWT secret), which sets `NODE_ENV=development` |
+| 2026-10-02 | `TRUST_PROXY` is required in production; the client address (`request.ip`) is the one rate limits and logs key on | Behind a load balancer, `false` collapses every client onto the balancer's address and `true` lets clients forge theirs. The operator must state which one applies |
+| 2026-10-02 | Rate limiting uses `@fastify/rate-limit` with in-process counters, in three tiers (global / `/auth/*` / public invitation routes) assigned by route in `http/rate-limit.ts` | Protects sign-in and invitation-code guessing, the only unauthenticated surface, without new infrastructure. Per-instance counters are accepted: the limits guard against abuse, not billing. A shared (Redis) store is the upgrade if exact limits across instances ever matter |
+| 2026-10-02 | Security headers come from `@fastify/helmet` with a deny-everything default CSP; the invitation landing page overrides it per response with a hash-pinned CSP (`contentSecurityPolicyFor`), not `unsafe-inline` | The API serves JSON only, so nothing needs to be allowed. The landing page is the one HTML document and needs its inline style and script; its script embeds the invitation code, so the hash is computed per response. `Referrer-Policy: no-referrer` also keeps the code (in the URL) from leaking to the store links |
+| 2026-10-02 | Graceful shutdown on SIGTERM / SIGINT (`shutdown.ts`): `app.close()` plus a periodic sweep of idle keep-alive connections, bounded by `SHUTDOWN_TIMEOUT_SECONDS` | A deploy or scale-down must not cut requests in half. Fastify alone leaves a connection that was busy at shutdown open for its 72s keep-alive timeout — found by the tests, and exactly what a load balancer's connections look like — so the sweep is what makes the drain finish in milliseconds instead of hitting the timeout |
+| 2026-10-02 | The Postgres pool has an `error` listener that logs `db.pool.error` (`db/client.ts`) | `pg.Pool` emits `error` for a broken idle connection; unhandled, that crashes the process on any database restart or failover |
 
 ## Open items
 

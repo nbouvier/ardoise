@@ -34,6 +34,12 @@ export const dbPlugin = fp<DbPluginOptions>(
       (await createDatabase({
         databaseUrl: opts.databaseUrl,
         pgliteDataDir: opts.pgliteDataDir,
+        onPoolError: (error) =>
+          // Plain object, not the error itself: see `http.request.failed` in docs/LOGGING.md.
+          app.log.error(
+            { error: { type: error.name, message: error.message, code: (error as { code?: string }).code } },
+            'db.pool.error',
+          ),
       }));
 
     if (opts.runMigrations ?? true) {

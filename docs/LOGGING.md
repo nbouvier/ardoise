@@ -22,6 +22,34 @@ current setup and state.
 
 Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
+### HTTP events
+
+| Event                   | Level | Fields                       | Meaning |
+| ----------------------- | ----- | ---------------------------- | ------- |
+| `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. The only place the cause is visible. |
+| `http.request.rejected` | info  | `status`, `code`             | A request was refused before or outside a route's own handling: malformed JSON, body too large, unsupported content type, or `429` for rate limiting (`status: 429`). A burst of 429s from one address is how abuse of `/auth/*` shows up. |
+
+The error is logged as a plain `error` object rather than under pino's `err` key: that
+serializer copies every property, and a Postgres error's `detail` holds the offending
+value. The `message` is kept — it is what makes the failure diagnosable — but some
+driver messages quote the value that was rejected, so treat these logs as sensitive.
+
+### Database events
+
+| Event           | Level | Fields                               | Meaning |
+| --------------- | ----- | ------------------------------------ | ------- |
+| `db.pool.error` | error | `error` (`type`, `message`, `code`)  | The Postgres pool reported an error on an idle connection (database restart, failover, network drop). The broken connection is discarded and replaced on the next query; queries that were running on it fail and surface as `http.request.failed`. Repeated occurrences mean the database is unstable. |
+
+### Lifecycle events
+
+| Event                       | Level | Fields                    | Meaning |
+| --------------------------- | ----- | ------------------------- | ------- |
+| `server.start.failed`       | error | —                         | The process could not start (bad port, migration failure…); it exits 1. |
+| `server.shutdown.started`   | info  | `signal`, `timeoutMs`     | SIGTERM / SIGINT received: the server stopped accepting connections and is draining. |
+| `server.shutdown.completed` | info  | —                         | Drained and database closed; the process exits 0. |
+| `server.shutdown.timeout`   | error | `timeoutMs`               | In-flight requests did not finish in time; the process exits 1 anyway. Something is holding a request open. |
+| `server.shutdown.failed`    | error | error                     | Closing raised (database pool, hook); the process exits 1. |
+
 ### Group and transaction events
 
 | Event                        | Level | Fields                                                    | Meaning |

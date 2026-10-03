@@ -27,6 +27,22 @@ export interface CreateDatabaseOptions {
   databaseUrl?: string | undefined;
   /** PGlite data directory. Omit for an in-memory database (tests). */
   pgliteDataDir?: string | undefined;
+  /** Called when the Postgres pool reports an error on an idle connection. */
+  onPoolError?: ((error: Error) => void) | undefined;
+}
+
+/**
+ * `pg.Pool` emits `error` when an idle client's connection breaks — Postgres
+ * restarting, a failover, a network drop. An `EventEmitter` with no `error`
+ * listener turns that into an uncaught exception, so without this the whole
+ * API would crash on a database blip instead of failing the queries that hit it.
+ * The pool discards the broken client itself and connects anew on the next query.
+ */
+export function attachPoolErrorHandler(
+  pool: { on: (event: 'error', listener: (error: Error) => void) => unknown },
+  onError: (error: Error) => void,
+): void {
+  pool.on('error', onError);
 }
 
 const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url));
@@ -37,6 +53,7 @@ export async function createDatabase(
   if (options.databaseUrl) {
     const { default: pg } = await import('pg');
     const pool = new pg.Pool({ connectionString: options.databaseUrl });
+    attachPoolErrorHandler(pool, options.onPoolError ?? (() => undefined));
     return {
       db: drizzleNodePg(pool, { schema }),
       dialect: 'node-postgres',
