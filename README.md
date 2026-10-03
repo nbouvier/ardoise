@@ -57,8 +57,9 @@ npm test
 - `apps/mobile/` — Expo client (`src/app/` routes, `src/features/`, `src/components/`, `src/lib/`)
 - `apps/server/` — Fastify API (`src/app.ts` factory, `src/features/`, `src/config/`, `drizzle/` migrations)
 - `packages/shared/` — API contract and shared arithmetic (Zod schemas, splits, statistics)
-- `.github/` — CI workflows
-- `docs/` — living documentation (architecture, product, API, mobile, testing, database, logging, design, deployment)
+- `deploy/` — what runs on the server machine: Compose stack, deploy and backup scripts, Caddy proxy
+- `.github/` — CI, deployment and mobile release workflows
+- `docs/` — living documentation (architecture, product, API, mobile, testing, database, logging, design, deployment, operations)
 - `docs/specs/` — feature specifications, the source of truth for established behavior
 - `docs/guidelines/` — authoring conventions for specs, testing, observability and secrets
 
