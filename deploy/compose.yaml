@@ -25,7 +25,10 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready --username splitcount --dbname splitcount']
+      # Over TCP on purpose: on a fresh volume the image first runs a temporary
+      # socket-only server for its init, then restarts. A socket check would call
+      # that one healthy and the first deploy's backup would hit the restart.
+      test: ['CMD-SHELL', 'pg_isready --host 127.0.0.1 --username splitcount --dbname splitcount']
       interval: 5s
       timeout: 5s
       retries: 10

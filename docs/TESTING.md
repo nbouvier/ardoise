@@ -106,8 +106,28 @@ rebuilds `packages/shared`; a stale `dist/` is the usual cause of a local-only p
 `deploy/test.sh` checks the order and the failure handling of `deploy.sh` / `backup.sh`
 against a fake `docker` (migration fails → the new server never starts; unhealthy server
 → previous image restored; a second concurrent deploy is refused; backup retention). It
-needs no Docker and runs in a second. What no test here covers: the compose stack
+needs no Docker and runs in a second. What no automated test covers: the compose stack
 actually running, and the image under real traffic — that is what staging is for.
+
+### Rehearsing a deploy locally
+
+Before changing `Dockerfile`, `deploy/compose.yaml` or the deploy scripts, run the real
+`deploy.sh` once with Docker Desktop — it found a first-deploy race the fake `docker`
+cannot see (the Postgres healthcheck, now over TCP). In a throwaway directory holding
+copies of the five `deploy/` scripts and `compose.yaml`, and a `.env` with
+`DEPLOY_ENV=localtest` and a free `SERVER_PORT`:
+
+```bash
+docker run -d --rm --name sc-registry -p 127.0.0.1:5000:5000 registry:2
+docker build -t localhost:5000/splitcount-server:sha-0000001 .   # from the repo root
+docker push localhost:5000/splitcount-server:sha-0000001
+./deploy.sh localhost:5000/splitcount-server:sha-0000001          # in the throwaway dir
+```
+
+Worth checking: a first deploy on an empty volume, a second deploy (`pending: 0`), an
+image whose `CMD` exits (rollback to the previous tag, `release.env` unchanged), and the
+restore of `docs/OPERATIONS.md`. Clean up with `./compose.sh down -v` and
+`docker stop sc-registry`. Last rehearsed 2026-10-03: all four passed.
 
 ## Current state
 
