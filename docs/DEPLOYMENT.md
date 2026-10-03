@@ -7,6 +7,30 @@ Not covered here: the hosting platform itself (not chosen yet — see the open i
 `docs/ARCHITECTURE.md`), database migrations (`docs/DATABASE.md`), logging
 (`docs/LOGGING.md`).
 
+## Container image
+
+The server ships as one image, built from the repository root with the `Dockerfile`:
+
+```bash
+docker build -t splitcount-server .
+```
+
+- Three stages: production dependencies (`npm ci --omit=dev`), build (`npm run build`:
+  `@splitcount/shared`, then the server), and a runtime that copies only
+  `node_modules`, the two `dist/` folders and `apps/server/drizzle` (the migrations).
+  Base image `node:26-slim` — keep `NODE_VERSION` in step with `.nvmrc`.
+- Runs as the unprivileged `node` user, `NODE_ENV=production` (so the production checks
+  below apply), listens on `PORT` (3000).
+- `HEALTHCHECK` calls `GET /health`, which answers `503` while the server drains.
+- **One image, two commands.** The default command starts the server; the release step
+  uses the same image: `node apps/server/dist/scripts/migrate.js`. The schema the
+  migrations produce is therefore always the one the code was built for.
+- `.dockerignore` is an allowlist (root manifests, `apps/server`, `packages/shared`, the
+  mobile *manifest*): the mobile app, `docs/`, `.git` and every `.env*` stay out of the
+  build context, so a local `.env` can never end up in an image.
+- No secret is baked in: all configuration comes from the environment at run time
+  (`apps/server/.env.example` lists it).
+
 ## Startup configuration
 
 Configuration is read once, at startup, by `apps/server/src/config/env.ts`. An invalid
