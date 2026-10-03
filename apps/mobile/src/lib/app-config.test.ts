@@ -88,4 +88,27 @@ describe('app.config', () => {
       expect(() => resolve()).not.toThrow();
     });
   });
+
+  describe('over-the-air updates', () => {
+    it('points updates at the EAS project once `eas init` wrote its id', () => {
+      const config = resolve({
+        ...base,
+        updates: { fallbackToCacheTimeout: 0 },
+        extra: { eas: { projectId: '00000000-1111-2222-3333-444444444444' } },
+      });
+
+      expect(config.updates).toEqual({
+        fallbackToCacheTimeout: 0,
+        url: 'https://u.expo.dev/00000000-1111-2222-3333-444444444444',
+      });
+      // The project id must survive the `extra` rebuilt by app.config.ts.
+      expect(config.extra?.eas).toEqual({ projectId: '00000000-1111-2222-3333-444444444444' });
+    });
+
+    it('sets no update URL before there is an EAS project', () => {
+      const config = resolve({ ...base, updates: { fallbackToCacheTimeout: 0 } });
+
+      expect(config.updates).toEqual({ fallbackToCacheTimeout: 0 });
+    });
+  });
 });

@@ -48,8 +48,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       '@react-native-google-signin/google-signin',
   );
 
+  // `eas init` writes the project id under `extra.eas` of app.json; the update URL is
+  // derived from it so the id is written once. No project yet, no URL: expo-updates
+  // then stays inert (development builds, local runs).
+  const easProjectId = (config.extra?.eas as { projectId?: string } | undefined)?.projectId;
+
   return {
     ...config,
+    ...(easProjectId
+      ? { updates: { ...config.updates, url: `https://u.expo.dev/${easProjectId}` } }
+      : {}),
     name: config.name ?? 'SplitCount',
     slug: config.slug ?? 'splitcount',
     android: {

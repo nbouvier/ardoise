@@ -212,7 +212,7 @@ See `docs/guidelines/LOGGING.md` for detailed conventions.
 - `android/` and `ios/` are generated (Continuous Native Generation) and git-ignored —
   never edit them; change native config via `app.json` / config plugins, then re-run or
   `npm run prebuild --workspace @splitcount/mobile`.
-- Cloud (EAS) builds are not set up yet.
+- Release builds and over-the-air updates run on EAS (`apps/mobile/eas.json`, `.github/workflows/mobile-release.yml`); see `docs/MOBILE.md`. Android only for now.
 
 `docs/MOBILE.md` is your playground, keep it updated.
 

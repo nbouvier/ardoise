@@ -194,6 +194,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-03 | In production, migrations are a separate release step (`src/scripts/migrate.ts`); the server only verifies the schema is current (`migrations: 'verify'` in `db/plugin.ts`) and refuses to start otherwise | Migrating at startup lets N instances race on the same migrations. One explicit step, run once before the new version starts, also makes a failed migration block the release. The check turns "new image on an old schema" into a startup error instead of runtime 500s. Development and tests keep migrating at startup |
 | 2026-10-03 | The server runs as a Docker image on a VPS: Compose stack per environment (Postgres + server) behind one Caddy proxy; `deploy.sh` backs up, migrates once, starts the server and rolls back if it is unhealthy | The hosting provider is undecided, so nothing may depend on one: a Linux box with Docker is the lowest common denominator. Compose over an orchestrator because there is one machine and one server instance. Scripts (tested against a fake `docker`, `deploy/test.sh`) rather than ad-hoc commands, so the order and the failure handling are reviewed code. Details and limits: `docs/OPERATIONS.md` |
 | 2026-10-03 | Two environments, production and staging, both on the VPS; staging deploys on every merge to `main`, production promotes the image staging already ran | CI must not push straight to production. Promoting the same image means production never runs a build nobody has seen. No demo environment (decided: not worth it) |
+| 2026-10-03 | Mobile releases are built on EAS (profiles `staging`, `production`, `production-apk`), triggered manually from GitHub Actions; JavaScript-only changes ship as EAS Update on a channel per profile, with `runtimeVersion` = the `appVersion` policy. Android only | Reproducible builds with a keystore held by EAS, and fixes without store review. Manual because builds are metered and an update is live in minutes. `appVersion` over `fingerprint` for predictability with the monorepo and local dev builds, at the cost of a rule to remember (bump `version` with any native change) — see `docs/MOBILE.md` |
+| 2026-10-03 | The application id is `APP_ID` (`app.config.ts`), and a `production*` EAS build refuses the template's `com.anonymous…` placeholder | The id is permanent once published and the name is not final: keep it one value, and make publishing under the placeholder impossible rather than unlikely |
 | 2026-10-02 | The Postgres pool has an `error` listener that logs `db.pool.error` (`db/client.ts`) | `pg.Pool` emits `error` for a broken idle connection; unhandled, that crashes the process on any database restart or failover |
 
 ## Open items
@@ -203,8 +205,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   itself is provider-independent (`docs/OPERATIONS.md`).
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
-- Development builds are local (`expo run:*`) for now; EAS Build not set up (see
+- Development builds are local (`expo run:*`). Release builds and OTA updates are
+  configured for EAS but not yet *used*: the Expo account, `eas init`, the EAS environment
+  variables, `EXPO_TOKEN` and the final `APP_ID` are still to be done (checklist in
   `docs/MOBILE.md`).
+- The product name and the application id (`APP_ID`) are not final; the id must be chosen
+  before the first production build, and the Google OAuth Android client created for it.
 - `users` is shared domain data: the auth feature owns the writes, everyone else reads
   through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
   third reader). `friendships` is now in the same position — `groups` reads it directly
