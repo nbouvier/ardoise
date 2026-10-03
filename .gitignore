@@ -42,3 +42,8 @@ google-services.json
 GoogleService-Info.plist
 credentials*.json
 service-account*.json
+
+# Deployment: per-machine state that lives next to the scripts on the server
+deploy/release.env
+deploy/backups/
+deploy/.deploy.lock/

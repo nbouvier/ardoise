@@ -1,0 +1,77 @@
+# One SplitCount environment (production or staging): Postgres + the API server.
+# Run through deploy.sh, never by hand; see docs/OPERATIONS.md.
+#
+# Configuration comes from `.env` next to this file (see .env.example) and from
+# SERVER_IMAGE, which deploy.sh sets for each release.
+
+name: splitcount-${DEPLOY_ENV:?set DEPLOY_ENV in .env}
+
+x-logging: &logging
+  # Container logs live on the VPS disk: cap them so they cannot fill it.
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: splitcount
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: splitcount
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready --username splitcount --dbname splitcount']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No published port: only this stack's own services can reach the database.
+
+  # The release step. Not started with the stack: deploy.sh runs it once per
+  # release (`compose run --rm migrate`), before the new server starts.
+  migrate:
+    image: ${SERVER_IMAGE:?set by deploy.sh}
+    command: ['node', 'apps/server/dist/scripts/migrate.js']
+    restart: 'no'
+    logging: *logging
+    profiles: ['release']
+    environment:
+      DATABASE_URL: postgres://splitcount:${POSTGRES_PASSWORD}@db:5432/splitcount
+    depends_on:
+      db:
+        condition: service_healthy
+
+  server:
+    image: ${SERVER_IMAGE:?set by deploy.sh}
+    restart: unless-stopped
+    logging: *logging
+    init: true
+    # Longer than SHUTDOWN_TIMEOUT_SECONDS (25), so the drain finishes or logs
+    # its own timeout before Docker kills the container.
+    stop_grace_period: 30s
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://splitcount:${POSTGRES_PASSWORD}@db:5432/splitcount
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:?set GOOGLE_CLIENT_IDS in .env}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
+      # One proxy (Caddy, see proxy/) sits between the clients and the server.
+      TRUST_PROXY: '1'
+      # Optional, passed through only when set in .env (an empty value would be
+      # rejected by the server's validation).
+      LOG_LEVEL:
+      PLAY_STORE_URL:
+      APP_STORE_URL:
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Loopback only: the public entry point is the proxy.
+      - '127.0.0.1:${SERVER_PORT:-3000}:3000'
+
+volumes:
+  db-data:

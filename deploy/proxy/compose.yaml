@@ -1,0 +1,33 @@
+# The public entry point of a machine: Caddy terminates HTTPS (certificates are
+# obtained and renewed automatically) and forwards to the API of each environment
+# on loopback. One proxy per machine, whatever the number of environments on it.
+# Set up once, by hand; see docs/OPERATIONS.md.
+#
+#   cd /opt/splitcount/proxy && docker compose up -d
+
+name: splitcount-proxy
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    # Host network: reaches the environments' loopback-only ports, and binds 80/443.
+    network_mode: host
+    environment:
+      PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN:?set PRODUCTION_DOMAIN in .env}
+      STAGING_DOMAIN: ${STAGING_DOMAIN:?set STAGING_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates: losing them means asking for new ones (rate-limited).
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+volumes:
+  caddy-data:
+  caddy-config:

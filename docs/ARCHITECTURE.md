@@ -50,6 +50,11 @@ packages/
                    inferred types) shared by both apps. No React Native, no Node-only
                    APIs, no secrets. Built to dist/ (ESM); consumers resolve types
                    straight from src/ so a rebuild is only needed for runtime/bundling.
+deploy/            Everything that runs on the server machine: the Compose stack of one
+                   environment, the deploy / backup scripts and their tests, and the
+                   Caddy proxy (deploy/proxy/). Synced to the machine by every deploy.
+                   See docs/OPERATIONS.md.
+Dockerfile         The API server's image (built from the repo root).
 docs/              Living documentation (this folder). Transverse, stays at the root.
 docs/specs/        Feature specifications — source of truth for established behavior.
 docs/guidelines/   Authoring conventions.
@@ -187,10 +192,15 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-02 | Security headers come from `@fastify/helmet` with a deny-everything default CSP; the invitation landing page overrides it per response with a hash-pinned CSP (`contentSecurityPolicyFor`), not `unsafe-inline` | The API serves JSON only, so nothing needs to be allowed. The landing page is the one HTML document and needs its inline style and script; its script embeds the invitation code, so the hash is computed per response. `Referrer-Policy: no-referrer` also keeps the code (in the URL) from leaking to the store links |
 | 2026-10-02 | Graceful shutdown on SIGTERM / SIGINT (`shutdown.ts`): `app.close()` plus a periodic sweep of idle keep-alive connections, bounded by `SHUTDOWN_TIMEOUT_SECONDS` | A deploy or scale-down must not cut requests in half. Fastify alone leaves a connection that was busy at shutdown open for its 72s keep-alive timeout — found by the tests, and exactly what a load balancer's connections look like — so the sweep is what makes the drain finish in milliseconds instead of hitting the timeout |
 | 2026-10-03 | In production, migrations are a separate release step (`src/scripts/migrate.ts`); the server only verifies the schema is current (`migrations: 'verify'` in `db/plugin.ts`) and refuses to start otherwise | Migrating at startup lets N instances race on the same migrations. One explicit step, run once before the new version starts, also makes a failed migration block the release. The check turns "new image on an old schema" into a startup error instead of runtime 500s. Development and tests keep migrating at startup |
+| 2026-10-03 | The server runs as a Docker image on a VPS: Compose stack per environment (Postgres + server) behind one Caddy proxy; `deploy.sh` backs up, migrates once, starts the server and rolls back if it is unhealthy | The hosting provider is undecided, so nothing may depend on one: a Linux box with Docker is the lowest common denominator. Compose over an orchestrator because there is one machine and one server instance. Scripts (tested against a fake `docker`, `deploy/test.sh`) rather than ad-hoc commands, so the order and the failure handling are reviewed code. Details and limits: `docs/OPERATIONS.md` |
+| 2026-10-03 | Two environments, production and staging, both on the VPS; staging deploys on every merge to `main`, production promotes the image staging already ran | CI must not push straight to production. Promoting the same image means production never runs a build nobody has seen. No demo environment (decided: not worth it) |
 | 2026-10-02 | The Postgres pool has an `error` listener that logs `db.pool.error` (`db/client.ts`) | `pg.Pool` emits `error` for a broken idle connection; unhandled, that crashes the process on any database restart or failover |
 
 ## Open items
 
+- Hosting provider for the VPS: not chosen (comparison to do). Also open with it: the
+  domain name, an off-machine backup destination, an uptime monitor. The deployment
+  itself is provider-independent (`docs/OPERATIONS.md`).
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see

@@ -3,8 +3,8 @@
 Living document. What the API server (`apps/server`) requires and guarantees when it runs
 in production. Update it whenever a production-relevant setting or behaviour changes.
 
-Not covered here: the hosting platform itself (not chosen yet — see the open items in
-`docs/ARCHITECTURE.md`), database migrations (`docs/DATABASE.md`), logging
+Not covered here: how a release reaches the machine, the machine's layout, backups and
+rollbacks (`docs/OPERATIONS.md`), the schema (`docs/DATABASE.md`), logging
 (`docs/LOGGING.md`).
 
 ## Container image

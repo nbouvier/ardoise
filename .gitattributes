@@ -1,0 +1,5 @@
+# Scripts and images run on Linux: a CRLF checkout (Windows, core.autocrlf) breaks
+# the shebang line.
+*.sh text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
