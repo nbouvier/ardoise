@@ -95,6 +95,19 @@ concern.
 | Job | Runs | Fails the run when |
 | --- | --- | --- |
 | `secrets` | gitleaks (pinned version, checksum verified) over the whole git history, findings redacted | a secret is found in any reachable commit (see `docs/guidelines/SECURITY.md`) |
+| `verify` | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (both apps), `deploy/test.sh`, `docker compose config` on both compose files | any of them fails; or a compose file no longer resolves with `deploy/.env.example` (a required variable missing, a typo) |
+| `image` | builds the server `Dockerfile` (needs `secrets` and `verify`); on `main` also pushes it to GHCR as `sha-<7 chars>` | the image does not build |
+
+These are the same commands as "Validation" in `CLAUDE.md`: a green CI means those pass on
+a clean Linux checkout, with no leftover `dist/` or `.env`. Reproduce a CI failure with
+`npm ci && npm run lint && npm run typecheck && npm test` from the repo root (`npm ci`
+rebuilds `packages/shared`; a stale `dist/` is the usual cause of a local-only pass).
+
+`deploy/test.sh` checks the order and the failure handling of `deploy.sh` / `backup.sh`
+against a fake `docker` (migration fails → the new server never starts; unhealthy server
+→ previous image restored; a second concurrent deploy is refused; backup retention). It
+needs no Docker and runs in a second. What no test here covers: the compose stack
+actually running, and the image under real traffic — that is what staging is for.
 
 ## Current state
 

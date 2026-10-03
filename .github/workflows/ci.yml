@@ -1,6 +1,8 @@
 name: CI
 
-# Every pull request and every push to main. See docs/TESTING.md.
+# Every pull request and every merge to main runs the checks and builds the
+# server image. A merge to main also publishes the image (and, once added,
+# deploys it to staging). See docs/OPERATIONS.md.
 
 on:
   push:
@@ -9,7 +11,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a branch makes the older run pointless; a run on main may be
+  # mid-deploy and must finish.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -39,3 +43,92 @@ jobs:
       # --redact: a finding must not print the secret it found into a public log.
       - name: Scan the history for secrets
         run: ./gitleaks git --redact --verbose --no-banner .
+
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Also builds @splitcount/shared (its `prepare` script), which both apps import.
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Deploy scripts
+        run: deploy/test.sh
+
+      # The compose files cannot be run here, but they can be parsed and resolved:
+      # a missing required variable or a typo fails now, not during a deploy.
+      - name: Compose files
+        env:
+          SERVER_IMAGE: splitcount-server:ci
+        run: |
+          cp deploy/.env.example deploy/.env.ci
+          echo 'LOG_LEVEL=debug' >> deploy/.env.ci
+          docker compose --profile release --env-file deploy/.env.ci -f deploy/compose.yaml config > resolved.yaml
+          # Optional settings reach the container when set in .env…
+          grep -q 'LOG_LEVEL: debug' resolved.yaml
+          # …and are left out when they are not (an empty value fails the server's validation).
+          if grep -q 'PLAY_STORE_URL: ""' resolved.yaml; then
+            echo 'PLAY_STORE_URL must not be passed as an empty string' >&2
+            exit 1
+          fi
+          docker compose --env-file deploy/proxy/.env.example -f deploy/proxy/compose.yaml config --quiet
+
+  image:
+    # A leaked secret blocks the publish, like a failing test.
+    needs: [secrets, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # The exact image to deploy: immutable `sha-` tag, plus its digest.
+      reference: ${{ steps.reference.outputs.value }}
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: name
+        # Registry names are lowercase; the owner may not be.
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/splitcount-server" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: type=sha
+
+      # On a pull request the image is built (a broken Dockerfile fails the PR)
+      # but not published.
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - id: reference
+        run: echo "value=${{ steps.name.outputs.image }}:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
