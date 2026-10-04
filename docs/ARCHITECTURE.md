@@ -9,8 +9,8 @@ SplitCount is an npm-workspaces monorepo with a mobile client and a backend API.
 exclusively through the HTTP API.
 
 The mobile client runs as an **Expo development build** (embeds `expo-dev-client`), not
-the Expo Go sandbox — it relies on native modules Expo Go does not bundle, and Google
-sign-in will need a native SDK. The web target still runs without a native build. See
+the Expo Go sandbox — Google sign-in needs a native SDK Expo Go does not bundle. The web
+target still runs without a native build. See
 `docs/MOBILE.md`.
 
 ## Repository layout
@@ -68,7 +68,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | The auth feature is the first client/server contract. Request and response shapes (`/auth/google`, `/auth/refresh`, `/auth/me`) and the `UserProfile` / `AuthSession` types must stay identical on both sides; duplicating Zod schemas would drift. Added 2026-09-09 with Google sign-in. Extended 2026-09-10 with the friends contract (`FriendSummary`, invitation responses), 2026-09-11 with the groups contract and the generalised invitation contract, and 2026-09-11 with the transactions contract and split arithmetic (`transactions.ts`) — the first *logic*, not just schemas, in the package: the client needs to preview a split live while composing a transaction, and the server needs to compute the same split as the authority, so the rounding algorithm itself has to be one implementation, not two that could drift. Extended 2026-09-12 with `reimbursements.ts` — pure arithmetic again, for the same reason: the plan that clears a group is derived from its balances on the client (`docs/specs/reimbursements.md`), and there must be exactly one definition of it. Now `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
+| `@splitcount/shared`   | Request and response shapes must stay identical on both sides; duplicated Zod schemas would drift. It also holds the arithmetic both sides must agree on to the cent: the split rounding (`transactions.ts` — the client previews a split live, the server recomputes it as the authority), the category breakdown (`statistics.ts`) and the reimbursement plan (`reimbursements.ts`, derived from balances on the client). One implementation each, never two. Modules: `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
 
 ## Client / server contract
 
@@ -108,7 +108,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | Mobile framework   | Expo Router                               |
 | Server framework   | Fastify                                   |
 | Server dev runner  | tsx; build via `tsc`                      |
-| Validation         | Zod (server; shared schemas later)        |
+| Validation         | Zod (server, and the shared API contract) |
 | Mobile tests       | jest-expo                                 |
 | Server tests       | Vitest (`app.inject` integration tests)   |
 | Mobile lint        | `eslint-config-expo` (flat)               |
@@ -176,7 +176,6 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-12 | An invitation link is refused outright (`getOrCreateInvite`/`rotateInvite`) for a `pairRooted` group, rather than checked on acceptance | An invite has no friendship check at all, unlike adding a friend directly — refusing generation is the only thing that actually closes the path, since acceptance already has no gate to add one to |
 | 2026-09-12 | `GroupDetail.pairRooted` is a derived boolean (`ancestors[0] ?? group).kind === 'pair'`), not a second stored flag | Same shape as `readOnly`: one field the client reads to hide "add friends"/"share an invitation link" and skip the friend picker, without re-deriving the ancestor walk itself |
 | 2026-09-12 | Creating a sub-group under a `pairRooted` parent defaults its members to the ceiling's own two people instead of leaving the second friend to join later | The self-join toggle already existed for the general "unjoined sub-group" case, but here it is pure friction: `pairCeiling` already resolves the only two ids such a sub-group could ever hold, so there is nothing to pick and nothing worth deferring |
-
 | 2026-09-12 | Every group balance is scoped to **that group alone**; the sub-tree roll-up built earlier the same day was removed, `viewerBalanceCents` kept with the narrower meaning | The rolled-up figure could not be reconciled with anything on screen: no list inside a group accounted for it. Containment also deletes a whole class of question (whose descendants count, what a visible-but-unjoined one contributes) instead of answering it — `listDescendants` and `reimbursementScope` went with it |
 | 2026-09-12 | The reimbursement plan is derived **client-side** from a group's balances by `planReimbursements` in `packages/shared`; the `GET .../reimbursements` route, its service method and `computeBalancesByGroup` were removed | Once the plan covers one group, it is a pure function of figures the client already has. Deriving it where they are read makes the plan and the balance list structurally incapable of disagreeing, needs no authorization of its own, and matches how the statistics breakdown already works |
 | 2026-09-12 | The plan is greedy (exact matches first, then largest debtor against largest creditor), documented as "at most n−1 payments", never as minimal | A provably minimal set of payments is NP-hard; the product needs a short, deterministic, explainable plan, and a claim of optimality would be false |
@@ -191,16 +190,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 ## Open items
 
-- Backend deployment target: VPS-style host (e.g. AWS EC2). Needs a managed Postgres and
-  `DATABASE_URL` in the environment; `npm run migrate` in the deploy step.
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
 - Development builds are local (`expo run:*`) for now; EAS Build not set up (see
   `docs/MOBILE.md`).
-- Any dev build installed before `@expo/ui`'s `community/datetime-picker` was actually
-  used (2026-09-11) needs regenerating — `npm run prebuild --workspace @splitcount/mobile`
-  then `mobile:android` / `mobile:ios` — before the transaction date field works on
-  device; see `docs/MOBILE.md`.
 - `users` is shared domain data: the auth feature owns the writes, everyone else reads
   through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
   third reader). `friendships` is now in the same position — `groups` reads it directly

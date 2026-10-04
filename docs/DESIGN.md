@@ -874,9 +874,8 @@ page says where it came from.
 
 The whole surface — auth, groups, friends, transactions, statistics, reimbursements,
 invitations — is on this design system; every Expo starter component and asset is gone.
-The sign-in screen has been verified in both themes on the web target; the rest is covered
-by component tests but **has not been validated on a device**, since web sign-in is
-disabled and they cannot be reached there.
+Web sign-in is disabled, so the web target only reaches the sign-in screen: every other
+screen is covered by component tests, and its rendering is checked on a development build.
 
 The app icon, splash glyph, favicon and Android adaptive layers were generated from
 `BrandMark`. They are flat exports of the SVG: if the mark ever changes, regenerate them

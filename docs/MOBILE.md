@@ -9,9 +9,9 @@ Living document for how `apps/mobile` is built and run. Update it when the workf
 
 Reasons:
 
-- The template already depends on native modules that Expo Go does not bundle
-  (`@expo/ui`, `expo-glass-effect`, `react-native-gesture-handler`, `react-native-reanimated`).
-- Planned Google sign-in needs a native Google SDK that is not available in Expo Go.
+- Google sign-in uses a native SDK (`@react-native-google-signin/google-signin`) that
+  Expo Go does not include.
+- The app's own native configuration (config plugins) only applies to a build of its own.
 
 Scanning the QR code with Expo Go therefore fails ("Something went wrong"). Use a
 development build, or the web target.
@@ -52,12 +52,12 @@ Prerequisites:
 
 - **Android**: Android Studio + SDK, `ANDROID_HOME` set, an emulator or a USB device
   with USB debugging.
-- **A JDK 17–23 (21 recommended)**, e.g. `winget install EclipseAdoptium.Temurin.21.JDK`.
-  JDK 24+ breaks the native build (the prefab tool prints a warning on stderr that Gradle
-  treats as a failure). It need not be your default JDK: `npm run mobile:android` runs
+- **A JDK 17–23 (21 recommended)**, for example Eclipse Temurin 21. JDK 24+ breaks the
+  native build (the prefab tool prints a warning on stderr that Gradle treats as a
+  failure). It need not be the default JDK: `npm run mobile:android` runs
   `apps/mobile/scripts/android.js`, which uses `JAVA_HOME` if it is already 17–23, else
   looks for an installed JDK in the usual folders (preferring 21) and sets `JAVA_HOME` and
-  `PATH` for that one build only. Other projects on JDK 25 are unaffected.
+  `PATH` for that one build only, leaving the machine's default JDK alone.
 - **iOS**: macOS, Xcode, CocoaPods.
 
 ```bash
@@ -73,38 +73,24 @@ hand. Change native config through `app.json` / config plugins, then re-run, or
 After the dev build is installed, iterate with just `npm run mobile` (JS reloads live;
 rebuild only when native dependencies or config change).
 
-## Native UI (`@expo/ui`)
+## Native dependencies
 
-`@expo/ui` renders native SwiftUI (iOS) / Jetpack Compose (Android) views from React
-Native. It was a dependency from early on but unused until the transaction date field
-(`src/features/transactions/date-picker-field.tsx`, via `@expo/ui/community/datetime-picker`)
-— the first real use, 2026-09-11.
+Some dependencies contain native code, linked into the dev build when it is built:
+`@expo/ui` (native SwiftUI / Jetpack Compose views — the transaction date field,
+`src/features/transactions/date-picker-field.tsx`), `react-native-svg` (the statistics
+donut, `src/features/statistics/donut-chart.tsx`), the Google sign-in SDK…
 
-**If your installed dev build predates that**, it does not have the native module linked
-and the date field will fail at runtime. Regenerate and reinstall:
-
-```bash
-npm run prebuild --workspace @splitcount/mobile
-npm run mobile:android   # or: npm run mobile:ios
-```
-
-A fresh `expo run:*` (which does this automatically) also works. No `app.json` change was
-needed — `@expo/ui` has no config plugin, only autolinking.
-
-## Charts (`react-native-svg`)
-
-Added 2026-09-12 for the group statistics donut
-(`src/features/statistics/donut-chart.tsx`). It is a **native module**, so a dev build
-installed before that date does not have it linked and the statistics sheet will fail at
-runtime. Same fix as above:
+**After adding or upgrading one**, an installed dev build does not have it and the screen
+that uses it fails at runtime. Regenerate and reinstall:
 
 ```bash
 npm run prebuild --workspace @splitcount/mobile
 npm run mobile:android   # or: npm run mobile:ios
 ```
 
-The web target needs nothing — `react-native-svg` renders real SVG there. No config
-plugin, only autolinking.
+A fresh `expo run:*` does this automatically. Neither `@expo/ui` nor `react-native-svg`
+has a config plugin (autolinking only), and the web target needs no rebuild:
+`react-native-svg` renders real SVG there.
 
 ## App icon and splash
 
@@ -122,8 +108,7 @@ npm run prebuild --workspace @splitcount/mobile
 npm run mobile:android   # or: npm run mobile:ios
 ```
 
-The `ios.icon` key (an Icon Composer `.icon` bundle) was removed along with the Expo
-starter art — iOS now uses the same `icon.png` as everything else.
+iOS uses the same `icon.png` as every other platform.
 
 ## Cloud builds (EAS) — alternative
 
