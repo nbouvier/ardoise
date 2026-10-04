@@ -32,7 +32,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <ThemedView style={styles.centered}>
         <ThemedText type="subtitle">Can’t connect</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.message}>
-          We couldn’t reach SplitCount. Check your connection and try again.
+          We couldn’t reach Ardoise. Check your connection and try again.
         </ThemedText>
         <Button
           label="Try again"

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# SplitCount API server (apps/server). Build from the repository root:
+# Ardoise API server (apps/server). Build from the repository root:
 #
 #   docker build -t ardoise-server .
 #

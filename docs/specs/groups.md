@@ -2,7 +2,7 @@
 
 ## Context
 
-SplitCount can tell who a person is (Google sign-in) and who they are connected to
+Ardoise can tell who a person is (Google sign-in) and who they are connected to
 (friends), but there is still nowhere to put a shared expense. A **group** is that place:
 a named space that a set of people belong to, inside which expenses are recorded, split
 and balanced.
@@ -29,16 +29,16 @@ statistics — that additionally remembers which group it was created under.
 
 ## User story
 
-As a **SplitCount user**, I want to **create a group and put my friends in it**, so that
+As an **Ardoise user**, I want to **create a group and put my friends in it**, so that
 **we have one place to track what we share**.
 
-As a **SplitCount user**, I want to **invite someone into a group with a link**, so that
+As an **Ardoise user**, I want to **invite someone into a group with a link**, so that
 **I can include people who are not in my friend list yet**.
 
-As a **SplitCount user**, I want to **open the shared space I have with a friend by
+As an **Ardoise user**, I want to **open the shared space I have with a friend by
 tapping their name**, so that **a one-to-one tab does not require creating a group**.
 
-As a **SplitCount user**, I want to **archive a group that is over and delete one that
+As an **Ardoise user**, I want to **archive a group that is over and delete one that
 was a mistake**, so that **my list stays about what is still going on**.
 
 As a **member of a group**, I want to **create a sub-group under it for a subset of us**,

@@ -6,7 +6,7 @@ rule here in the same change rather than inventing it locally.
 
 ## Identity
 
-SplitCount is about money shared between people who like each other. The design aims for
+Ardoise is about money shared between people who like each other. The design aims for
 **warm, colourful and calm** — not the neutral grey-on-white of a banking app, and not a
 rainbow either.
 
@@ -29,7 +29,7 @@ people. It is **drawn in SVG from the theme tokens**, not shipped as a bitmap, s
 identity has exactly one source. The app icon, splash glyph, favicon and Android
 adaptive layers are exports of that same mark.
 
-The home screen is where the app introduces itself: "SplitCount" and the tagline. The other tab screens (Groups, Friends,
+The home screen is where the app introduces itself: "Ardoise" and the tagline. The other tab screens (Groups, Friends,
 Account) open with **the page's own name on a single line** — `sectionTitle`, then, smaller
 (`smallBold`, secondary) after a "·", what it counts ("3 groups", "2 friends"; nothing on
 Account) — via `ScreenHeader`. The one page pushed above the tabs, a group's, keeps the
@@ -102,7 +102,7 @@ own.
 
 - Light/dark driven by the OS colour scheme (`userInterfaceStyle: "automatic"`).
 - On web, hydration-safe colour scheme via `apps/mobile/src/hooks/use-color-scheme.web.ts`.
-- React Navigation gets SplitCount's palette too (`navigationTheme` in `app/_layout.tsx`)
+- React Navigation gets Ardoise's palette too (`navigationTheme` in `app/_layout.tsx`)
   — otherwise a pushed screen's header and the gap between screens fall back to its
   grey-on-white defaults and punch a hole in the tinted canvas.
 - Use `ThemedText` / `ThemedView` rather than styling colours directly.
@@ -347,7 +347,7 @@ the animated splash overlay), **error** ("Can't connect" + a secondary "Try agai
 
 ### Sign-in (`src/features/auth/sign-in-screen.tsx`)
 
-Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "SplitCount", a tagline,
+Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "Ardoise", a tagline,
 and a single primary "Continue with Google". Inline `danger` error text on failure (not
 on user cancellation). On web the button is disabled with a "coming soon" caption.
 
@@ -819,7 +819,7 @@ its label and the pill behind the icon — the one place navigation says which a
 is. The **Account tab's icon is the signed-in person's own avatar** (24, initial on a
 medallion when Google gave no picture) inside a thin ring that takes the tab's colour —
 brand when active, invisible otherwise — so it is always clear whose account is open. On web the tab list is a floating pill bar with the
-"SplitCount" wordmark in brand violet.
+"Ardoise" wordmark in brand violet.
 
 The home is the index of that group, so its URL is `/`; the groups list sits at
 `/groups`, which coexists with the `/groups/[id]` detail route outside the tabs.

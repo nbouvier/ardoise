@@ -219,7 +219,7 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 
 | Variable                          | Purpose                                              |
 | --------------------------------- | --------------------------------------------------- |
-| `EXPO_PUBLIC_API_BASE_URL`        | SplitCount API base URL (default `http://localhost:3000`). |
+| `EXPO_PUBLIC_API_BASE_URL`        | Ardoise API base URL (default `http://localhost:3000`). |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
 | `APP_ID`                          | Overrides the application id of `app.json` (not `EXPO_PUBLIC_`: read at build time only). Optional, unset for Ardoise itself — for a fork publishing its own build. See "Application id". |

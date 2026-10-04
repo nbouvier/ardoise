@@ -26,7 +26,7 @@ describe('friends routes', () => {
       invites: {
         now: () => clock,
         inviteTtlSeconds: 3600,
-        publicBaseUrl: 'https://splitcount.test',
+        publicBaseUrl: 'https://ardoise.test',
       },
     }));
   });
@@ -60,7 +60,7 @@ describe('friends routes', () => {
       expect(response.statusCode).toBe(200);
       const { invite } = response.json();
       expect(invite.code).toMatch(/^[A-Za-z0-9_-]{22}$/);
-      expect(invite.url).toBe(`https://splitcount.test/i/${invite.code}`);
+      expect(invite.url).toBe(`https://ardoise.test/i/${invite.code}`);
       expect(invite.expiresAt).toBe(new Date(clock.getTime() + 3600_000).toISOString());
     });
 

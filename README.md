@@ -1,4 +1,4 @@
-# SplitCount
+# Ardoise
 
 An app for sharing expenses among friends, family or flatmates, with nested sub-groups,
 expense tracking, reimbursement plans and advanced statistics.

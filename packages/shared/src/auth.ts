@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Public shape of a signed-in user, safe to expose to the client. Mirrors the
- * minimum Google profile fields SplitCount stores.
+ * minimum Google profile fields Ardoise stores.
  */
 export const userProfileSchema = z.object({
   id: z.uuid(),
@@ -18,7 +18,7 @@ export const googleAuthRequestSchema = z.object({
 });
 export type GoogleAuthRequest = z.infer<typeof googleAuthRequestSchema>;
 
-/** `POST /auth/refresh` request: an opaque SplitCount refresh token. */
+/** `POST /auth/refresh` request: an opaque Ardoise refresh token. */
 export const refreshRequestSchema = z.object({
   refreshToken: z.string().min(1),
 });
@@ -29,7 +29,7 @@ export const logoutRequestSchema = refreshRequestSchema;
 export type LogoutRequest = RefreshRequest;
 
 /**
- * A SplitCount session: a short-lived access token for API calls plus a
+ * An Ardoise session: a short-lived access token for API calls plus a
  * longer-lived, rotating refresh token. `accessTokenExpiresAt` is an ISO 8601
  * timestamp so the client can refresh proactively.
  */

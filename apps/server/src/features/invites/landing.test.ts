@@ -30,7 +30,7 @@ describe('GET /i/:code', () => {
   beforeAll(async () => {
     ({ app, reset } = await createTestContext({
       auth: { googleVerifier: google },
-      invites: { publicBaseUrl: 'https://splitcount.test', storeLinks: {} },
+      invites: { publicBaseUrl: 'https://ardoise.test', storeLinks: {} },
     }));
   });
 

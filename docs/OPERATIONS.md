@@ -10,10 +10,9 @@ provider-independent: anyone can self-host the same stack. The machine can be x8
 ARM64: the CI publishes the image for both (`linux/amd64`, `linux/arm64`) under one tag,
 and Docker pulls the one matching the machine.
 
-**Names.** The product is being renamed Ardoise; the code still says SplitCount. Everything
-named on the machine and in the registry already uses `ardoise` (directories, Compose
-projects and so their volumes, the database role, the image, the backups), because those
-names are fixed by the first deploy: renaming them later means moving data.
+**Names.** Everything named on the machine and in the registry uses `ardoise`
+(directories, Compose projects and so their volumes, the database role, the image, the
+backups). Those names are fixed by the first deploy: renaming them later means moving data.
 
 ## Topology
 

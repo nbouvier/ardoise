@@ -33,7 +33,7 @@ describe('friend balances', () => {
       invites: {
         now: () => clock,
         inviteTtlSeconds: 3600,
-        publicBaseUrl: 'https://splitcount.test',
+        publicBaseUrl: 'https://ardoise.test',
       },
       groups: { now: () => clock },
       transactions: { now: () => clock },

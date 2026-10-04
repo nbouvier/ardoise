@@ -4,7 +4,7 @@ Living document. Update it whenever a structural decision is made or changed.
 
 ## Overview
 
-SplitCount is an npm-workspaces monorepo with a mobile client and a backend API. The
+Ardoise is an npm-workspaces monorepo with a mobile client and a backend API. The
 **server is the source of truth** for all shared data; the mobile client reads and writes
 exclusively through the HTTP API.
 
@@ -83,7 +83,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
   rather than being duplicated.
 - The mobile client treats the server as authoritative: no offline write model yet.
 - Auth: the client sends a Google ID token, the server verifies it and returns a
-  SplitCount session (short access JWT + rotating refresh token). The client stores the
+  Ardoise session (short access JWT + rotating refresh token). The client stores the
   refresh token in the OS secure store and refreshes transparently on 401.
 - The API is JSON everywhere except `GET /i/:code`, the public invitation landing page,
   which is HTML because a browser opens it before the app is involved.
@@ -201,7 +201,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-04 | Off-machine backups go to S3-compatible object storage located in Europe | A dump on the machine's own disk does not survive losing the machine; keeping the copy in Europe keeps users' data there too |
 | 2026-10-04 | The server image is multi-platform (`linux/amd64` + `linux/arm64`), built in CI with QEMU; the Dockerfile compiles on the builder's platform and only installs dependencies on the target's | ARM machines are common and cheap (the reference deployment runs on one), and nothing may depend on the provider's architecture. Emulating only `npm ci` keeps the build fast; installing on the target platform keeps a future native dependency correct |
 | 2026-10-04 | The daily off-site copy is `backup-offsite.sh`: the `backup.sh` dump, sent with restic (official image) to an S3-compatible bucket, retention 30 daily / 12 monthly applied there, reported to a healthchecks.io-style monitor | restic encrypts on the machine (the dumps hold users' financial data) and works with any S3 provider; one dump per snapshot under a fixed name and host keeps the retention and the restore simple. Running it in Docker means nothing more to install. The monitor catches what a script cannot report itself: a cron that stopped, a machine that is gone. Known gap: the machine's key can also delete (see `docs/OPERATIONS.md`, "Known limits") |
-| 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code, workspaces and app texts keep SplitCount for now | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. Renaming the code is a separate, larger change with no such deadline |
+| 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code followed the same day (workspaces `@ardoise/*`, app identifiers, texts) | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. The code has no such deadline but one name everywhere is simpler |
 
 ## Open items
 

@@ -83,7 +83,7 @@ describe('CreateGroupScreen', () => {
 
     await fireEvent.changeText(
       screen.getByLabelText('Invitation code'),
-      'https://api.splitcount.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
+      'https://api.ardoise.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
     );
     await fireEvent.press(screen.getByRole('button', { name: /^join$/i }));
 

@@ -136,7 +136,7 @@ describe('AcceptInviteScreen', () => {
 
     await renderScreen();
 
-    expect(await screen.findByText(/Can’t reach SplitCount/)).toBeTruthy();
+    expect(await screen.findByText(/Can’t reach Ardoise/)).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: /try again/i }));
 

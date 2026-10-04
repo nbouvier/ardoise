@@ -14,7 +14,7 @@ describe('parseInviteUrl', () => {
   });
 
   it('reads a code from the landing-page URL', () => {
-    expect(parseInviteUrl(`https://api.splitcount.test/i/${CODE}`)).toBe(CODE);
+    expect(parseInviteUrl(`https://api.ardoise.test/i/${CODE}`)).toBe(CODE);
   });
 
   it('ignores a query string or fragment', () => {

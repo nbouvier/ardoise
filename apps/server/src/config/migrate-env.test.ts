@@ -4,8 +4,8 @@ import { loadMigrateEnv } from './migrate-env.js';
 
 describe('loadMigrateEnv', () => {
   it('needs only the database URL', () => {
-    expect(loadMigrateEnv({ DATABASE_URL: 'postgres://u:p@db:5432/splitcount' })).toEqual({
-      DATABASE_URL: 'postgres://u:p@db:5432/splitcount',
+    expect(loadMigrateEnv({ DATABASE_URL: 'postgres://u:p@db:5432/ardoise' })).toEqual({
+      DATABASE_URL: 'postgres://u:p@db:5432/ardoise',
       LOG_LEVEL: 'info',
     });
   });

@@ -38,7 +38,7 @@ const PROBLEM_COPY: Record<Problem, { title: string; body: string }> = {
     body: 'Send it to someone else — you can’t add yourself as a friend.',
   },
   offline: {
-    title: 'Can’t reach SplitCount',
+    title: 'Can’t reach Ardoise',
     body: 'Check your connection and try again.',
   },
 };

@@ -5,7 +5,7 @@
 Groups exist but hold no money yet — they are spaces with members only
 (`docs/specs/groups.md`). This feature adds the thing a group is actually for: recording
 who paid what, who it was for, and how it is split, and the running total each member
-owes or is owed as a result. This is the core of SplitCount.
+owes or is owed as a result. This is the core of Ardoise.
 
 **Settle-up — suggesting who should pay whom to clear the balances** — is not part of
 this feature; see Out of scope.

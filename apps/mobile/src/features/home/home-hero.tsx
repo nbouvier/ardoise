@@ -28,7 +28,7 @@ export function HomeHero() {
       <SafeAreaView edges={['top']} style={styles.content}>
         <View style={styles.text}>
           <ThemedText type="title" style={styles.centeredText}>
-            SplitCount
+            Ardoise
           </ThemedText>
           <ThemedText type="sectionTitle" themeColor="textSecondary" style={styles.centeredText}>
             {TAGLINE}

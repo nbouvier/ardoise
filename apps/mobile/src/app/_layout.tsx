@@ -25,7 +25,7 @@ const PAGE_FROM_BOTTOM =
     : ({ presentation: 'transparentModal', animation: 'slide_from_bottom' } as const);
 
 /**
- * React Navigation's own palette, driven by SplitCount's tokens — otherwise the
+ * React Navigation's own palette, driven by Ardoise's tokens — otherwise the
  * stack header and the gap between screens fall back to its grey-on-white
  * defaults and break the tinted canvas everywhere a screen is pushed.
  */

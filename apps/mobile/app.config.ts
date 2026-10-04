@@ -58,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...(easProjectId
       ? { updates: { ...config.updates, url: `https://u.expo.dev/${easProjectId}` } }
       : {}),
-    name: config.name ?? 'SplitCount',
+    name: config.name ?? 'Ardoise',
     slug: config.slug ?? 'ardoise',
     android: {
       ...config.android,

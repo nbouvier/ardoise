@@ -27,7 +27,7 @@ describe('groups routes', () => {
       invites: {
         now: () => clock,
         inviteTtlSeconds: 3600,
-        publicBaseUrl: 'https://splitcount.test',
+        publicBaseUrl: 'https://ardoise.test',
       },
       groups: { now: () => clock },
     }));
@@ -1542,7 +1542,7 @@ describe('groups routes', () => {
       const fromMember = (await groupInvite(grace, group.id)).json().invite;
 
       expect(fromMember.code).toBe(fromOwner.code);
-      expect(fromOwner.url).toBe(`https://splitcount.test/i/${fromOwner.code}`);
+      expect(fromOwner.url).toBe(`https://ardoise.test/i/${fromOwner.code}`);
 
       const rotated = (
         await app.inject({

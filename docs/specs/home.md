@@ -2,7 +2,7 @@
 
 ## Context
 
-Opening SplitCount landed straight on the group list — an alphabetical inventory that
+Opening Ardoise landed straight on the group list — an alphabetical inventory that
 says nothing about what the user was in the middle of. The list is the right place to
 *manage* groups, and the wrong place to *resume*: the two or three spaces someone lives
 in are buried among the ones they joined once, and nothing anywhere answers "what
@@ -32,7 +32,7 @@ the group list**.
 ### Identity
 
 - The top of the screen — about a **quarter of its height** — carries the product's own
-  identity: the app's mark, the name **SplitCount**, and underneath it, smaller, the line
+  identity: the app's mark, the name **Ardoise**, and underneath it, smaller, the line
   **"Settle up, stay friends."**
 - It sits on a decorative background built from the app's own palette
   (`docs/DESIGN.md`) — soft, out-of-focus colour, never an image, never text the user

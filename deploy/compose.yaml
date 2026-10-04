@@ -1,4 +1,4 @@
-# One SplitCount environment (production or staging): Postgres + the API server.
+# One Ardoise environment (production or staging): Postgres + the API server.
 # Run through deploy.sh, never by hand; see docs/OPERATIONS.md.
 #
 # Configuration comes from `.env` next to this file (see .env.example) and from

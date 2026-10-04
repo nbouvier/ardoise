@@ -99,7 +99,7 @@ function storeLinks(links: LandingLinks): string {
   ].filter(Boolean);
 
   if (entries.length === 0) {
-    return `<p>SplitCount is not on the app stores yet.</p>`;
+    return `<p>Ardoise is not on the app stores yet.</p>`;
   }
   return `<p>Don’t have the app?</p><div class="stores">${entries.join('')}</div>`;
 }
@@ -113,7 +113,7 @@ export function describeInvite(preview: InvitePreview): { headline: string; blur
     };
   }
   return {
-    headline: `${preview.inviter.name} invited you to SplitCount`,
+    headline: `${preview.inviter.name} invited you to Ardoise`,
     blurb: 'Share expenses with the people you split with.',
   };
 }
@@ -154,7 +154,7 @@ export function renderInvitePage(input: ValidLandingInput): string {
     headline,
     `<h1>${escapeHtml(headline)}</h1>
 <p>${escapeHtml(blurb)}</p>
-<a class="primary" href="${deepLink}">Open in SplitCount</a>
+<a class="primary" href="${deepLink}">Open in Ardoise</a>
 <p>Already installed the app? Enter this invitation code:</p>
 <code class="code">${code}</code>
 ${storeLinks(input)}

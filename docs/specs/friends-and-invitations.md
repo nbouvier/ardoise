@@ -2,7 +2,7 @@
 
 ## Context
 
-SplitCount knows who a person is (Google sign-in) but nothing about the relationships
+Ardoise knows who a person is (Google sign-in) but nothing about the relationships
 between people. Every planned feature — shared counts, expenses, balances — needs to pick
 participants, and asking for an email address every time is friction expense-sharing apps
 too often impose.
@@ -10,19 +10,19 @@ too often impose.
 This feature introduces a **friend list**, built through **invitation links**. A user
 generates a link, shares it through whatever they already use (copy/paste, SMS, mail,
 WhatsApp, any social app via the OS share sheet), and the person who opens it lands in
-SplitCount, signs in with Google if they do not have an account yet, and the two become
+Ardoise, signs in with Google if they do not have an account yet, and the two become
 friends.
 
 Friendship is the prerequisite; the group/expense features that consume it come later.
 
 ## User story
 
-As a **SplitCount user**, I want to **invite someone to become my friend by sending them a
+As an **Ardoise user**, I want to **invite someone to become my friend by sending them a
 link**, so that **I can add them to a shared count later without knowing or typing their
 account details**.
 
 As a **person receiving such a link**, I want to **open it and end up connected to the
-sender in a few taps, even if I have never used SplitCount**, so that **joining is not a
+sender in a few taps, even if I have never used Ardoise**, so that **joining is not a
 chore**.
 
 ## Expected behavior
@@ -47,8 +47,8 @@ chore**.
 
 Opening the link:
 
-1. **The app is installed** — the link opens SplitCount directly.
-2. **The app is not installed** — a web page explains what SplitCount is, offers the app
+1. **The app is installed** — the link opens Ardoise directly.
+2. **The app is not installed** — a web page explains what Ardoise is, offers the app
    stores when they exist, and shows the **invitation code** so the person can enter it
    manually in the app after installing it.
 
@@ -127,7 +127,7 @@ either Friends list, the group behind their row already exists.
 - [ ] The invite screen shows a link; reopening it shows **the same** link.
 - [ ] Copying puts the link in the clipboard; sharing opens the OS share sheet with the link.
 - [ ] Generating a new link invalidates the previous one: the old link is refused.
-- [ ] Opening a valid link on a device with the app installed opens SplitCount on the
+- [ ] Opening a valid link on a device with the app installed opens Ardoise on the
       confirmation screen showing the inviter's name.
 - [ ] Opening a valid link while signed out shows the sign-in screen, and the confirmation
       screen appears right after a successful sign-in (including for a brand-new account).
@@ -216,7 +216,7 @@ for *another* user (`FriendSummary`: id, name, avatar) is deliberately narrower 
 - Removing a friend asks for confirmation.
 - Light and dark themes via the existing `ThemedText` / `ThemedView` / `Colors` tokens.
 - The web landing page is intentionally plain: product name, who is inviting, one "Open in
-  SplitCount" button, the code, and store links when they exist.
+  Ardoise" button, the code, and store links when they exist.
 
 ## Observability
 

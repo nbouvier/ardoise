@@ -15,7 +15,7 @@ export function InviteScreen({ embedded }: InviteScreenProps = {}) {
     <InviteShareScreen
       title="Invite a friend"
       blurb={FRIEND_INVITE_BLURB}
-      shareMessage={(url) => `Join me on SplitCount: ${url}`}
+      shareMessage={(url) => `Join me on Ardoise: ${url}`}
       load={fetchInvite}
       rotate={rotateInvite}
       embedded={embedded}

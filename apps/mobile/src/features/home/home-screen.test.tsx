@@ -75,7 +75,7 @@ describe('HomeScreen', () => {
   it('leads with the app’s own identity', async () => {
     await render(<HomeScreen />);
 
-    expect(await screen.findByText('SplitCount')).toBeTruthy();
+    expect(await screen.findByText('Ardoise')).toBeTruthy();
     expect(screen.getByText('Settle up, stay friends.')).toBeTruthy();
   });
 
@@ -228,7 +228,7 @@ describe('HomeScreen', () => {
     expect(await screen.findByText(/couldn’t load your favorites/)).toBeTruthy();
     // The other section, and the identity, are untouched.
     expect(screen.getByText('Groceries')).toBeTruthy();
-    expect(screen.getByText('SplitCount')).toBeTruthy();
+    expect(screen.getByText('Ardoise')).toBeTruthy();
 
     mockFetchFavoriteGroups.mockResolvedValue([trip]);
     await fireEvent.press(screen.getByRole('button', { name: /try again/i }));

@@ -2,7 +2,7 @@
 
 ## Project
 
-SplitCount is an app for sharing expenses among friends, family or flatmates, with nested
+Ardoise is an app for sharing expenses among friends, family or flatmates, with nested
 sub-groups, expense tracking, reimbursement plans and advanced statistics.
 
 The server is the source of truth for all shared data. The mobile client reads and
