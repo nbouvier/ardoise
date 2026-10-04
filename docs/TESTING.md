@@ -112,7 +112,7 @@ actually running, and the image under real traffic — that is what staging is f
 ### Rehearsing a deploy locally
 
 Before changing `Dockerfile`, `deploy/compose.yaml` or the deploy scripts, run the real
-`deploy.sh` once with Docker Desktop — it found a first-deploy race the fake `docker`
+`deploy.sh` once with a local Docker — it found a first-deploy race the fake `docker`
 cannot see (the Postgres healthcheck, now over TCP). In a throwaway directory holding
 copies of the five `deploy/` scripts and `compose.yaml`, and a `.env` with
 `DEPLOY_ENV=localtest` and a free `SERVER_PORT`:
@@ -127,7 +127,7 @@ docker push localhost:5000/splitcount-server:sha-0000001
 Worth checking: a first deploy on an empty volume, a second deploy (`pending: 0`), an
 image whose `CMD` exits (rollback to the previous tag, `release.env` unchanged), and the
 restore of `docs/OPERATIONS.md`. Clean up with `./compose.sh down -v` and
-`docker stop sc-registry`. Last rehearsed 2026-10-03: all four passed.
+`docker stop sc-registry`.
 
 ## Current state
 

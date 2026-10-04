@@ -84,7 +84,7 @@ jobs:
           docker compose --env-file deploy/proxy/.env.example -f deploy/proxy/compose.yaml config --quiet
 
   image:
-    # A leaked secret blocks the publish, like a failing test.
+    # A leaked secret blocks the publish and the staging deploy, like a failing test.
     needs: [secrets, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 20

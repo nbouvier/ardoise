@@ -24,7 +24,7 @@ repository entirely. They are not negotiable.
   (`C:\Users\<name>\…`, `/home/<name>/…`).
 - **Google OAuth client IDs** are not secret in the strict sense (they ship inside the
   app), but they stay out of git like the rest of the configuration: they live in `.env`
-  files.
+  files and EAS environment variables.
 
 `EXPO_PUBLIC_*` variables are bundled into the mobile app and readable by anyone who has
 it: they must never hold a secret (see "Configuration" in `CLAUDE.md`).
@@ -34,7 +34,9 @@ it: they must never hold a secret (see "Configuration" in `CLAUDE.md`).
 | Context | Location | In git |
 | --- | --- | --- |
 | Local development | `apps/server/.env`, `apps/mobile/.env` | never (ignored) |
-| CI | GitHub secrets | never |
+| Server machine | `deploy/.env`, `deploy/proxy/.env`, `chmod 600`, on the machine only | never (ignored) |
+| CI and deploys | GitHub Environments secrets (`DEPLOY_*`, `EXPO_TOKEN`) | never |
+| Mobile builds | EAS environment variables; Android signing keys managed by EAS | never |
 
 Only the `.env.example` files are committed, with placeholders.
 
@@ -75,14 +77,18 @@ Only the `.env.example` files are committed, with placeholders.
 | Secret | Rotation |
 | --- | --- |
 | `AUTH_JWT_SECRET` | New random value in the server `.env`, redeploy (signs every user out) |
-| Google OAuth client | Delete and recreate it in Google Cloud Console, update the `.env` files |
+| `POSTGRES_PASSWORD` | `ALTER USER` in Postgres, then update `deploy/.env` and redeploy |
+| `DEPLOY_SSH_KEY` | Remove the public key from the machine's `authorized_keys`, create a new pair, update the GitHub secret |
+| `EXPO_TOKEN` | Revoke it on expo.dev, create a new one, update the GitHub secret |
+| Google OAuth client | Delete and recreate it in Google Cloud Console, update `.env` files and EAS variables |
 | GitHub token | Revoke it in GitHub settings |
 
 ## Automated checks
 
 - **CI**: the `secrets` job in `.github/workflows/ci.yml` runs
   [gitleaks](https://github.com/gitleaks/gitleaks) over the whole git history on every pull
-  request and every push to `main`.
+  request and every push to `main`. The image is neither published nor deployed when it
+  fails.
 - **GitHub**: secret scanning and push protection must be enabled in the repository
   settings (Settings → Code security). Push protection rejects a push containing a known
   secret format before it is published.

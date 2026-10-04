@@ -5,9 +5,8 @@ a release reaches it, backups, rollbacks. What the *server process* needs (envir
 variables, proxy, shutdown…) is in `docs/DEPLOYMENT.md`; the schema is in
 `docs/DATABASE.md`. The mobile builds are in `docs/MOBILE.md`.
 
-The hosting provider is **not chosen yet**. Everything here assumes one Linux VPS with
-Docker (Compose v2) and is provider-independent; a provider comparison is a separate
-piece of work.
+Everything here assumes one Linux machine (a VPS) with Docker (Compose v2) and is
+provider-independent: anyone can self-host the same stack.
 
 ## Topology
 
@@ -110,11 +109,11 @@ which the per-instance rate limits (`docs/DEPLOYMENT.md`) already tolerate.
 ## Automated deploys (GitHub Actions)
 
 ```
-pull request ──► verify (lint, typecheck, tests, deploy scripts, compose files)
+pull request ──► secrets (gitleaks) + verify (lint, typecheck, tests, deploy scripts, compose files)
                  └─► image (built, not published)
 
-merge to main ─► verify ─► image (published: ghcr.io/<owner>/splitcount-server:sha-<7>)
-                             └─► deploy-staging ─► smoke test (GET <staging>/health)
+merge to main ─► secrets + verify ─► image (published: ghcr.io/<owner>/splitcount-server:sha-<7>)
+                                     └─► deploy-staging ─► smoke test (GET <staging>/health)
 
 "Deploy to production" (Actions tab, by hand, image_tag = sha-<7>)
                   └─► [reviewer approves] ─► deploy ─► smoke test
@@ -153,6 +152,10 @@ staging and production share a machine and you prefer one copy.
 If a secret or variable is missing the job fails at the SSH step with an empty host:
 that is the symptom of an unconfigured environment.
 
+In **Settings → Code security**, enable **Secret scanning** and **Push protection**: a push
+containing a known secret format is then rejected before it is published. The CI
+`secrets` job (gitleaks) is the second net; see `docs/guidelines/SECURITY.md`.
+
 ## Rolling back
 
 ```bash
@@ -180,11 +183,12 @@ deploy**; also schedule one daily, as the deploy user (`crontab -e`):
 ```
 
 **A dump on the machine's own disk does not survive losing the machine** (provider
-incident, deleted VPS, ransomware). Copy `backups/` somewhere else on a schedule: the
-provider's object storage or another host, with `rclone` or `rsync`. Choosing that
-destination belongs to the hosting decision; until it is made, production holds no
-off-machine copy of its data. The dumps contain every user's email and name: keep the
-destination private and encrypted.
+incident, deleted VPS, ransomware), so it is copied off the machine on a schedule. The
+reference deployment sends its backups to S3-compatible object storage located in Europe
+(the provider's backup service, or `rclone` / `rsync` to a bucket or another host when
+self-hosting elsewhere). Whatever the mechanism, check that the copy **includes
+`backups/`** and runs after the daily dump. The dumps contain every user's email and
+name: keep the destination private and encrypted.
 
 ### Restoring
 
@@ -227,5 +231,5 @@ secret (`docs/MOBILE.md`).
 - Single machine, single database: no replication, no automatic failover. The database
   runs in a container with a named volume on the machine's disk.
 - No zero-downtime deploys (above).
-- No off-machine backup until the hosting is chosen (above).
+- No uptime monitor or alerting yet (above).
 - Rate-limit counters are per process (`docs/DEPLOYMENT.md`).

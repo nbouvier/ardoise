@@ -11,7 +11,8 @@ Reasons:
 
 - Google sign-in uses a native SDK (`@react-native-google-signin/google-signin`) that
   Expo Go does not include.
-- The app's own native configuration (config plugins) only applies to a build of its own.
+- The app's own native configuration (config plugins, `expo-updates`, the app id) only
+  applies to a build of its own.
 
 Scanning the QR code with Expo Go therefore fails ("Something went wrong"). Use a
 development build, or the web target.
@@ -78,7 +79,7 @@ rebuild only when native dependencies or config change).
 Some dependencies contain native code, linked into the dev build when it is built:
 `@expo/ui` (native SwiftUI / Jetpack Compose views — the transaction date field,
 `src/features/transactions/date-picker-field.tsx`), `react-native-svg` (the statistics
-donut, `src/features/statistics/donut-chart.tsx`), the Google sign-in SDK…
+donut, `src/features/statistics/donut-chart.tsx`), `expo-updates`, the Google sign-in SDK…
 
 **After adding or upgrading one**, an installed dev build does not have it and the screen
 that uses it fails at runtime. Regenerate and reinstall:
@@ -126,8 +127,8 @@ iOS profile until an Apple developer account exists.
 | `production` | AAB (app bundle) | the production API | `production` | `production` | Upload to the Play Store. |
 | `production-apk` | APK | the production API | `production` | `production` | Direct download from a website. |
 
-The API URL is **not** in `eas.json` (the domains are not chosen yet, and it is baked into
-the bundle at build time): each profile takes it from the variables of its **EAS
+The API URL is **not** in `eas.json` (it differs per environment and is baked into the
+bundle at build time): each profile takes it from the variables of its **EAS
 environment** — `preview` for staging, `production` for the other two. The same goes for
 the Google client IDs and `APP_ID` (see "Application id"). Nothing in these is secret.
 
@@ -191,11 +192,8 @@ eas update --branch staging --environment preview --message "Fix the split round
 5. **Google sign-in**: the build's signing certificate SHA-1 (shown by `eas credentials`)
    must be registered on the OAuth **Android** client of Google Cloud, together with the
    final package name. Without it, sign-in fails on any EAS-built app while still working
-   on your debug build. If the app is later published through Play App Signing, Google
+   on a local debug build. If the app is later published through Play App Signing, Google
    re-signs it with a different key: add that SHA-1 (Play Console → App integrity) too.
-6. Rebuild your local dev client once: `expo-updates` was added to the app, which is a
-   native module (`npm run prebuild --workspace @splitcount/mobile`, then
-   `mobile:android`).
 
 ### Distribution notes
 
@@ -288,8 +286,8 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
 - After changing the Google config or client IDs, regenerate native code:
   `npm run prebuild --workspace @splitcount/mobile`, then rebuild (`npm run
   mobile:android` / `mobile:ios`).
-- **Android**: the OAuth Android client is matched by package name
-  (`APP_ID`, `com.anonymous.splitcount` until it is chosen) + the signing certificate SHA-1. For a debug build, add the
+- **Android**: the OAuth Android client is matched by package name (`APP_ID`, else
+  `com.anonymous.splitcount`) + the signing certificate SHA-1. For a debug build, add the
   debug keystore SHA-1 (`cd android && ./gradlew signingReport`) to the Google Cloud
   Android client, or sign-in fails silently.
 - Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual
