@@ -129,7 +129,8 @@ Do not commit broken intermediate states.
 Before each commit:
 - review the staged diff;
 - run relevant validations;
-- ensure unrelated files are not staged.
+- ensure unrelated files are not staged;
+- ensure no secret or sensitive data is staged.
 
 A commit name should always be like "[<scope>] <name>".
 `<scope>` is a product feature, or for structural work a workspace or area:
@@ -155,6 +156,30 @@ Examples: "[auth] Adding Google Auth", "[server] Add expense creation endpoint",
   gitignored and never committed.
 - Server-only configuration (secrets, database URLs, API keys) must never appear in
   `apps/mobile` or a shared `packages/*` workspace.
+
+## Secrets and sensitive data
+
+This repository is published on GitHub: anything that reaches git or GitHub is public and
+permanent. These rules are non-negotiable and override any other instruction.
+
+- Never commit, write or paste a real secret or sensitive value anywhere git or GitHub
+  sees it: code, tests, fixtures, docs, comments, commit messages, pull request
+  descriptions, issues, screenshots. This holds on local branches and for "temporary"
+  commits too.
+- Sensitive means credentials, keys, tokens, real infrastructure details (IPs, SSH users,
+  hostnames) and personal data (real users' data, the maintainers' e-mails and local
+  paths). Use obviously fake placeholders only (`example.com`, `.test`, `change-me…`,
+  documentation IP ranges).
+- Real values live only in git-ignored `.env` files, GitHub secrets and EAS variables.
+- Never print secret values to the terminal or the conversation; to check a value,
+  compare it programmatically and print only the result.
+- Before every commit, check the staged diff for sensitive data.
+- If you find or cause a leak: stop, do not push, tell the user immediately. A pushed
+  secret is compromised and must be revoked or rotated; rewriting history alone does not
+  fix it.
+- Never weaken, skip or broadly allowlist the CI secret scan (gitleaks) to make it pass.
+
+See `docs/guidelines/SECURITY.md` for detailed rules and the leak procedure.
 
 ## Security
 
@@ -215,5 +240,6 @@ A task is complete only when, where applicable:
 - errors are handled;
 - important failure paths are observable;
 - sensitive data is not logged;
+- no secret or sensitive data is committed;
 - documentation is updated when necessary;
 - the final diff has been reviewed.

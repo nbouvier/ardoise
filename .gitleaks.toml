@@ -1,0 +1,12 @@
+# gitleaks configuration, read by the CI `secrets` job (.github/workflows/ci.yml).
+# The default rules apply; each allowlist below is one verified false positive, as
+# narrow as possible (exact value AND exact file). See docs/guidelines/SECURITY.md.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake JWT secret the server test suite runs with; never used outside tests"
+condition = "AND"
+paths = ['''^apps/server/vitest\.config\.ts$''']
+regexes = ['''^test-secret-at-least-16-chars-long$''']

@@ -54,6 +54,6 @@ npm test
 - `packages/` — shared code, created when something is genuinely shared
 - `docs/` — living documentation (architecture, product, API, mobile, testing, database, logging, design)
 - `docs/specs/` — feature specifications, the source of truth for established behavior
-- `docs/guidelines/` — authoring conventions for specs, testing and observability
+- `docs/guidelines/` — authoring conventions for specs, testing, observability and secrets
 
 See `CLAUDE.md` for the full working agreement.

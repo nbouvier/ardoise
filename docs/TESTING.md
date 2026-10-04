@@ -88,6 +88,14 @@ tests run as iOS, so the screens' own tests drive the native `RefreshControl` an
 `PullToRefreshScrollView` is tested directly. What a swipe *feels* like is a device
 concern.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`:
+
+| Job | Runs | Fails the run when |
+| --- | --- | --- |
+| `secrets` | gitleaks (pinned version, checksum verified) over the whole git history, findings redacted | a secret is found in any reachable commit (see `docs/guidelines/SECURITY.md`) |
+
 ## Current state
 
 - `apps/server` hardening (`docs/DEPLOYMENT.md`): `src/config/env.test.ts` (production

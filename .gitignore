@@ -26,4 +26,19 @@ yarn-error.*
 
 # OS / editor
 .DS_Store
+
+# Keys and credential files: never committed anywhere in the repository
+# (docs/guidelines/SECURITY.md)
 *.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+google-services.json
+GoogleService-Info.plist
+credentials*.json
+service-account*.json
