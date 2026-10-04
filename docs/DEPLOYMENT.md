@@ -16,7 +16,7 @@ docker build -t ardoise-server .
 ```
 
 - Three stages: production dependencies (`npm ci --omit=dev`), build (`npm run build`:
-  `@splitcount/shared`, then the server), and a runtime that copies only
+  `@ardoise/shared`, then the server), and a runtime that copies only
   `node_modules`, the two `dist/` folders and `apps/server/drizzle` (the migrations).
   Base image `node:26-slim` — keep `NODE_VERSION` in step with `.nvmrc`.
 - Runs as the unprivileged `node` user, `NODE_ENV=production` (so the production checks
@@ -58,7 +58,7 @@ In production the server **does not migrate**. Migrations run once per release, 
 separate step, and every server instance only checks the result:
 
 1. **Release step** — `node apps/server/dist/scripts/migrate.js` (from the repo,
-   `npm run migrate:deploy --workspace @splitcount/server`). Needs only `DATABASE_URL`
+   `npm run migrate:deploy --workspace @ardoise/server`). Needs only `DATABASE_URL`
    (`config/migrate-env.ts`) — not the Google IDs or the JWT secret. Idempotent; exits
    `1` and logs `db.migrate.failed` on any error, which must stop the release before
    any new container starts.

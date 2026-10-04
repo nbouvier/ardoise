@@ -1,5 +1,5 @@
 {
-  "name": "splitcount",
+  "name": "ardoise",
   "version": "1.0.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -11,15 +11,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build --workspace @splitcount/shared && npm run build --workspace @splitcount/server",
+    "build": "npm run build --workspace @ardoise/shared && npm run build --workspace @ardoise/server",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "pretest": "npm run build --workspace @splitcount/shared",
+    "pretest": "npm run build --workspace @ardoise/shared",
     "test": "npm run test --workspaces --if-present",
-    "mobile": "npm run start --workspace @splitcount/mobile",
-    "mobile:android": "npm run android --workspace @splitcount/mobile",
-    "mobile:ios": "npm run ios --workspace @splitcount/mobile",
-    "mobile:web": "npm run web --workspace @splitcount/mobile",
-    "server": "npm run dev --workspace @splitcount/server"
+    "mobile": "npm run start --workspace @ardoise/mobile",
+    "mobile:android": "npm run android --workspace @ardoise/mobile",
+    "mobile:ios": "npm run ios --workspace @ardoise/mobile",
+    "mobile:web": "npm run web --workspace @ardoise/mobile",
+    "server": "npm run dev --workspace @ardoise/server"
   }
 }

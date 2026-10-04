@@ -1,4 +1,4 @@
-import type { GroupRole } from '@splitcount/shared';
+import type { GroupRole } from '@ardoise/shared';
 import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';

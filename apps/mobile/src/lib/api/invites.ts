@@ -3,7 +3,7 @@ import {
   invitePreviewResponseSchema,
   type AcceptInviteResult,
   type InvitePreview,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import { parsedJson, type AuthorizedFetch } from './client';
 import { apiRequest } from './endpoints';

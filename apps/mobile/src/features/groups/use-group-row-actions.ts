@@ -1,4 +1,4 @@
-import type { GroupKind } from '@splitcount/shared';
+import type { GroupKind } from '@ardoise/shared';
 import { useState, type ReactNode } from 'react';
 
 import { useDialog } from '@/components/use-dialog';

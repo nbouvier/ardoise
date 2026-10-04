@@ -1,4 +1,4 @@
-import type { FriendEntry } from '@splitcount/shared';
+import type { FriendEntry } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';

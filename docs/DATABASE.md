@@ -29,15 +29,15 @@ SQL migrations live in `apps/server/drizzle/` and are generated from the schema 
 `apps/server/src/db/schema.ts`.
 
 ```bash
-npm run migrate:generate --workspace @splitcount/server   # generate a migration from schema changes
-npm run migrate --workspace @splitcount/server            # apply pending migrations (needs DATABASE_URL)
+npm run migrate:generate --workspace @ardoise/server   # generate a migration from schema changes
+npm run migrate --workspace @ardoise/server            # apply pending migrations (needs DATABASE_URL)
 ```
 
 - `migrate:generate` only reads the schema file; no database needed.
 - **Development and tests:** the server applies pending migrations itself on startup
   (embedded PGlite, or whatever `DATABASE_URL` points at when `NODE_ENV=development`).
 - **Production:** the server never migrates. A release step runs
-  `npm run migrate:deploy --workspace @splitcount/server` (`node dist/scripts/migrate.js`
+  `npm run migrate:deploy --workspace @ardoise/server` (`node dist/scripts/migrate.js`
   from the built output, which has no drizzle-kit) **once** per release, and the server
   refuses to start while a migration is pending. See "Database migrations" in
   `docs/DEPLOYMENT.md`. `npm run migrate` (drizzle-kit) stays for a developer's machine.
@@ -244,7 +244,7 @@ An expense, income or transfer recorded in a group.
 
 Check constraints: `transactions_kind_valid`, `transactions_split_mode_valid`,
 `transactions_amount_positive` (`amount_cents > 0`), `transactions_category_valid` (one
-of the preset keys) — the preset list is duplicated here and in `@splitcount/shared`'s
+of the preset keys) — the preset list is duplicated here and in `@ardoise/shared`'s
 `categories.ts`; keep both in sync by hand, there being only the one place that needs to
 change until custom categories exist.
 

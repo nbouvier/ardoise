@@ -1,4 +1,4 @@
-import type { GroupDetail, GroupMember, SubgroupSummary, Transaction } from '@splitcount/shared';
+import type { GroupDetail, GroupMember, SubgroupSummary, Transaction } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {

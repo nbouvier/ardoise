@@ -55,7 +55,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # Also builds @splitcount/shared (its `prepare` script), which both apps import.
+      # Also builds @ardoise/shared (its `prepare` script), which both apps import.
       - run: npm ci
 
       - run: npm run lint

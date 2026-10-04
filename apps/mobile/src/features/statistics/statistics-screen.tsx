@@ -6,7 +6,7 @@ import {
   type SubgroupSummary,
   type TransactionCategory,
   type TransactionsListScope,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,

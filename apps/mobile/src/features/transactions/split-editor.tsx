@@ -3,8 +3,8 @@ import type {
   FriendSummary,
   SharesSplitParticipant,
   SplitInput,
-} from '@splitcount/shared';
-import { splitByShares } from '@splitcount/shared';
+} from '@ardoise/shared';
+import { splitByShares } from '@ardoise/shared';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 

@@ -1,4 +1,4 @@
-import type { FriendSummary, SplitInput } from '@splitcount/shared';
+import type { FriendSummary, SplitInput } from '@ardoise/shared';
 import { describe, expect, it } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { useState } from 'react';

@@ -1,4 +1,4 @@
-import { MAX_GROUP_DEPTH, type GroupRole } from '@splitcount/shared';
+import { MAX_GROUP_DEPTH, type GroupRole } from '@ardoise/shared';
 
 import type { GroupRow } from '../../db/schema.js';
 

@@ -195,7 +195,7 @@ The invitation **code is stored in clear**, unlike refresh tokens. It must be re
 ("copy my link again"), and it only grants a narrow, expiring, revocable capability: to
 become a friend of one specific user, subject to that user's own acceptance step.
 
-Shapes are shared between client and server through `@splitcount/shared`. The shape returned
+Shapes are shared between client and server through `@ardoise/shared`. The shape returned
 for *another* user (`FriendSummary`: id, name, avatar) is deliberately narrower than the
 `UserProfile` returned for oneself — it carries no email address.
 

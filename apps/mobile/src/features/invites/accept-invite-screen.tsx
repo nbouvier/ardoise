@@ -1,4 +1,4 @@
-import type { AcceptInviteResult, InvitePreview } from '@splitcount/shared';
+import type { AcceptInviteResult, InvitePreview } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';

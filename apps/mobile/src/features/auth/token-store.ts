@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import type { UserProfile } from '@splitcount/shared';
+import type { UserProfile } from '@ardoise/shared';
 
 import { errorFields, logger } from '@/lib/logger';
 

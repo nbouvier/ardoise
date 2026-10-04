@@ -1,4 +1,4 @@
-import type { Balance } from '@splitcount/shared';
+import type { Balance } from '@ardoise/shared';
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 

@@ -3,7 +3,7 @@ import {
   meResponseSchema,
   type AuthSession,
   type MeResponse,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import { ApiError, expectOk, NetworkError, readErrorCode } from './errors';
 

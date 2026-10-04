@@ -1,4 +1,4 @@
-import type { Transaction } from '@splitcount/shared';
+import type { Transaction } from '@ardoise/shared';
 import { describe, expect, it } from '@jest/globals';
 
 import { splitFrom } from './transaction-request';

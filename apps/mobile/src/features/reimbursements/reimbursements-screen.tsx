@@ -1,4 +1,4 @@
-import { planReimbursements, type Balance, type GroupMember } from '@splitcount/shared';
+import { planReimbursements, type Balance, type GroupMember } from '@ardoise/shared';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 

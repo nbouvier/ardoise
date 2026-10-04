@@ -1,4 +1,4 @@
-import { inviteCodeSchema } from '@splitcount/shared';
+import { inviteCodeSchema } from '@ardoise/shared';
 
 /**
  * The invitation code the app was opened with, held outside React so it

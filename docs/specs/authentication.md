@@ -132,7 +132,7 @@ Persisted data (see `docs/DATABASE.md`):
 - **Session**: owning user, refresh-token hash (unique), expiry, created / last-used /
   revoked timestamps.
 
-Request/response shapes are shared between client and server via `@splitcount/shared`.
+Request/response shapes are shared between client and server via `@ardoise/shared`.
 
 Client persistence: the refresh token is stored in the OS secure store
 (`expo-secure-store`); the access token is kept in memory only.

@@ -3,7 +3,7 @@ import type {
   TransactionCategory,
   TransactionKind,
   TransactionsListResponse,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';

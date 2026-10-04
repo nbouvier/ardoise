@@ -1,4 +1,4 @@
-import type { AuthSession, UserProfile } from '@splitcount/shared';
+import type { AuthSession, UserProfile } from '@ardoise/shared';
 
 import { ApiError } from '@/lib/api/errors';
 import {

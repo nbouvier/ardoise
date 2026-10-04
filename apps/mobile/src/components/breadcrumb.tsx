@@ -1,4 +1,4 @@
-import type { GroupAncestor } from '@splitcount/shared';
+import type { GroupAncestor } from '@ardoise/shared';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';

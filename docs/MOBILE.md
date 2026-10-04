@@ -69,7 +69,7 @@ npm run mobile:android    # or: npm run mobile:ios
 `expo run:*` generates the native project on the fly (Continuous Native Generation).
 The `android/` and `ios/` folders are generated and git-ignored; never edit them by
 hand. Change native config through `app.json` / config plugins, then re-run, or
-`npm run prebuild --workspace @splitcount/mobile` to regenerate.
+`npm run prebuild --workspace @ardoise/mobile` to regenerate.
 
 After the dev build is installed, iterate with just `npm run mobile` (JS reloads live;
 rebuild only when native dependencies or config change).
@@ -85,7 +85,7 @@ donut, `src/features/statistics/donut-chart.tsx`), `expo-updates`, the Google si
 that uses it fails at runtime. Regenerate and reinstall:
 
 ```bash
-npm run prebuild --workspace @splitcount/mobile
+npm run prebuild --workspace @ardoise/mobile
 npm run mobile:android   # or: npm run mobile:ios
 ```
 
@@ -105,7 +105,7 @@ config**: after changing the mark, the icons or those colours, an existing dev b
 showing the old ones until it is regenerated.
 
 ```bash
-npm run prebuild --workspace @splitcount/mobile
+npm run prebuild --workspace @ardoise/mobile
 npm run mobile:android   # or: npm run mobile:ios
 ```
 
@@ -239,7 +239,7 @@ develop under but must never ship.
   and updates (EAS)") before the first production build.
 - Changing it later, before publishing, is cheap: change `APP_ID`, create the matching
   Google OAuth **Android** client (it is matched by package name + signing SHA-1), rebuild.
-  Native projects must be regenerated (`npm run prebuild --workspace @splitcount/mobile`),
+  Native projects must be regenerated (`npm run prebuild --workspace @ardoise/mobile`),
   and an installed build under the old id is a different app.
 - The tests are in `src/lib/app-config.test.ts`. They live under `src/` deliberately:
   next to `app.config.ts`, `@jest/globals` becomes the first file `tsc` sees and flips which
@@ -284,7 +284,7 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
 - Config plugins (`expo-secure-store`, `@react-native-google-signin/google-signin`) are in
   `app.json`; `app.config.ts` adds the iOS URL scheme from the iOS client ID.
 - After changing the Google config or client IDs, regenerate native code:
-  `npm run prebuild --workspace @splitcount/mobile`, then rebuild (`npm run
+  `npm run prebuild --workspace @ardoise/mobile`, then rebuild (`npm run
   mobile:android` / `mobile:ios`).
 - **Android**: the OAuth Android client is matched by package name (`APP_ID`, else
   `com.anonymous.splitcount`) + the signing certificate SHA-1. For a debug build, add the

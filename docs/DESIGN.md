@@ -72,7 +72,7 @@ never a per-screen choice.
 
 ### Category colours
 
-Not theme tokens: each transaction category owns its colour in `@splitcount/shared`'s
+Not theme tokens: each transaction category owns its colour in `@ardoise/shared`'s
 `categories.ts`, alongside its emoji and label, and keeps it in both themes. Read it from
 `categoryDefinition(key).color`. A selected category pill and the statistics donut use
 that colour rather than the brand hue — a category is the one thing allowed to bring its

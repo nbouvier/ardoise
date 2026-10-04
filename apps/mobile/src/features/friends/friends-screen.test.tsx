@@ -1,4 +1,4 @@
-import type { FriendEntry } from '@splitcount/shared';
+import type { FriendEntry } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 

@@ -7,7 +7,7 @@ route is added, changed or removed.
 
 - REST over HTTP, JSON request and response bodies.
 - Request and response shapes are validated with Zod on the server; the schemas are
-  shared with the client via `@splitcount/shared`.
+  shared with the client via `@ardoise/shared`.
 - Authentication: SplitCount issues its own session after verifying a Google ID token.
   Protected routes require `Authorization: Bearer <accessToken>`. The access token is a
   short-lived (~15 min) HS256 JWT; the client refreshes it with the rotating refresh
@@ -475,7 +475,7 @@ transaction — there is no per-transaction ownership.
 `weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
 a single-participant amount split).
 
-**Categories** are a fixed, closed preset list (`@splitcount/shared`'s `categories.ts`) —
+**Categories** are a fixed, closed preset list (`@ardoise/shared`'s `categories.ts`) —
 `groceries`, `restaurant`, `leisure`, `housing`, `transport`, `travel`, `health`,
 `shopping`, `bills`, `gifts`, `education`, `pets`, `other`. `other` is the default for a
 transaction recorded without one; it is a real category, not a stand-in for "none" — a
@@ -619,7 +619,7 @@ Response `200`:
 ```
 
 > **The reimbursement plan has no route.** Who should pay whom to clear a group is
-> derived from these balances by `planReimbursements` in `@splitcount/shared`, on the
+> derived from these balances by `planReimbursements` in `@ardoise/shared`, on the
 > client, so the plan and the balance list can never disagree
 > (`docs/specs/reimbursements.md`). Acting on it uses the ordinary
 > `POST /groups/:groupId/transactions` with `kind: "transfer"`; there is no settlement

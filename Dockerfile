@@ -22,10 +22,10 @@ COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/
 COPY apps/mobile/package.json apps/mobile/
 COPY packages/shared/package.json packages/shared/
-# --ignore-scripts: @splitcount/shared builds itself in `prepare`, but its sources
+# --ignore-scripts: @ardoise/shared builds itself in `prepare`, but its sources
 # are not here yet (and it is built once, below).
 RUN npm ci --omit=dev --ignore-scripts \
-    --workspace @splitcount/server --workspace @splitcount/shared
+    --workspace @ardoise/server --workspace @ardoise/shared
 
 # --- Build ---------------------------------------------------------------------
 # Runs on the builder's own platform whatever the target: its output (JavaScript)
@@ -39,7 +39,7 @@ COPY apps/server/package.json apps/server/
 COPY apps/mobile/package.json apps/mobile/
 COPY packages/shared/package.json packages/shared/
 RUN npm ci --ignore-scripts \
-    --workspace @splitcount/server --workspace @splitcount/shared
+    --workspace @ardoise/server --workspace @ardoise/shared
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/server apps/server
@@ -51,7 +51,7 @@ FROM node:${NODE_VERSION}-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Same layout as in the repo: node_modules links @splitcount/shared to
+# Same layout as in the repo: node_modules links @ardoise/shared to
 # ../../packages/shared, and the server finds its migrations at apps/server/drizzle.
 COPY --from=prod-deps /repo/node_modules node_modules
 COPY --from=build /repo/package.json ./

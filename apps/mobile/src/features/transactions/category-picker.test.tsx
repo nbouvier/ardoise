@@ -1,4 +1,4 @@
-import { TRANSACTION_CATEGORIES } from '@splitcount/shared';
+import { TRANSACTION_CATEGORIES } from '@ardoise/shared';
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 

@@ -1,4 +1,4 @@
-import type { Transaction, TransactionsListScope } from '@splitcount/shared';
+import type { Transaction, TransactionsListScope } from '@ardoise/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';

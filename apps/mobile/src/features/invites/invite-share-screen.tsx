@@ -1,4 +1,4 @@
-import type { Invite } from '@splitcount/shared';
+import type { Invite } from '@ardoise/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {

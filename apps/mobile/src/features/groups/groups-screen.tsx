@@ -1,4 +1,4 @@
-import type { GroupSummary } from '@splitcount/shared';
+import type { GroupSummary } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';

@@ -1,4 +1,4 @@
-import type { GroupDetail } from '@splitcount/shared';
+import type { GroupDetail } from '@ardoise/shared';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';

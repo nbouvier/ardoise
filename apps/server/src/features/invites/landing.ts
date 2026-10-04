@@ -13,7 +13,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { InvitePreview } from '@splitcount/shared';
+import type { InvitePreview } from '@ardoise/shared';
 
 /** The mobile app's URL scheme. Must match `scheme` in `apps/mobile/app.json`. */
 export const APP_SCHEME = 'splitcount';

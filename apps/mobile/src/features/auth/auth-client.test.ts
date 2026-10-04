@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-import type { AuthSession } from '@splitcount/shared';
+import type { AuthSession } from '@ardoise/shared';
 
 import { ApiError } from '@/lib/api/errors';
 

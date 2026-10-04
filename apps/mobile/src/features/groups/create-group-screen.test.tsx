@@ -1,4 +1,4 @@
-import type { FriendSummary, GroupDetail } from '@splitcount/shared';
+import type { FriendSummary, GroupDetail } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 

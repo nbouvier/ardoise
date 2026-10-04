@@ -1,4 +1,4 @@
-import { categoryDefinition, type RecentTransaction, type Transaction } from '@splitcount/shared';
+import { categoryDefinition, type RecentTransaction, type Transaction } from '@ardoise/shared';
 import { StyleSheet, View } from 'react-native';
 
 import { Breadcrumb } from '@/components/breadcrumb';

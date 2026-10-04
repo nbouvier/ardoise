@@ -1,4 +1,4 @@
-import type { GroupAncestor, GroupDetail } from '@splitcount/shared';
+import type { GroupAncestor, GroupDetail } from '@ardoise/shared';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

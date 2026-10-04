@@ -252,7 +252,7 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   (always set, `Other` by default), payer, the group it belongs to, split mode, who
   recorded it, and timestamps.
 - The **category list is a fixed, closed set** (key, label, emoji) defined once in code
-  (`@splitcount/shared`) and validated the same way on both sides — not a database table,
+  (`@ardoise/shared`) and validated the same way on both sides — not a database table,
   since nothing today creates, renames or reorders one. If custom categories are ever
   added, that is the point to promote it to a table; until then a table would be
   unused flexibility.
@@ -268,7 +268,7 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   transaction, not by a database constraint (a cross-row sum check isn't expressible as a
   single-row `CHECK`).
 - The split algorithm (shares → per-member cents, largest-remainder rounding) is shared
-  code (`@splitcount/shared`) rather than duplicated: the client uses it for a live
+  code (`@ardoise/shared`) rather than duplicated: the client uses it for a live
   preview while composing a transaction, the server uses it as the authority and
   recomputes independently of whatever the client sent (except in fixed-amount mode,
   where the entered amounts are the input, only validated to sum correctly).

@@ -1,4 +1,4 @@
-import { inviteCodeSchema } from '@splitcount/shared';
+import { inviteCodeSchema } from '@ardoise/shared';
 import type { FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';

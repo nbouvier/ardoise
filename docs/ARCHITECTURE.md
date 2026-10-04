@@ -46,7 +46,7 @@ apps/
                    Fastify plugin (plugin.ts). SQL migrations in server/drizzle/.
       test/        Test helpers (in-memory DB, ready app).
 packages/
-  shared/          @splitcount/shared — platform-neutral API contract (Zod schemas +
+  shared/          @ardoise/shared — platform-neutral API contract (Zod schemas +
                    inferred types) shared by both apps. No React Native, no Node-only
                    APIs, no secrets. Built to dist/ (ESM); consumers resolve types
                    straight from src/ so a rebuild is only needed for runtime/bundling.
@@ -73,13 +73,13 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | Request and response shapes must stay identical on both sides; duplicated Zod schemas would drift. It also holds the arithmetic both sides must agree on to the cent: the split rounding (`transactions.ts` — the client previews a split live, the server recomputes it as the authority), the category breakdown (`statistics.ts`) and the reimbursement plan (`reimbursements.ts`, derived from balances on the client). One implementation each, never two. Modules: `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
+| `@ardoise/shared`   | Request and response shapes must stay identical on both sides; duplicated Zod schemas would drift. It also holds the arithmetic both sides must agree on to the cent: the split rounding (`transactions.ts` — the client previews a split live, the server recomputes it as the authority), the category breakdown (`statistics.ts`) and the reimbursement plan (`reimbursements.ts`, derived from balances on the client). One implementation each, never two. Modules: `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
 
 ## Client / server contract
 
 - REST over HTTP/JSON. Request and response shapes are validated with Zod on the server;
-  the schemas live in `@splitcount/shared` and the client validates responses with them.
-- When a type or schema is needed on both sides, it moves into `@splitcount/shared`
+  the schemas live in `@ardoise/shared` and the client validates responses with them.
+- When a type or schema is needed on both sides, it moves into `@ardoise/shared`
   rather than being duplicated.
 - The mobile client treats the server as authoritative: no offline write model yet.
 - Auth: the client sends a Google ID token, the server verifies it and returns a
@@ -133,7 +133,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | Vitest for server tests                                   | Fast, native TS/ESM                         |
 | 2026-09-09 | PostgreSQL + Drizzle; PGlite embedded in dev/test         | SQL-first, strong types; no external service to run tests |
 | 2026-09-09 | Mobile runs as an Expo development build, not Expo Go     | Native modules + upcoming Google sign-in     |
-| 2026-09-09 | `@splitcount/shared` workspace for the API contract       | First shared client/server contract (auth)   |
+| 2026-09-09 | `@ardoise/shared` workspace for the API contract       | First shared client/server contract (auth)   |
 | 2026-09-09 | Auth: Google ID token verified server-side → own session | Google tokens are short-lived; we need persistent, revocable sessions |
 | 2026-09-09 | Session = short JWT access token + rotating DB refresh token | Persistent sign-in + real server-side sign-out / revocation |
 | 2026-09-10 | Invitation links hosted by the API (`GET /i/:code`) + `splitcount://` scheme | No domain or store presence yet; Universal/App Links slot in later without changing the contract |
@@ -148,7 +148,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-14 | Pair groups are created eagerly, the moment a friendship is — `friends` calls `groupsRepository.createPairGroup` directly (instantiated in `friendsPlugin`, the same "borrow a repository" pattern `ledger` already uses), not through the `groups` service | The Friends list is sourced from the pair group itself (id, favorite marker) rather than a parallel query, so the group must already exist by the time a friendship is listed — a get-or-create on every read was the alternative, and a write on a `GET` is worse than creating it once, up front |
 | 2026-09-11 | A non-member gets `404` for a group, never `403` | A `403` would confirm the group exists |
 | 2026-09-11 | One migrated PGlite per *test file*, truncated between tests | A database per test cost seconds each; same isolation, suite down from 92s to 17s |
-| 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@splitcount/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
+| 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@ardoise/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
 | 2026-09-11 | A shares split defaults every participant to weight 1; there is no separate "equal" mode | An equal split *is* a shares split where everyone is weighted the same — a dedicated mode would just be that one case with its own code path |
 | 2026-09-11 | Balances are computed on the fly from `transactions` / `transaction_participants`, not stored | No denormalized total to keep in sync while the feature is new; revisit if querying at scale becomes a real cost (see Open items) |
 | 2026-09-11 | Transactions are the one thing that works on a pair group like a standard group | Every other direct pair-group route is refused by `assertNotPairGroup`; transactions must not share that guard, or the pair group could never hold anything. (Creating a *sub-group* under it is a second, later exception — 2026-09-12 below — since that acts on the new group, not the pair group itself) |
@@ -158,7 +158,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | Each friend's balance rides on `GET /friends` rather than its own route; `friendSummarySchema` is left untouched | The friend list has no useful state without the amounts, and a second call would show names before figures. The summary shape is reused by group members, transaction participants and invitation previews, none of which have a balance |
 | 2026-09-11 | The transaction date field uses `@expo/ui`'s `community/datetime-picker`, not a new dependency | `@expo/ui` was already a dependency but not yet linked into the native build; reusing it (SwiftUI `DatePicker` on iOS, a Material dialog on Android) needs the same native rebuild a brand-new picker library would have, for zero added dependency footprint |
 | 2026-09-12 | A group's per-category breakdown is derived on the client, from the transactions the group screen already holds — no endpoint, no stored aggregate | It is the same call the screen already makes, and a second round trip would show a chart after the list it summarises. Valid only while the list is unpaginated (see Open items) |
-| 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@splitcount/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
+| 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@ardoise/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
 | 2026-09-12 | Each category carries its own colour in the shared preset list | A chart and its legend describing different colours for the same category is a defect the type system can prevent; the colour is part of the category, not of the screen |
 | 2026-09-12 | The donut is drawn with `react-native-svg` rather than stacked views | Thirteen arcs, exact hit-testing per slice and one implementation across iOS, Android and web. It is a native dependency, so it costs a dev-build rebuild (`docs/MOBILE.md`) |
 | 2026-09-12 | Groups can nest via a single nullable `groups.parent_id`, not a materialised path or a closure table | The write path (create, delete) is simple and the read path (ancestors, descendants) is a bounded recursive query, since depth is capped; a closure table would trade that simplicity for write-time upkeep this scale does not need yet |

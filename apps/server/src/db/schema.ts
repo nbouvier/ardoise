@@ -242,7 +242,7 @@ export const transactions = pgTable(
     // by a day depending on time zone.
     occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
     comment: text('comment'),
-    // A fixed, closed preset list (`@splitcount/shared`'s categories.ts) kept
+    // A fixed, closed preset list (`@ardoise/shared`'s categories.ts) kept
     // in code, not a table — nothing creates, renames or reorders one today.
     // This CHECK is the one place that list is duplicated; keep both in sync.
     // Always set — an uncategorised transaction is recorded as 'other'.

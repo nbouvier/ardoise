@@ -80,9 +80,9 @@ npm test
 
 Workspace-specific commands (run with `--workspace <name>`):
 ```bash
-npm run start --workspace @splitcount/mobile     # Expo dev server
-npm run dev --workspace @splitcount/server       # API dev server
-npm run build --workspace @splitcount/server     # compile the API
+npm run start --workspace @ardoise/mobile     # Expo dev server
+npm run dev --workspace @ardoise/server       # API dev server
+npm run build --workspace @ardoise/server     # compile the API
 ```
 
 Database migration commands live in `apps/server` and are documented in `docs/DATABASE.md`.
@@ -211,7 +211,7 @@ See `docs/guidelines/LOGGING.md` for detailed conventions.
   mobile` serves it; `npm run mobile:web` runs the web target with no native build.
 - `android/` and `ios/` are generated (Continuous Native Generation) and git-ignored —
   never edit them; change native config via `app.json` / config plugins, then re-run or
-  `npm run prebuild --workspace @splitcount/mobile`.
+  `npm run prebuild --workspace @ardoise/mobile`.
 - Release builds and over-the-air updates run on EAS (`apps/mobile/eas.json`, `.github/workflows/mobile-release.yml`); see `docs/MOBILE.md`. Android only for now.
 
 `docs/MOBILE.md` is your playground, keep it updated.

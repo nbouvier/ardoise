@@ -6,7 +6,7 @@ import type {
   SubgroupSummary,
   Transaction,
   TransactionsListResponse,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
