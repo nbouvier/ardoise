@@ -11,14 +11,14 @@ Two shapes of shared space exist in practice and users should not have to think 
 difference:
 
 - an explicit, named group — a trip, a flatshare, a recurring night out;
-- the ongoing one-to-one tab between two friends, which in Tricount forces people to
-  create a two-person "trip" that is really just "me and you".
+- the ongoing one-to-one tab between two friends, which group-only apps force people to
+  model as a two-person "trip" that is really just "me and you".
 
 Groups make the second case an **implicit group** that already exists for every pair of
 friends, reachable by tapping that friend. Both run on the same model: a group is a group,
 only its lifecycle differs.
 
-A third shape addresses a real organisational gap Tricount does not solve: a shared trip
+A third shape addresses a real organisational gap flat expense groups leave open: a shared trip
 or household is rarely one flat expense pool. A flatshare has a recurring-bills sub-budget;
 a group holiday has a sub-trip only some of the party joins. Rather than forcing everything
 into one undifferentiated group, or forcing a brand-new top-level group with its own

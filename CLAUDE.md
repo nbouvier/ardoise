@@ -2,8 +2,8 @@
 
 ## Project
 
-SplitCount is an app that aims to ease expense sharing between people.
-It is built to be a successor of the famous app Tricount, adding more organisation and better expense tracking.
+SplitCount is an app for sharing expenses among friends, family or flatmates, with nested
+sub-groups, expense tracking, reimbursement plans and advanced statistics.
 
 The server is the source of truth for all shared data. The mobile client reads and
 writes through the API and never owns authoritative state.

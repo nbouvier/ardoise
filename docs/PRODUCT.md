@@ -5,8 +5,9 @@ lives in `docs/specs/`.
 
 ## Vision
 
-Ease expense sharing between people. Positioned as a successor to Tricount, with stronger
-organisation and better expense tracking.
+An app for sharing expenses among friends, family or flatmates, with nested sub-groups,
+expense tracking, reimbursement plans and advanced statistics: shared costs kept organised,
+and always clear about who owes whom.
 
 ## Target users
 
@@ -78,15 +79,13 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   group behind it. Personal to the viewer, and independent of a group's archived state.
   See `docs/specs/favorites.md`.
 
-Otherwise the project is still at an early stage: monorepo, mobile client, an API with
-`/health`, auth, friends, invitations, groups, group transactions, per-category
-statistics, reimbursement plans, favorites and a home screen, tooling and documentation.
+The product is not yet released; Android is the first target.
 
 ## Planned direction
 
 - Settling with one person across every group they share, from the friend list — the
   per-group plan now exists; what is missing is which group would record it.
-- Better tracking and organisation than Tricount (categories, history, clarity).
+- Richer tracking and organisation (categories, history, clarity).
 
 ## Not yet decided
 

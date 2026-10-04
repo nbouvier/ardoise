@@ -4,8 +4,8 @@
 
 SplitCount knows who a person is (Google sign-in) but nothing about the relationships
 between people. Every planned feature — shared counts, expenses, balances — needs to pick
-participants, and asking for an email address every time is friction that Tricount already
-gets wrong.
+participants, and asking for an email address every time is friction expense-sharing apps
+too often impose.
 
 This feature introduces a **friend list**, built through **invitation links**. A user
 generates a link, shares it through whatever they already use (copy/paste, SMS, mail,

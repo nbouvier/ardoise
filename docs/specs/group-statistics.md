@@ -9,8 +9,7 @@ hotels. This feature adds the first read-only analysis of a group's transactions
 breakdown of its money across categories, for the group as a whole and for the viewer
 personally.
 
-It is the "better expense tracking" half of the product promise — the part Tricount does
-not do well.
+It is the "expense tracking" half of the product promise.
 
 Since groups can nest (`docs/specs/groups.md`), the same question comes up one level
 higher: did *the trip as a whole* go on food or on hotels, once its sub-groups are counted
