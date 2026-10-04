@@ -2,8 +2,8 @@ import { errors as joseErrors, jwtVerify, SignJWT } from 'jose';
 
 import { env } from '../../config/env.js';
 
-const ISSUER = 'splitcount';
-const AUDIENCE = 'splitcount';
+const ISSUER = 'ardoise';
+const AUDIENCE = 'ardoise';
 const encoder = new TextEncoder();
 
 export interface AccessToken {
