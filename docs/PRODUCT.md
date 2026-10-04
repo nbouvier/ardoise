@@ -18,6 +18,12 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 - A mobile client (Expo / React Native).
 - A backend API (Node) that is the source of truth for all shared data.
 - Users sign in; groups and expenses live on the server and sync to each member's device.
+- Crashes and unexpected errors, on the phone and on the server, are reported to Sentry
+  (a third-party service, EU data region) so they can be fixed: the error and its stack,
+  never request contents, amounts, titles, tokens or e-mail addresses; the user appears
+  only as an opaque id. A screen that fails to render shows "Something went wrong" with a
+  way to try again instead of a blank app. The privacy policy must name this processor.
+  See `docs/LOGGING.md`.
 
 ## Current capabilities
 

@@ -27,6 +27,10 @@ describe('app.config', () => {
   beforeEach(() => {
     delete process.env.APP_ID;
     delete process.env.EAS_BUILD_PROFILE;
+    delete process.env.SENTRY_DSN;
+    delete process.env.SENTRY_ORG;
+    delete process.env.SENTRY_PROJECT;
+    delete process.env.SENTRY_URL;
   });
 
   afterEach(() => {
@@ -109,6 +113,38 @@ describe('app.config', () => {
       const config = resolve({ ...base, updates: { fallbackToCacheTimeout: 0 } });
 
       expect(config.updates).toEqual({ fallbackToCacheTimeout: 0 });
+    });
+  });
+
+  describe('error reporting', () => {
+    function sentryPlugin(config: ExpoConfig) {
+      return config.plugins?.find(
+        (plugin) => Array.isArray(plugin) && plugin[0] === '@sentry/react-native/expo',
+      );
+    }
+
+    it('carries the DSN to the app when the build sets one', () => {
+      process.env.SENTRY_DSN = 'https://public@o0.ingest.example.test/1';
+
+      expect(resolve().extra?.sentryDsn).toBe('https://public@o0.ingest.example.test/1');
+    });
+
+    it('has no DSN, so reports nothing, when the build sets none', () => {
+      expect(resolve().extra?.sentryDsn).toBeNull();
+    });
+
+    it('configures the source-map upload from the environment', () => {
+      process.env.SENTRY_ORG = 'example-org';
+      process.env.SENTRY_PROJECT = 'example-mobile';
+
+      expect(sentryPlugin(resolve())).toEqual([
+        '@sentry/react-native/expo',
+        { organization: 'example-org', project: 'example-mobile' },
+      ]);
+    });
+
+    it('keeps the plugin, with nothing in it, outside a release build', () => {
+      expect(sentryPlugin(resolve())).toEqual(['@sentry/react-native/expo', {}]);
     });
   });
 });

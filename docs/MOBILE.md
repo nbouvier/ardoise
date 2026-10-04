@@ -189,7 +189,10 @@ eas update --branch staging --environment preview --message "Fix the split round
    It is the app's identity for ever — **a lost keystore means users cannot update**. Back
    it up once: `eas credentials` → Android → Keystore → download, and store it (with its
    passwords) somewhere private and offline.
-5. **Google sign-in**: the build's signing certificate SHA-1 (shown by `eas credentials`)
+5. **Sentry**: the variables and secrets of "Error reporting (Sentry)" below. Without
+   `SENTRY_AUTH_TOKEN` in the EAS environment a release build fails at its source-map
+   upload, and the workflow refuses to publish an update.
+6. **Google sign-in**: the build's signing certificate SHA-1 (shown by `eas credentials`)
    must be registered on the OAuth **Android** client of Google Cloud, together with the
    final package name. Without it, sign-in fails on any EAS-built app while still working
    on a local debug build. If the app is later published through Play App Signing, Google
@@ -212,6 +215,50 @@ eas update --branch staging --environment preview --message "Fix the split round
 - **iOS**: needs the Apple Developer Program (US$99/year) even for TestFlight; deliberately
   out of scope for now.
 
+## Error reporting (Sentry)
+
+Release builds report crashes and unexpected errors to **Sentry** (sentry.io, EU data
+region), project `ardoise-mobile`. What gets reported, what never does, and how the logger
+feeds it: `docs/LOGGING.md`, "Error reporting". This section is the build side.
+
+**On or off.** The app reports only when its build carries a DSN (`SENTRY_DSN`, passed
+through `extra.sentryDsn`). It is set in the `preview` and `production` EAS environments
+and nowhere else: local development builds, the web target and tests report nothing. The
+Sentry **environment** of a report is the build's update channel — `staging` or
+`production` — and `development` for a build without one.
+
+**Readable stack traces.** A release bundle is minified and compiled to Hermes bytecode; a
+report is only readable once Sentry has the matching source map.
+
+- `metro.config.js` is built on `getSentryExpoConfig`, which stamps a *debug id* into
+  every bundle and its map: Sentry pairs them by that id, whatever the release name.
+- **Builds**: the `@sentry/react-native/expo` config plugin (`app.config.ts`) adds a step
+  to the Android release build that uploads the maps (and native symbols). It runs on EAS,
+  with the EAS environment's `SENTRY_ORG`, `SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN`. Debug
+  builds (local development) skip it. A release build without the token **fails** — set
+  `SENTRY_DISABLE_AUTO_UPLOAD=true` in the environment to build without maps on purpose.
+- **Updates**: `eas update` bundles on the GitHub runner, so the **Mobile release**
+  workflow uploads the maps itself right after publishing (`npx
+  sentry-expo-upload-sourcemaps dist`), with the repository secret `SENTRY_AUTH_TOKEN` and
+  the variables `SENTRY_ORG` / `SENTRY_PROJECT_MOBILE`. It checks they exist **before**
+  publishing. An update published by hand from a laptop needs the same three variables
+  and the same command afterwards.
+
+**Variables.**
+
+| Name | Where | Secret | Purpose |
+| --- | --- | --- | --- |
+| `SENTRY_DSN` | EAS env `preview` + `production` | no (plaintext) | Turns reporting on; the project's client key. |
+| `SENTRY_ORG` | EAS env `preview` + `production`; GitHub variable | no | Organization slug, for the upload. |
+| `SENTRY_PROJECT` | EAS env `preview` + `production` | no | `ardoise-mobile`. |
+| `SENTRY_PROJECT_MOBILE` | GitHub variable | no | Same value, for the workflow (the server has its own project). |
+| `SENTRY_AUTH_TOKEN` | EAS env `preview` + `production` (visibility *secret*); GitHub secret | **yes** | Organization auth token, scope limited to uploads. |
+| `SENTRY_URL` | optional, both | no | Only if an upload ever fails on the region: `https://de.sentry.io/`. |
+
+**Native module.** `@sentry/react-native` has native code: adding or upgrading it needs a
+new build (and a `version` bump once builds are in users' hands, see "Build, or update?").
+After pulling it, rebuild the local development build (`npm run mobile:android`).
+
 ## Environment
 
 Configuration is layered onto `app.json` by `app.config.ts`, driven by `EXPO_PUBLIC_*`
@@ -223,6 +270,7 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
 | `APP_ID`                          | Overrides the application id of `app.json` (not `EXPO_PUBLIC_`: read at build time only). Optional, unset for Ardoise itself — for a fork publishing its own build. See "Application id". |
+| `SENTRY_DSN`                      | Turns error reporting on (not `EXPO_PUBLIC_`: it reaches the app through `extra`). Leave unset locally. See "Error reporting (Sentry)", which also lists the build-time `SENTRY_*` variables. |
 
 ### Application id
 
@@ -244,7 +292,7 @@ is published** — on the Play Store it can never change. `APP_ID` overrides it.
   global `fetch` typing wins, breaking the typecheck of every test that mocks `fetch`.
 
 Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
-`src/features/auth/google.ts`).
+`src/features/auth/google.ts`, `src/lib/error-reporting.ts`).
 
 ## Deep links
 

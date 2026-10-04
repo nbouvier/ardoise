@@ -61,6 +61,11 @@ COPY --from=build /repo/apps/server/package.json apps/server/
 COPY --from=build /repo/apps/server/dist apps/server/dist
 COPY apps/server/drizzle apps/server/drizzle
 
+# The version this image is (the CI passes `sha-<commit>`), so an error report says
+# which release it came from. Last, so a new value rebuilds nothing above.
+ARG APP_RELEASE=
+ENV APP_RELEASE=${APP_RELEASE}
+
 # Not root: the `node` user ships with the base image.
 USER node
 EXPOSE 3000

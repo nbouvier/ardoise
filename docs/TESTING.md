@@ -160,7 +160,14 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     and `security-headers`.
   - `src/shutdown.test.ts` drives `installGracefulShutdown` with a fake `process` against
     a really listening app: draining, the timeout and the idle-connection sweep over real
-    sockets.
+    sockets; the timeout and a failed close reported, and queued reports sent before the
+    exit.
+  - Error reporting (`src/error-reporting.test.ts`, with `@sentry/node` mocked): off
+    without a DSN, no data collection, `strict` unhandled rejections, the `Fastify`
+    integration removed, the request scrubbed down to method + redacted URL, sensitive
+    `extra` fields redacted. `error-handler.test.ts` checks a 5xx is reported under its
+    route template and a 4xx is not. The scrubbing was also checked once end to end
+    against a fake ingest endpoint (`docs/LOGGING.md`); that check is not automated.
   - Database: migrations (`src/db/client.test.ts`, including the pending-migration count
     the production startup check relies on), the pool error handler
     (`src/db/pool.test.ts`) and the three plugin modes `apply` / `verify` / `skip`
@@ -218,6 +225,14 @@ What each suite covers, by workspace and feature. Paths are relative to the work
 
 ### `apps/mobile`
 
+- **Error reporting** (`src/lib/error-reporting.test.ts`, `src/lib/logger.test.ts`,
+  `@sentry/react-native`, `expo-constants` and `expo-updates` mocked): off without a DSN,
+  the environment from the update channel, which errors are reportable, breadcrumbs and
+  events scrubbed (sensitive keys, invitation codes), the logger's routing of each level,
+  and `errorFields` staying printable while carrying the original error. The module keeps
+  "started" state, so each test loads a fresh copy (`jest.isolateModules`); the pure
+  functions are imported normally, since an isolated copy would see different error
+  classes and break `instanceof`.
 - **Shared building blocks**: API clients (`src/lib/api/`, shared fakes in
   `src/test-utils/`); `src/lib/stable-order.test.ts`, the order-preserving merge behind
   "a row does not jump when I favorite it" — known ids keep their position, a fresh field

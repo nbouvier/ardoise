@@ -134,6 +134,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
+          # `sha-<commit>`, the same as the tag: the release error reports are filed under.
+          build-args: APP_RELEASE=${{ steps.meta.outputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

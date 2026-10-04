@@ -1,14 +1,20 @@
+import { ErrorBoundary } from '@sentry/react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { Platform, StyleSheet, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { CrashScreen } from '@/components/crash-screen';
 import { Colors } from '@/constants/theme';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { AuthGate } from '@/features/auth/auth-gate';
 import { InviteLinkHandler } from '@/features/invites/invite-link-handler';
 import { InvitePrompt } from '@/features/invites/invite-prompt';
+import { initErrorReporting } from '@/lib/error-reporting';
+
+// Before anything renders, so that a crash during the first render is reported too.
+initErrorReporting();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -53,20 +59,24 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <ThemeProvider value={navigationTheme(colorScheme === 'dark')}>
-        <AuthProvider>
-          <AnimatedSplashOverlay />
-          {/* Above the gate: an invitation may arrive before there is an account. */}
-          <InviteLinkHandler />
-          <AuthGate>
-            {/* A stack around the tabs, so a group opens on top of them. Its own
-              header (with the way back) is drawn by the group screen. */}
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="groups/[id]" options={PAGE_FROM_BOTTOM} />
-            </Stack>
-            <InvitePrompt />
-          </AuthGate>
-        </AuthProvider>
+        {/* A render error anywhere below lands here: reported, and a way out instead
+          of a blank screen. */}
+        <ErrorBoundary fallback={({ resetError }) => <CrashScreen onRetry={resetError} />}>
+          <AuthProvider>
+            <AnimatedSplashOverlay />
+            {/* Above the gate: an invitation may arrive before there is an account. */}
+            <InviteLinkHandler />
+            <AuthGate>
+              {/* A stack around the tabs, so a group opens on top of them. Its own
+                header (with the way back) is drawn by the group screen. */}
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="groups/[id]" options={PAGE_FROM_BOTTOM} />
+              </Stack>
+              <InvitePrompt />
+            </AuthGate>
+          </AuthProvider>
+        </ErrorBoundary>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

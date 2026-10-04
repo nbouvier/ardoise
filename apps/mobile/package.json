@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
+    "@ardoise/shared": "^1.0.0",
     "@expo/ui": "~57.0.17",
     "@react-native-google-signin/google-signin": "^16.1.5",
-    "@ardoise/shared": "^1.0.0",
+    "@sentry/react-native": "~7.11.0",
     "expo": "~57.0.21",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.17",

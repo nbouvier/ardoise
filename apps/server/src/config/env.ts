@@ -138,6 +138,25 @@ const envSchema = z.object({
    * exiting anyway. Keep it below the platform's kill timeout (30s on most).
    */
   SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().positive().default(25),
+  /**
+   * Sentry DSN of the server project. Unset (local development, tests), nothing is
+   * reported. Not a secret in Sentry's sense (it only lets a client send reports), but
+   * kept out of the repository like any other deployment value.
+   */
+  SENTRY_DSN: z.url().optional(),
+  /**
+   * What reports are filed under: `production` or `staging` (the Compose stack passes
+   * its `DEPLOY_ENV`). Defaults to `NODE_ENV`, which is `production` for both.
+   */
+  SENTRY_ENVIRONMENT: z.string().min(1).optional(),
+  /**
+   * The running version, baked into the image at build time (`sha-<commit>`). An image
+   * built without it (locally) has it empty, which means unknown.
+   */
+  APP_RELEASE: z
+    .string()
+    .optional()
+    .transform((value) => value || undefined),
   /** App Store listing, shown on the invitation landing page. Unset until published. */
   APP_STORE_URL: z.url().optional(),
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
@@ -193,6 +212,7 @@ const envChecked = envSchema
     ...value,
     PUBLIC_BASE_URL: value.PUBLIC_BASE_URL ?? 'http://localhost:3000',
     TRUST_PROXY: value.TRUST_PROXY ?? false,
+    SENTRY_ENVIRONMENT: value.SENTRY_ENVIRONMENT ?? value.NODE_ENV,
   }));
 
 /** Whether a URL hostname designates the machine itself (`localhost`, loopback). */

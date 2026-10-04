@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
+import { flushErrorReports, reportError } from './error-reporting.js';
+
 /** The slice of `process` the shutdown logic touches, so a test can stand in for it. */
 export interface ShutdownProcess {
   on: (signal: NodeJS.Signals, listener: (signal: NodeJS.Signals) => void) => unknown;
@@ -13,6 +15,8 @@ export interface GracefulShutdownOptions {
   timeoutMs: number;
   signals?: NodeJS.Signals[] | undefined;
   process?: ShutdownProcess | undefined;
+  /** Sends queued error reports before the exit. Default: `flushErrorReports`. */
+  flushReports?: (() => Promise<void>) | undefined;
 }
 
 /**
@@ -39,7 +43,9 @@ export interface GracefulShutdownOptions {
  * cut short. Keep `timeoutMs` below the platform's kill timeout so this log
  * line, not a `SIGKILL`, is what explains the exit.
  *
- * A second signal while shutting down is ignored.
+ * A second signal while shutting down is ignored. Before exiting, whatever the
+ * outcome, queued error reports are sent (a couple of seconds at most), so the
+ * failures that led to the exit, the exit's own included, are not lost with it.
  */
 export function installGracefulShutdown(
   app: FastifyInstance,
@@ -47,6 +53,7 @@ export function installGracefulShutdown(
 ): void {
   const proc = options.process ?? process;
   const signals = options.signals ?? ['SIGTERM', 'SIGINT'];
+  const flushReports = options.flushReports ?? (() => flushErrorReports());
   let shuttingDown = false;
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -57,27 +64,32 @@ export function installGracefulShutdown(
     app.log.info({ signal, timeoutMs: options.timeoutMs }, 'server.shutdown.started');
 
     let exited = false;
-    const exit = (code: number): void => {
+    const exit = async (code: number): Promise<void> => {
       if (!exited) {
         exited = true;
         clearTimeout(deadline);
         clearInterval(sweeper);
+        await flushReports();
         proc.exit(code);
       }
     };
     const sweeper = setInterval(() => app.server.closeIdleConnections(), SWEEP_INTERVAL_MS);
     const deadline = setTimeout(() => {
       app.log.error({ timeoutMs: options.timeoutMs }, 'server.shutdown.timeout');
-      exit(1);
+      reportError(new Error('Shutdown timed out'), 'server.shutdown.timeout', {
+        timeoutMs: options.timeoutMs,
+      });
+      void exit(1);
     }, options.timeoutMs);
 
     try {
       await app.close();
       app.log.info('server.shutdown.completed');
-      exit(0);
+      await exit(0);
     } catch (error) {
       app.log.error(error, 'server.shutdown.failed');
-      exit(1);
+      reportError(error, 'server.shutdown.failed');
+      await exit(1);
     }
   };
 

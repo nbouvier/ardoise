@@ -1,9 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../app.js';
+import { reportError } from '../error-reporting.js';
 
 import { registerErrorHandler } from './error-handler.js';
+
+vi.mock('../error-reporting.js', () => ({ reportError: vi.fn() }));
 
 /** What `pg` throws on a unique violation: the message names the constraint, `detail` the value. */
 function postgresError(): Error {
@@ -23,6 +26,7 @@ describe('error handler', () => {
   afterEach(async () => {
     await app?.close();
     app = undefined;
+    vi.mocked(reportError).mockClear();
   });
 
   async function appWithFailingRoute(error: Error) {
@@ -77,6 +81,29 @@ describe('error handler', () => {
       },
     });
     expect(JSON.stringify(entry)).not.toContain('ada@example.com');
+  });
+
+  it('reports an unexpected failure to error reporting, under its route template', async () => {
+    const error = postgresError();
+    const { app } = await appWithFailingRoute(error);
+
+    await app.inject({ method: 'GET', url: '/boom' });
+
+    expect(reportError).toHaveBeenCalledWith(error, 'http.request.failed', {
+      method: 'GET',
+      route: '/boom',
+      status: 500,
+    });
+  });
+
+  it('does not report a client error', async () => {
+    const { app } = await appWithFailingRoute(
+      Object.assign(new Error('Body is too large'), { statusCode: 413 }),
+    );
+
+    await app.inject({ method: 'GET', url: '/boom' });
+
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it('answers a client error with its status and an error code', async () => {
