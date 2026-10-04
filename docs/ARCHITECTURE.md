@@ -204,8 +204,8 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 ## Open items
 
-- No uptime monitor or alerting yet; the deployment itself stays provider-independent
-  (`docs/OPERATIONS.md`).
+- No alerting on log events yet, only an external uptime monitor and the backup check;
+  the deployment itself stays provider-independent (`docs/OPERATIONS.md`).
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
 - Development builds are local (`expo run:*`). Release builds and OTA updates are

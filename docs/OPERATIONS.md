@@ -65,7 +65,12 @@ deploys the image staging already ran, it is never rebuilt.
    is root-equivalent: use a key dedicated to the CI, nothing else on that user).
 3. **A firewall**: only 22, 80 and 443 open. The database and the server ports are
    already bound to loopback / the internal network by the compose files; the firewall is
-   the second line.
+   the second line. Cloud machines often filter twice: the provider's network rules and
+   the image's own iptables. Some images end the `INPUT` chain with a `REJECT` rule, and
+   an `ACCEPT` appended after it never matches — insert before it
+   (`iptables -L INPUT -n --line-numbers`, then `iptables -I INPUT <its number> -p tcp
+   --dport 443 -j ACCEPT`, same for 80) and make it persistent (`netfilter-persistent
+   save` or the image's equivalent; check no `DOCKER` chain ends up in the saved file).
 4. **DNS**: an A record (and AAAA if the machine has IPv6) for each domain pointing at the
    machine. Without a domain the proxy cannot obtain a certificate, and Android refuses
    cleartext HTTP, so there is no useful deployment without one.
@@ -73,7 +78,12 @@ deploys the image staging already ran, it is never rebuilt.
    `/opt/ardoise/{proxy,production,staging}`.
 6. **The proxy**: copy `deploy/proxy/` to `/opt/ardoise/proxy`, create its `.env` from
    `.env.example`, then `docker compose up -d`. Only if its Caddyfile or compose file
-   changes does it need touching again (it is not part of a release).
+   changes does it need touching again (it is not part of a release). Check its logs
+   (`docker compose logs caddy`) for `certificate obtained` for each domain; then
+   `http://<domain>` answers a redirect and `https://<domain>/health` a 502 until the
+   environment is deployed. `Error getting validation data` means the certificate
+   authority cannot reach ports 80/443 (firewall, DNS): **stop the proxy** while you fix
+   it, Let's Encrypt allows only 5 failed validations per domain per hour.
 7. **Per environment, the `.env`** — copy `deploy/.env.example` to
    `/opt/ardoise/<env>/.env`, fill it, `chmod 600`. It holds every secret of the
    environment and **exists only there**: it is not in git and not in the CI. Generate
@@ -91,6 +101,11 @@ The scripts (`deploy.sh`, `backup.sh`, `backup-offsite.sh`, `compose.sh`, `lib.s
 `compose.yaml`) are **not**
 installed by hand: every deploy copies them from the repository into the environment's
 directory, so what runs on the machine is what is in git.
+
+The commands in this document run **as the deploy user**. Administering from another
+account (one with sudo), prefix them with `sudo -u deploy` (`sudo -u deploy ./compose.sh
+ps`, `sudo -u deploy crontab -e`, `sudo -u deploy nano .env`): the env files are mode
+600 and must stay owned by the deploy user, or the next deploy cannot read them.
 
 ## Deploying
 
@@ -164,9 +179,11 @@ each:
 On `production`, enable **Required reviewers** (yourself is fine for a solo project: it
 turns a stray click into a deliberate second one) and restrict it to the `main` branch.
 On the repository: after the first image is published, check the package
-(`ardoise-server`, under the account's Packages) is **private** and linked to the
-repository, so the job token can read it. Use repository-level secrets instead if
-staging and production share a machine and you prefer one copy.
+(`ardoise-server`, in the repository's sidebar under Packages) is linked to the
+repository, so the job token can read it. It takes the repository's visibility — public
+here, which is harmless: the image holds the public code and no secret. Use
+repository-level secrets instead if staging and production share a machine and you
+prefer one copy.
 
 If a secret or variable is missing the job fails at the SSH step with an empty host:
 that is the symptom of an unconfigured environment.
@@ -221,7 +238,8 @@ Two layers:
    alerts on a failure, and on silence — a cron that stopped, a machine that is gone, a
    run stuck past the grace time.
 4. The cron, as the deploy user (`crontab -e`), away from any automatic-reboot window of
-   the machine:
+   the machine (minimal images may not ship cron: install and enable it, e.g. `apt
+   install cron`, `systemctl enable --now cron`; it runs in the machine's time zone):
    ```cron
    15 3 * * * /opt/ardoise/production/backup-offsite.sh >> /opt/ardoise/production/backups/cron.log 2>&1
    ```
@@ -295,7 +313,8 @@ secret (`docs/MOBILE.md`).
 - Single machine, single database: no replication, no automatic failover. The database
   runs in a container with a named volume on the machine's disk.
 - No zero-downtime deploys (above).
-- No uptime monitor or alerting yet (above), except for the off-site backup's own check.
+- Alerting comes only from outside: the uptime monitor on `/health` and the off-site
+  backup's check. Nothing alerts on log events yet (above).
 - The machine holds a bucket key that can delete as well as write (`restic forget
   --prune` needs it): whoever takes over the machine can erase the off-site copies too.
   Not solved yet; the candidates are an object lock / retention rule on the bucket, or
