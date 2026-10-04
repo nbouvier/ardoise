@@ -36,22 +36,22 @@ ping_monitor() {
 restic() {
   # restic groups snapshots by host, and the retention applies per group: a fixed
   # name, not the container's random one.
-  docker run --rm --interactive --env-file "$config" --hostname "splitcount-$environment" \
-    --volume splitcount-restic-cache:/root/.cache/restic "$restic_image" "$@"
+  docker run --rm --interactive --env-file "$config" --hostname "ardoise-$environment" \
+    --volume ardoise-restic-cache:/root/.cache/restic "$restic_image" "$@"
 }
 
 ping_monitor /start
 trap 'if [ $? -eq 0 ]; then ping_monitor ""; else log "off-site backup failed" >&2; ping_monitor /fail; fi' EXIT
 
 ./backup.sh
-dump=$(ls -1t "${BACKUP_DIR:-backups}"/splitcount-*.dump | head -1)
+dump=$(ls -1t "${BACKUP_DIR:-backups}"/ardoise-*.dump | head -1)
 
 # One dump per snapshot, always under the same name: the snapshots form one group
-# for the retention, and `dump latest /splitcount.dump` gets the newest back.
+# for the retention, and `dump latest /ardoise.dump` gets the newest back.
 log "copying $dump off the machine"
-restic backup --stdin --stdin-filename splitcount.dump < "$dump"
+restic backup --stdin --stdin-filename ardoise.dump < "$dump"
 
 log 'applying the retention'
-restic forget --host "splitcount-$environment" --keep-daily 30 --keep-monthly 12 --prune
+restic forget --host "ardoise-$environment" --keep-daily 30 --keep-monthly 12 --prune
 
 log 'done'

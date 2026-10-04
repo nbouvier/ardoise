@@ -129,12 +129,12 @@ echo '# backup: retention'
 fresh_sandbox
 mkdir "$sandbox/backups"
 for day in 01 02 03 04 05; do
-  : > "$sandbox/backups/splitcount-202601${day}T000000Z.dump"
-  touch -d "2026-01-$day" "$sandbox/backups/splitcount-202601${day}T000000Z.dump"
+  : > "$sandbox/backups/ardoise-202601${day}T000000Z.dump"
+  touch -d "2026-01-$day" "$sandbox/backups/ardoise-202601${day}T000000Z.dump"
 done
 BACKUP_KEEP=3 "$sandbox/backup.sh" > /dev/null
 check 'keeps the newest N' test "$(ls "$sandbox"/backups/*.dump | wc -l)" -eq 3
-check 'drops the oldest' test ! -e "$sandbox/backups/splitcount-20260101T000000Z.dump"
+check 'drops the oldest' test ! -e "$sandbox/backups/ardoise-20260101T000000Z.dump"
 check 'keeps the one just taken' bash -c 'ls "$1"/backups/*.dump | grep -qv 2026010' _ "$sandbox"
 
 # An environment with off-site backups configured, pinging a monitor.
@@ -153,8 +153,8 @@ check 'exits 0' test $? -eq 0
 check 'signals the start first' before 'ping.example.com/check/start' 'pg_dump'
 check 'dumps before copying' before 'pg_dump' 'backup --stdin'
 check 'copies the dump just taken' grep -qx PGDMP "$SHIM_LOG.stdin"
-check 'copies under a fixed host name' logged '--hostname splitcount-production'
-check 'applies the retention after the copy' before 'backup --stdin' 'forget --host splitcount-production'
+check 'copies under a fixed host name' logged '--hostname ardoise-production'
+check 'applies the retention after the copy' before 'backup --stdin' 'forget --host ardoise-production'
 check 'signals success last' ping_success_last
 check 'never signals a failure' bash -c '! grep -qF -- "/check/fail" "$SHIM_LOG"'
 
@@ -182,7 +182,7 @@ echo '# off-site backup: the monitor is unreachable'
 fresh_offsite_sandbox
 FAIL_ON='ping.example.com' "$sandbox/backup-offsite.sh" > /dev/null 2>&1
 check 'still exits 0' test $? -eq 0
-check 'still copies and applies the retention' logged 'forget --host splitcount-production'
+check 'still copies and applies the retention' logged 'forget --host ardoise-production'
 
 echo '# off-site backup: no monitor configured'
 fresh_offsite_sandbox

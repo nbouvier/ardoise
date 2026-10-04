@@ -122,9 +122,9 @@ copies of the `deploy/` scripts (`*.sh` but `test.sh`) and `compose.yaml`, and a
 
 ```bash
 docker run -d --rm --name sc-registry -p 127.0.0.1:5000:5000 registry:2
-docker build -t localhost:5000/splitcount-server:sha-0000001 .   # from the repo root
-docker push localhost:5000/splitcount-server:sha-0000001
-./deploy.sh localhost:5000/splitcount-server:sha-0000001          # in the throwaway dir
+docker build -t localhost:5000/ardoise-server:sha-0000001 .   # from the repo root
+docker push localhost:5000/ardoise-server:sha-0000001
+./deploy.sh localhost:5000/ardoise-server:sha-0000001          # in the throwaway dir
 ```
 
 Worth checking: a first deploy on an empty volume, a second deploy (`pending: 0`), an

@@ -69,7 +69,7 @@ jobs:
       # a missing required variable or a typo fails now, not during a deploy.
       - name: Compose files
         env:
-          SERVER_IMAGE: splitcount-server:ci
+          SERVER_IMAGE: ardoise-server:ci
         run: |
           cp deploy/.env.example deploy/.env.ci
           echo 'LOG_LEVEL=debug' >> deploy/.env.ci
@@ -101,7 +101,7 @@ jobs:
 
       - id: name
         # Registry names are lowercase; the owner may not be.
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/splitcount-server" >> "$GITHUB_OUTPUT"
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ardoise-server" >> "$GITHUB_OUTPUT"
 
       # Emulates arm64 on the amd64 runner. Only the dependency install runs under
       # it: the Dockerfile compiles on the runner's own platform.
@@ -166,7 +166,7 @@ jobs:
           user: ${{ secrets.DEPLOY_USER }}
           ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
           known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          directory: /opt/splitcount/staging
+          directory: /opt/ardoise/staging
           image: ${{ needs.image.outputs.reference }}
           registry-user: ${{ github.actor }}
           registry-token: ${{ secrets.GITHUB_TOKEN }}

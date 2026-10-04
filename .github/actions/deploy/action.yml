@@ -21,10 +21,10 @@ inputs:
       from receiving the registry token.
     required: true
   directory:
-    description: Environment directory on the machine, for example /opt/splitcount/staging.
+    description: Environment directory on the machine, for example /opt/ardoise/staging.
     required: true
   image:
-    description: Full image reference to deploy, for example ghcr.io/owner/splitcount-server:sha-1a2b3c4.
+    description: Full image reference to deploy, for example ghcr.io/owner/ardoise-server:sha-1a2b3c4.
     required: true
   registry-user:
     description: User for the container registry login.

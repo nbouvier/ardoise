@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy one release of the API server to this environment.
 #
-#   ./deploy.sh ghcr.io/<owner>/splitcount-server:sha-1a2b3c4
+#   ./deploy.sh ghcr.io/<owner>/ardoise-server:sha-1a2b3c4
 #
 # In order: pull the image, make sure the database is up, back it up, run the
 # migrations ONCE, start the new server and wait until it is healthy. A failure

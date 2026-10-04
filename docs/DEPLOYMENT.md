@@ -12,7 +12,7 @@ rollbacks (`docs/OPERATIONS.md`), the schema (`docs/DATABASE.md`), logging
 The server ships as one image, built from the repository root with the `Dockerfile`:
 
 ```bash
-docker build -t splitcount-server .
+docker build -t ardoise-server .
 ```
 
 - Three stages: production dependencies (`npm ci --omit=dev`), build (`npm run build`:

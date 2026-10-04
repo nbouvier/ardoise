@@ -10,6 +10,11 @@ provider-independent: anyone can self-host the same stack. The machine can be x8
 ARM64: the CI publishes the image for both (`linux/amd64`, `linux/arm64`) under one tag,
 and Docker pulls the one matching the machine.
 
+**Names.** The product is being renamed Ardoise; the code still says SplitCount. Everything
+named on the machine and in the registry already uses `ardoise` (directories, Compose
+projects and so their volumes, the database role, the image, the backups), because those
+names are fixed by the first deploy: renaming them later means moving data.
+
 ## Topology
 
 ```
@@ -28,8 +33,8 @@ and Docker pulls the one matching the machine.
 
 | | production | staging |
 | --- | --- | --- |
-| Directory on the machine | `/opt/splitcount/production` | `/opt/splitcount/staging` |
-| Compose project | `splitcount-production` | `splitcount-staging` |
+| Directory on the machine | `/opt/ardoise/production` | `/opt/ardoise/staging` |
+| Compose project | `ardoise-production` | `ardoise-staging` |
 | Host port (loopback) | 3000 | 3001 |
 | Domain | `PRODUCTION_DOMAIN` | `STAGING_DOMAIN` |
 | Receives a release | when someone promotes it (manual) | on every merge to `main` |
@@ -65,12 +70,12 @@ deploys the image staging already ran, it is never rebuilt.
    machine. Without a domain the proxy cannot obtain a certificate, and Android refuses
    cleartext HTTP, so there is no useful deployment without one.
 5. **The directories**, owned by the deploy user:
-   `/opt/splitcount/{proxy,production,staging}`.
-6. **The proxy**: copy `deploy/proxy/` to `/opt/splitcount/proxy`, create its `.env` from
+   `/opt/ardoise/{proxy,production,staging}`.
+6. **The proxy**: copy `deploy/proxy/` to `/opt/ardoise/proxy`, create its `.env` from
    `.env.example`, then `docker compose up -d`. Only if its Caddyfile or compose file
    changes does it need touching again (it is not part of a release).
 7. **Per environment, the `.env`** — copy `deploy/.env.example` to
-   `/opt/splitcount/<env>/.env`, fill it, `chmod 600`. It holds every secret of the
+   `/opt/ardoise/<env>/.env`, fill it, `chmod 600`. It holds every secret of the
    environment and **exists only there**: it is not in git and not in the CI. Generate
    the secrets on the machine:
    ```bash
@@ -90,8 +95,8 @@ directory, so what runs on the machine is what is in git.
 ## Deploying
 
 ```bash
-cd /opt/splitcount/<env>
-./deploy.sh ghcr.io/<owner>/splitcount-server:sha-1a2b3c4
+cd /opt/ardoise/<env>
+./deploy.sh ghcr.io/<owner>/ardoise-server:sha-1a2b3c4
 ```
 
 (The CI does exactly that over SSH; run it by hand to redeploy or roll back.) In order:
@@ -126,7 +131,7 @@ which the per-instance rate limits (`docs/DEPLOYMENT.md`) already tolerate.
 pull request ──► secrets (gitleaks) + verify (lint, typecheck, tests, deploy scripts, compose files)
                  └─► image (built, not published)
 
-merge to main ─► secrets + verify ─► image (published: ghcr.io/<owner>/splitcount-server:sha-<7>)
+merge to main ─► secrets + verify ─► image (published: ghcr.io/<owner>/ardoise-server:sha-<7>)
                                      └─► deploy-staging ─► smoke test (GET <staging>/health)
 
 "Deploy to production" (Actions tab, by hand, image_tag = sha-<7>)
@@ -159,7 +164,7 @@ each:
 On `production`, enable **Required reviewers** (yourself is fine for a solo project: it
 turns a stray click into a deliberate second one) and restrict it to the `main` branch.
 On the repository: after the first image is published, check the package
-(`splitcount-server`, under the account's Packages) is **private** and linked to the
+(`ardoise-server`, under the account's Packages) is **private** and linked to the
 repository, so the job token can read it. Use repository-level secrets instead if
 staging and production share a machine and you prefer one copy.
 
@@ -173,9 +178,9 @@ containing a known secret format is then rejected before it is published. The CI
 ## Rolling back
 
 ```bash
-cd /opt/splitcount/production
+cd /opt/ardoise/production
 cat release.env                 # the current release
-./deploy.sh ghcr.io/<owner>/splitcount-server:sha-<previous>
+./deploy.sh ghcr.io/<owner>/ardoise-server:sha-<previous>
 ```
 
 That is the same procedure with an older image: it takes a backup, runs that image's
@@ -190,7 +195,7 @@ Images stay on the machine and in the registry; the registry keeps the `sha-…`
 
 Two layers:
 
-- **On the machine.** `backup.sh` writes `backups/splitcount-<UTC timestamp>.dump`
+- **On the machine.** `backup.sh` writes `backups/ardoise-<UTC timestamp>.dump`
   (PostgreSQL custom format) and keeps the newest `BACKUP_KEEP` (default 30). Taken
   **automatically before every deploy**: the way back from a bad migration.
 - **Off the machine, daily.** A dump on the machine's own disk does not survive losing the
@@ -218,18 +223,18 @@ Two layers:
 4. The cron, as the deploy user (`crontab -e`), away from any automatic-reboot window of
    the machine:
    ```cron
-   15 3 * * * /opt/splitcount/production/backup-offsite.sh >> /opt/splitcount/production/backups/cron.log 2>&1
+   15 3 * * * /opt/ardoise/production/backup-offsite.sh >> /opt/ardoise/production/backups/cron.log 2>&1
    ```
 5. Run it once by hand, check the monitor turned green, then **restore from the bucket**
    (below).
 
 Staging holds disposable data: its pre-deploy dumps are enough.
 
-Each snapshot holds one dump, named `/splitcount.dump`, under the host
-`splitcount-<DEPLOY_ENV>`. To look at the repository from the machine:
+Each snapshot holds one dump, named `/ardoise.dump`, under the host
+`ardoise-<DEPLOY_ENV>`. To look at the repository from the machine:
 
 ```bash
-cd /opt/splitcount/production
+cd /opt/ardoise/production
 docker run --rm --env-file backup-offsite.env restic/restic:0.18.0 snapshots
 ```
 
@@ -242,10 +247,10 @@ one fail: `… restic/restic:0.18.0 unlock`.
 From a dump on the machine:
 
 ```bash
-cd /opt/splitcount/production
+cd /opt/ardoise/production
 ./compose.sh stop server
-./compose.sh exec -T db pg_restore --username splitcount --dbname splitcount \
-  --clean --if-exists --no-owner < backups/splitcount-<timestamp>.dump
+./compose.sh exec -T db pg_restore --username ardoise --dbname ardoise \
+  --clean --if-exists --no-owner < backups/ardoise-<timestamp>.dump
 ./compose.sh start server
 ```
 
@@ -254,8 +259,8 @@ the same commands with that file.
 
 ```bash
 docker run --rm --env-file backup-offsite.env restic/restic:0.18.0 \
-  dump --host splitcount-production latest /splitcount.dump > restored.dump
-# an older one: `snapshots`, then `dump <snapshot id> /splitcount.dump`
+  dump --host ardoise-production latest /ardoise.dump > restored.dump
+# an older one: `snapshots`, then `dump <snapshot id> /ardoise.dump`
 ```
 
 Prefer to rehearse on staging first: copy a production dump there and restore it. **Test
@@ -277,7 +282,7 @@ any change to how backups are taken.
 
 | Secret | Lives in | Rotating it |
 | --- | --- | --- |
-| `.env` of an environment | that environment's directory, mode 600 | Edit, then `./compose.sh up -d server` (recreates the container with the new values). Changing `AUTH_JWT_SECRET` signs every user out. Changing `POSTGRES_PASSWORD` here does not change it *inside* an existing database: alter the role first (`./compose.sh exec db psql -U splitcount -c "alter user splitcount password '…'"`), then edit. |
+| `.env` of an environment | that environment's directory, mode 600 | Edit, then `./compose.sh up -d server` (recreates the container with the new values). Changing `AUTH_JWT_SECRET` signs every user out. Changing `POSTGRES_PASSWORD` here does not change it *inside* an existing database: alter the role first (`./compose.sh exec db psql -U ardoise -c "alter user ardoise password '…'"`), then edit. |
 | Google OAuth client IDs | `GOOGLE_CLIENT_IDS` | Public identifiers, not secrets. |
 | CI → machine SSH key | repository secrets (see "Automated deploys") | Generate a new pair, replace the public key in `authorized_keys`, then the secret. |
 | `backup-offsite.env` | production's directory, mode 600; `RESTIC_PASSWORD` also in a password manager | Bucket key: create a new one, edit, revoke the old. `RESTIC_PASSWORD`: `restic key add` then `restic key remove` the old one (re-encrypting the data is not needed), then edit. |

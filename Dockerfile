@@ -2,7 +2,7 @@
 
 # SplitCount API server (apps/server). Build from the repository root:
 #
-#   docker build -t splitcount-server .
+#   docker build -t ardoise-server .
 #
 # The CI builds it for linux/amd64 and linux/arm64 (a multi-platform image: each
 # machine pulls its own architecture).

@@ -3,9 +3,9 @@
 # on loopback. One proxy per machine, whatever the number of environments on it.
 # Set up once, by hand; see docs/OPERATIONS.md.
 #
-#   cd /opt/splitcount/proxy && docker compose up -d
+#   cd /opt/ardoise/proxy && docker compose up -d
 
-name: splitcount-proxy
+name: ardoise-proxy
 
 services:
   caddy:
