@@ -13,11 +13,17 @@ x-logging: &logging
     max-size: 10m
     max-file: '5'
 
+# Every container has a memory ceiling: production, staging and the proxy share one
+# machine, and a leak or a runaway query in one must not starve the others. Past
+# its ceiling a container is killed and restarted (`restart`), the others carry on.
+# Sizes in .env (see .env.example).
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
     logging: *logging
+    mem_limit: ${DB_MEMORY_LIMIT:-1g}
     environment:
       POSTGRES_USER: splitcount
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -41,6 +47,7 @@ services:
     command: ['node', 'apps/server/dist/scripts/migrate.js']
     restart: 'no'
     logging: *logging
+    mem_limit: ${SERVER_MEMORY_LIMIT:-512m}
     profiles: ['release']
     environment:
       DATABASE_URL: postgres://splitcount:${POSTGRES_PASSWORD}@db:5432/splitcount
@@ -52,6 +59,8 @@ services:
     image: ${SERVER_IMAGE:?set by deploy.sh}
     restart: unless-stopped
     logging: *logging
+    # Node sizes its heap from this ceiling.
+    mem_limit: ${SERVER_MEMORY_LIMIT:-512m}
     init: true
     # Longer than SHUTDOWN_TIMEOUT_SECONDS (25), so the drain finishes or logs
     # its own timeout before Docker kills the container.

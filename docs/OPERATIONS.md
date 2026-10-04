@@ -39,6 +39,15 @@ The two environments share only the machine and the proxy. They can be moved to 
 machines without changing anything but the Caddyfile (each machine then runs one of the
 two sites).
 
+**Memory.** Every container has a ceiling, so a leak or a runaway query in one cannot
+starve the others (staging cannot take production down with it). Past its ceiling a
+container is killed and restarted by Docker; the others carry on. Per environment, in its
+`.env`: `DB_MEMORY_LIMIT` (default `1g`) and `SERVER_MEMORY_LIMIT` (default `512m`, also
+used by the migration step; Node sizes its heap from it). The proxy has a fixed `256m`.
+Both environments at the defaults plus the proxy need about 3.3 GB: size the machine for
+that, or lower staging's. A container restarting in a loop (`./compose.sh ps`, and
+`OOMKilled` in `docker inspect`) means its ceiling is too low.
+
 Staging exists so that a change (including its migration) runs once somewhere that does
 not matter before it reaches production. The **same image** is promoted: production
 deploys the image staging already ran, it is never rebuilt.

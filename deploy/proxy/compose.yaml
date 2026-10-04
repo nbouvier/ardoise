@@ -13,6 +13,9 @@ services:
     restart: unless-stopped
     # Host network: reaches the environments' loopback-only ports, and binds 80/443.
     network_mode: host
+    # Same reason as the environments' ceilings (deploy/compose.yaml); Caddy needs
+    # a few tens of MB.
+    mem_limit: 256m
     environment:
       PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN:?set PRODUCTION_DOMAIN in .env}
       STAGING_DOMAIN: ${STAGING_DOMAIN:?set STAGING_DOMAIN in .env}
