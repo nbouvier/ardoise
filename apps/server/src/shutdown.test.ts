@@ -3,7 +3,13 @@ import { EventEmitter } from 'node:events';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { reportError } from './error-reporting.js';
 import { installGracefulShutdown, type ShutdownProcess } from './shutdown.js';
+
+vi.mock('./error-reporting.js', () => ({
+  reportError: vi.fn(),
+  flushErrorReports: vi.fn(async () => undefined),
+}));
 
 /** A stand-in for `process`: `signal()` plays the platform, `exit` records what the server asked for. */
 function fakeProcess() {
@@ -34,6 +40,7 @@ describe('installGracefulShutdown', () => {
       await app.close();
     }
     app = undefined;
+    vi.mocked(reportError).mockClear();
   });
 
   /**
@@ -119,6 +126,9 @@ describe('installGracefulShutdown', () => {
     signal('SIGTERM');
 
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1));
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'server.shutdown.timeout', {
+      timeoutMs: 100,
+    });
 
     // The late close must not report a second, contradictory exit.
     release.open();
@@ -139,6 +149,22 @@ describe('installGracefulShutdown', () => {
     signal('SIGTERM');
 
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1));
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), 'server.shutdown.failed');
+  });
+
+  it('sends queued error reports before exiting', async () => {
+    const { app } = await listeningApp();
+    const { proc, exit, signal } = fakeProcess();
+    const sent = gate();
+    const flushReports = vi.fn(() => sent.opened);
+    installGracefulShutdown(app, { timeoutMs: 5_000, process: proc, flushReports });
+
+    signal('SIGTERM');
+    await vi.waitFor(() => expect(flushReports).toHaveBeenCalledTimes(1));
+    expect(exit).not.toHaveBeenCalled();
+
+    sent.open();
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
   });
 
   it('ignores a second signal while shutting down', async () => {

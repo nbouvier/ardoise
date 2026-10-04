@@ -89,6 +89,37 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('error reporting', () => {
+    it('is off without a DSN, and files reports under NODE_ENV by default', () => {
+      const env = loadEnv(production);
+
+      expect(env.SENTRY_DSN).toBeUndefined();
+      expect(env.SENTRY_ENVIRONMENT).toBe('production');
+      expect(env.APP_RELEASE).toBeUndefined();
+    });
+
+    it('takes the DSN, the environment and the release from the deployment', () => {
+      const env = loadEnv({
+        ...production,
+        SENTRY_DSN: 'https://public@o0.ingest.example.test/1',
+        SENTRY_ENVIRONMENT: 'staging',
+        APP_RELEASE: 'sha-abc1234',
+      });
+
+      expect(env.SENTRY_DSN).toBe('https://public@o0.ingest.example.test/1');
+      expect(env.SENTRY_ENVIRONMENT).toBe('staging');
+      expect(env.APP_RELEASE).toBe('sha-abc1234');
+    });
+
+    it('treats the empty release of an image built without one as unknown', () => {
+      expect(loadEnv({ ...production, APP_RELEASE: '' }).APP_RELEASE).toBeUndefined();
+    });
+
+    it('refuses a DSN that is not a URL rather than silently reporting nothing', () => {
+      expect(() => loadEnv({ ...production, SENTRY_DSN: 'not-a-dsn' })).toThrow(/SENTRY_DSN/);
+    });
+  });
+
   it('rejects a TRUST_PROXY that is not understood, in any environment', () => {
     expect(() => loadEnv({ ...base, NODE_ENV: 'development', TRUST_PROXY: 'yes' })).toThrow(
       /TRUST_PROXY: must be true, false/,

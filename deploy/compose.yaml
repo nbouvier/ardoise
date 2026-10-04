@@ -73,11 +73,14 @@ services:
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
       # One proxy (Caddy, see proxy/) sits between the clients and the server.
       TRUST_PROXY: '1'
+      # Error reports are filed under this environment's name (production / staging).
+      SENTRY_ENVIRONMENT: ${DEPLOY_ENV}
       # Optional, passed through only when set in .env (an empty value would be
       # rejected by the server's validation).
       LOG_LEVEL:
       PLAY_STORE_URL:
       APP_STORE_URL:
+      SENTRY_DSN:
     depends_on:
       db:
         condition: service_healthy

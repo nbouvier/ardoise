@@ -119,7 +119,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | Mobile lint        | `eslint-config-expo` (flat)               |
 | Server lint        | `typescript-eslint` (flat)                |
 | Server logging     | Fastify / pino                            |
-| Error reporting    | Sentry (sentry.io, EU region): `@sentry/react-native` |
+| Error reporting    | Sentry (sentry.io, EU region): `@sentry/react-native`, `@sentry/node` |
 | Database           | PostgreSQL + Drizzle ORM (drizzle-kit migrations); PGlite embedded in dev/test |
 
 ## Key decisions
@@ -205,11 +205,15 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code followed the same day (workspaces `@ardoise/*`, app identifiers, texts) | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. The code has no such deadline but one name everywhere is simpler |
 | 2026-10-04 | Crashes and unexpected errors are reported to Sentry's hosted service (free plan, EU data region), one project per app, production and staging told apart by the report's `environment`; reporting is off without a DSN | A crash on a phone is otherwise invisible. Hosted over self-hosted GlitchTip (which speaks the same protocol): no service to run, update and back up on the one machine, and the free quota is far above this app's scale. Switching later is a DSN and an upload URL, no code change. One project per app rather than per environment: the same code yields the same issues, alerts filter on `environment:production` |
 | 2026-10-04 | On mobile, `logger` is the feed: every event a breadcrumb, `error` always an issue, `warn` an issue only for an unexpected error (not `NetworkError` / `ApiError` / a cancelled sign-in); `errorFields()` carries the original error on a symbol key | No call site changed, and the decision of what is worth an issue sits in one rule (`isReportable`) instead of 30 `catch` blocks. Expected failures stay out of the quota; a bug that the UI recovers from still surfaces |
+| 2026-10-04 | On the server, failures are reported explicitly (`reportError(error, event)`) at the five places that log them at `error` level; the SDK's automatic `Fastify` integration is removed, and every `dataCollection` category is turned off | One capture per failure, tagged with the same event name as its log line and carrying the route template rather than a URL that may hold an invitation code. The SDK defaults collect headers (the bearer token), bodies and local variables: none is needed to diagnose a failure, each can leak. An unhandled rejection still exits the process (`strict`), as without Sentry |
+| 2026-10-04 | The image carries its version (`APP_RELEASE`, build argument = the `sha-` tag) | An error report then names the release it came from; the same image is promoted from staging to production, so the value stays true |
 
 ## Open items
 
-- No alerting on log events yet, only an external uptime monitor and the backup check;
-  the deployment itself stays provider-independent (`docs/OPERATIONS.md`).
+- Logs are not shipped anywhere (errors go to Sentry, the rest stays in Docker's 50 MB
+  per container); the deployment itself stays provider-independent
+  (`docs/OPERATIONS.md`). Sentry's free plan includes log ingestion, the obvious next step
+  if logs older than that are ever needed.
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
 - Development builds are local (`expo run:*`). Release builds and OTA updates are

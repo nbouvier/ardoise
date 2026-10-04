@@ -26,7 +26,7 @@ Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
 | Event                   | Level | Fields                       | Meaning |
 | ----------------------- | ----- | ---------------------------- | ------- |
-| `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. The only place the cause is visible. |
+| `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. Also reported to Sentry; the log line and the issue are the only places the cause is visible. |
 | `http.request.rejected` | info  | `status`, `code`             | A request was refused before or outside a route's own handling: malformed JSON, body too large, unsupported content type, or `429` for rate limiting (`status: 429`). A burst of 429s from one address is how abuse of `/auth/*` shows up. |
 
 The error is logged as a plain `error` object rather than under pino's `err` key: that
@@ -128,6 +128,38 @@ symbol key, invisible when the fields are printed, for the reporter to use.
   `/invites/<code>`, `/i/<code>` and `ardoise://invite/<code>` become `…/[code]`.
 - The console breadcrumbs are dropped (the logger's own, scrubbed ones replace them).
 - No performance tracing, no session replay, no screenshots.
+
+### Server
+
+`src/error-reporting.ts`, started by `src/index.ts` (the process entry point; `buildApp`
+and the tests never start it). Configuration: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`
+(`DEPLOY_ENV` in the Compose stack), `APP_RELEASE` (baked into the image) —
+`docs/DEPLOYMENT.md`, `docs/OPERATIONS.md`.
+
+Reporting is explicit, next to the log line, with the event name as the `event` tag:
+
+| Event | Reported |
+| --- | --- |
+| `http.request.failed` | With `method`, the route **template** (`/groups/:groupId`, never the raw URL) and `status`. 4xx are never reported. |
+| `server.start.failed` | Then waits for the report to be sent before exiting. |
+| `db.pool.error` | Each occurrence; Sentry groups them in one issue. |
+| `server.shutdown.timeout`, `server.shutdown.failed` | Queued reports are sent before the process exits. |
+| Uncaught exception, unhandled rejection | By the SDK, which then exits the process as Node would (Docker restarts it). |
+
+The SDK's own `Fastify` integration is removed: it reported every 5xx untagged, and the
+SDK's de-duplication then dropped the tagged report.
+
+**What never leaves the machine.** The SDK collects a lot by default; all of it is off
+(`dataCollection`): request headers (the `Authorization` bearer), cookies, request and
+response bodies (amounts, titles), query strings, user info, database query data, and
+the values of local variables in stack frames. As a second net, `beforeSend` keeps only
+the method and URL of the request an error happened in, replaces invitation codes in the
+URL with `[code]`, and redacts any `extra` field named like a token, password, e-mail,
+amount, title, comment or `detail`. What remains is the error's type, message and stack.
+A driver error's **message** can still quote a value (see `http.request.failed` above):
+the same caveat as for the logs. Checked end to end against a fake ingest endpoint: a
+request carrying a bearer token, a cookie, an invitation code, a query string and a body
+with a title and an amount produced a report containing none of them.
 
 ## Shared rules (both apps)
 

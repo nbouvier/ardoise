@@ -1,5 +1,7 @@
 import fp from 'fastify-plugin';
 
+import { reportError } from '../error-reporting.js';
+
 import {
   assertMigrated,
   createDatabase,
@@ -42,12 +44,14 @@ export const dbPlugin = fp<DbPluginOptions>(
       (await createDatabase({
         databaseUrl: opts.databaseUrl,
         pgliteDataDir: opts.pgliteDataDir,
-        onPoolError: (error) =>
+        onPoolError: (error) => {
           // Plain object, not the error itself: see `http.request.failed` in docs/LOGGING.md.
           app.log.error(
             { error: { type: error.name, message: error.message, code: (error as { code?: string }).code } },
             'db.pool.error',
-          ),
+          );
+          reportError(error, 'db.pool.error');
+        },
       }));
 
     const migrations = opts.migrations ?? 'apply';

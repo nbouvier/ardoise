@@ -95,6 +95,8 @@ deploys the image staging already ran, it is never rebuilt.
    and different `SERVER_PORT` (3000 / 3001, matching the Caddyfile).
 8. **Off-site backups** (production): `backup-offsite.env` and the daily cron, see
    "Backups" below.
+9. **Error reporting** (optional, both environments): `SENTRY_DSN` in the `.env`, the
+   same value for production and staging — see "Logs and monitoring" below.
 
 The scripts (`deploy.sh`, `backup.sh`, `backup-offsite.sh`, `compose.sh`, `lib.sh`,
 `compose.yaml`) are **not**
@@ -292,8 +294,17 @@ any change to how backups are taken.
   Point an external uptime monitor at `https://<domain>/health` — without one, the first
   report of an outage is a user. It does not check the database (by design: it must keep
   answering when the database is down).
-- Events worth alerting on once there is somewhere to alert: `server.start.failed`,
-  `db.pool.error` (repeated), `http.request.failed`, `server.shutdown.timeout`.
+- **Error reporting (Sentry).** With `SENTRY_DSN` set in an environment's `.env`, the
+  failures that need a human become Sentry issues, e-mailed on first occurrence:
+  `http.request.failed`, `server.start.failed`, `db.pool.error`,
+  `server.shutdown.timeout`, `server.shutdown.failed`, and any uncaught exception or
+  unhandled rejection (after which the process exits and Docker restarts it). Each issue
+  carries the log event name as its `event` tag, the environment (`DEPLOY_ENV`) and the
+  release (the image's `sha-` tag), so it leads straight to the log line and the commit.
+  What is and is not sent: `docs/LOGGING.md`, "Error reporting (Sentry)". Changing the
+  DSN: edit `.env`, then `./compose.sh up -d server`.
+- Not reported: the release step (`db.migrate.failed`), which fails the deploy itself
+  and shows in the workflow run.
 
 ## Secrets and rotation
 
@@ -301,6 +312,7 @@ any change to how backups are taken.
 | --- | --- | --- |
 | `.env` of an environment | that environment's directory, mode 600 | Edit, then `./compose.sh up -d server` (recreates the container with the new values). Changing `AUTH_JWT_SECRET` signs every user out. Changing `POSTGRES_PASSWORD` here does not change it *inside* an existing database: alter the role first (`./compose.sh exec db psql -U ardoise -c "alter user ardoise password '…'"`), then edit. |
 | Google OAuth client IDs | `GOOGLE_CLIENT_IDS` | Public identifiers, not secrets. |
+| Sentry DSN | `SENTRY_DSN` in each `.env` | A client key: it can only send reports, so it is not a secret in Sentry's sense, but kept out of git anyway. If it is abused (spam reports eating the quota), Sentry → project → Client Keys: create a new key, edit both `.env`, `./compose.sh up -d server`, then disable the old key. The mobile app embeds its own project's DSN. |
 | CI → machine SSH key | repository secrets (see "Automated deploys") | Generate a new pair, replace the public key in `authorized_keys`, then the secret. |
 | `backup-offsite.env` | production's directory, mode 600; `RESTIC_PASSWORD` also in a password manager | Bucket key: create a new one, edit, revoke the old. `RESTIC_PASSWORD`: `restic key add` then `restic key remove` the old one (re-encrypting the data is not needed), then edit. |
 
@@ -312,8 +324,9 @@ secret (`docs/MOBILE.md`).
 - Single machine, single database: no replication, no automatic failover. The database
   runs in a container with a named volume on the machine's disk.
 - No zero-downtime deploys (above).
-- Alerting comes only from outside: the uptime monitor on `/health` and the off-site
-  backup's check. Nothing alerts on log events yet (above).
+- Alerting comes from outside the machine: the uptime monitor on `/health`, the off-site
+  backup's check, and Sentry for errors (above). Logs themselves are not shipped
+  anywhere: what is not an error event stays in the 50 MB Docker keeps per container.
 - The machine holds a bucket key that can delete as well as write (`restic forget
   --prune` needs it): whoever takes over the machine can erase the off-site copies too.
   Not solved yet; the candidates are an object lock / retention rule on the bucket, or

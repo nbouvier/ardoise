@@ -29,7 +29,11 @@ docker build -t ardoise-server .
   mobile *manifest*): the mobile app, `docs/`, `.git` and every `.env*` stay out of the
   build context, so a local `.env` can never end up in an image.
 - No secret is baked in: all configuration comes from the environment at run time
-  (`apps/server/.env.example` lists it).
+  (`apps/server/.env.example` lists it). The one value baked in is `APP_RELEASE`, the
+  image's own version (`sha-<commit>`, a build argument the CI sets), which error
+  reports are filed under.
+- The Sentry SDK (`@sentry/node`) accounts for about 90 MB of the image's
+  `node_modules`.
 
 ## Startup configuration
 
@@ -51,6 +55,12 @@ When `NODE_ENV=production`, on top of the variables that are always required
 
 Outside production they stay optional (`DATABASE_URL` → embedded PGlite,
 `PUBLIC_BASE_URL` → `http://localhost:3000`, `TRUST_PROXY` → `false`).
+
+Error reporting is optional everywhere: `SENTRY_DSN` turns it on (unset, nothing is
+reported), `SENTRY_ENVIRONMENT` names what reports are filed under (default: `NODE_ENV`;
+the Compose stack passes `DEPLOY_ENV`, so `production` or `staging`). A `SENTRY_DSN` that
+is not a URL is refused at startup rather than silently reporting nothing. See
+`docs/LOGGING.md`, "Error reporting (Sentry)".
 
 ## Database migrations
 
@@ -143,7 +153,7 @@ instead of dying mid-request (`apps/server/src/shutdown.ts`):
 1. Stops accepting connections; a request arriving on an already-open keep-alive connection
    gets a `503` with `Connection: close`, so the load balancer retries it elsewhere.
 2. Lets in-flight requests finish and closes each connection as soon as it goes idle.
-3. Closes the database pool, then exits `0`.
+3. Closes the database pool, sends any queued error report (at most 2s), then exits `0`.
 
 If that has not finished after `SHUTDOWN_TIMEOUT_SECONDS` (default 25), it logs
 `server.shutdown.timeout` and exits `1` — a deploy that hangs is worse than one request cut
@@ -189,8 +199,9 @@ target) ever needs to call it.
 ## Error responses
 
 An unexpected failure never reaches the client as-is: `apps/server/src/http/error-handler.ts`
-answers any 5xx with `{ "error": "internal_error" }` and logs the cause server-side
-(`http.request.failed`, see `docs/LOGGING.md`). To investigate a report of an
-`internal_error`, find that log line by time and request id. Before this existed,
+answers any 5xx with `{ "error": "internal_error" }`, logs the cause server-side
+(`http.request.failed`, see `docs/LOGGING.md`) and reports it to Sentry, tagged with the
+same event name. To investigate a report of an `internal_error`, start from the Sentry
+issue (stack trace, route, release), or find the log line by time and request id. Before this existed,
 Fastify's default handler sent `error.message` to the client, so a Postgres error could
 leak a constraint name or part of a row.
