@@ -96,7 +96,7 @@ concern.
 | --- | --- | --- |
 | `secrets` | gitleaks (pinned version, checksum verified) over the whole git history, findings redacted | a secret is found in any reachable commit (see `docs/guidelines/SECURITY.md`) |
 | `verify` | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (both apps), `deploy/test.sh`, `docker compose config` on both compose files | any of them fails; or a compose file no longer resolves with `deploy/.env.example` (a required variable missing, a typo) |
-| `image` | builds the server `Dockerfile` (needs `secrets` and `verify`); on `main` also pushes it to GHCR as `sha-<7 chars>` | the image does not build |
+| `image` | builds the server `Dockerfile` for `linux/amd64` and `linux/arm64` (needs `secrets` and `verify`); on `main` also pushes it to GHCR as `sha-<7 chars>` | the image does not build for one of the two architectures |
 
 These are the same commands as "Validation" in `CLAUDE.md`: a green CI means those pass on
 a clean Linux checkout, with no leftover `dist/` or `.env`. Reproduce a CI failure with
@@ -128,6 +128,9 @@ Worth checking: a first deploy on an empty volume, a second deploy (`pending: 0`
 image whose `CMD` exits (rollback to the previous tag, `release.env` unchanged), and the
 restore of `docs/OPERATIONS.md`. Clean up with `./compose.sh down -v` and
 `docker stop sc-registry`.
+
+An ARM image rehearses the same way on an x86 machine (Docker Desktop emulates it): build
+with `docker buildx build --platform linux/arm64 --load …`, slower but faithful.
 
 ## Current state
 

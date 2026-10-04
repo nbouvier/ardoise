@@ -6,7 +6,9 @@ variables, proxy, shutdown…) is in `docs/DEPLOYMENT.md`; the schema is in
 `docs/DATABASE.md`. The mobile builds are in `docs/MOBILE.md`.
 
 Everything here assumes one Linux machine (a VPS) with Docker (Compose v2) and is
-provider-independent: anyone can self-host the same stack.
+provider-independent: anyone can self-host the same stack. The machine can be x86-64 or
+ARM64: the CI publishes the image for both (`linux/amd64`, `linux/arm64`) under one tag,
+and Docker pulls the one matching the machine.
 
 ## Topology
 

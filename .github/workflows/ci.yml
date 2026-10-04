@@ -103,6 +103,12 @@ jobs:
         # Registry names are lowercase; the owner may not be.
         run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/splitcount-server" >> "$GITHUB_OUTPUT"
 
+      # Emulates arm64 on the amd64 runner. Only the dependency install runs under
+      # it: the Dockerfile compiles on the runner's own platform.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -119,11 +125,13 @@ jobs:
           tags: type=sha
 
       # On a pull request the image is built (a broken Dockerfile fails the PR)
-      # but not published.
+      # but not published. Both architectures under one tag: the machine pulls its
+      # own (an amd64-only image fails on an ARM server with "exec format error").
       - id: build
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

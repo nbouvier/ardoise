@@ -4,6 +4,9 @@
 #
 #   docker build -t splitcount-server .
 #
+# The CI builds it for linux/amd64 and linux/arm64 (a multi-platform image: each
+# machine pulls its own architecture).
+#
 # The same image runs the server and the migration release step
 # (`node apps/server/dist/scripts/migrate.js`); see docs/DEPLOYMENT.md.
 
@@ -25,7 +28,11 @@ RUN npm ci --omit=dev --ignore-scripts \
     --workspace @splitcount/server --workspace @splitcount/shared
 
 # --- Build ---------------------------------------------------------------------
-FROM node:${NODE_VERSION}-slim AS build
+# Runs on the builder's own platform whatever the target: its output (JavaScript)
+# is the same for every architecture, and compiling under emulation is slow. The
+# dependencies above and the runtime below stay on the target platform, so a
+# package with a native binary still gets the right one.
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-slim AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/
