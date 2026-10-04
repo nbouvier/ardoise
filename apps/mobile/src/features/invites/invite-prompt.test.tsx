@@ -38,7 +38,7 @@ beforeEach(() => {
 
 describe('InviteLinkHandler', () => {
   it('parks the code from the URL the app was opened with', async () => {
-    mockUseURL.mockReturnValue(`splitcount://invite/${CODE}`);
+    mockUseURL.mockReturnValue(`ardoise://invite/${CODE}`);
 
     await render(<InviteLinkHandler />);
 
@@ -46,7 +46,7 @@ describe('InviteLinkHandler', () => {
   });
 
   it('ignores a URL that is not an invitation', async () => {
-    mockUseURL.mockReturnValue('splitcount://account');
+    mockUseURL.mockReturnValue('ardoise://account');
 
     await render(<InviteLinkHandler />);
 

@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import type { InvitePreview } from '@ardoise/shared';
 
 /** The mobile app's URL scheme. Must match `scheme` in `apps/mobile/app.json`. */
-export const APP_SCHEME = 'splitcount';
+export const APP_SCHEME = 'ardoise';
 
 export interface LandingLinks {
   appStoreUrl?: string | undefined;

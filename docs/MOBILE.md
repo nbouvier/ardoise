@@ -130,7 +130,7 @@ iOS profile until an Apple developer account exists.
 The API URL is **not** in `eas.json` (it differs per environment and is baked into the
 bundle at build time): each profile takes it from the variables of its **EAS
 environment** — `preview` for staging, `production` for the other two. The same goes for
-the Google client IDs and `APP_ID` (see "Application id"). Nothing in these is secret.
+the Google client IDs. Nothing in these is secret.
 
 Version numbers: `version` in `app.json` is the user-visible one, bumped by hand;
 `versionCode` (what the Play Store orders by) is kept by EAS (`appVersionSource: remote`)
@@ -144,7 +144,7 @@ native code.
 
 - **Build** (new binary) whenever anything native changed: a dependency with native code
   added/upgraded (the Expo SDK, `react-native-*`, `expo-*`), a config plugin, any native
-  field in `app.json` (permissions, icon, splash, scheme, `APP_ID`).
+  field in `app.json` (permissions, icon, splash, scheme, application id).
 - **Update** for everything else: screens, logic, copy, styles.
 
 `runtimeVersion` is the `appVersion` policy: an update is delivered only to binaries built
@@ -177,12 +177,12 @@ eas update --branch staging --environment preview --message "Fix the split round
    the update URL (`https://u.expo.dev/<projectId>`) from it.
 2. **EAS environment variables** (once per environment: `preview`, `production`):
    ```bash
-   eas env:create --environment production --name APP_ID --value app.example.split --visibility plaintext
    eas env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://api.example.com --visibility plaintext
    eas env:create --environment production --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID --value <id> --visibility plaintext
    ```
-   (`APP_ID`, `EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; the iOS client
-   id only when iOS exists.) A local `apps/mobile/.env` is **not** uploaded to EAS.
+   (`EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; the iOS client id only
+   when iOS exists. The application id comes from `app.json`.) A local `apps/mobile/.env`
+   is **not** uploaded to EAS.
 3. **A robot token** for the workflow: expo.dev → Account → Access tokens → create one and
    store it as the repository secret `EXPO_TOKEN`.
 4. **Signing keystore**: the first Android build offers to generate it and keeps it on EAS.
@@ -222,25 +222,23 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 | `EXPO_PUBLIC_API_BASE_URL`        | SplitCount API base URL (default `http://localhost:3000`). |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
-| `APP_ID`                          | Application id: the Android package and the iOS bundle identifier (not `EXPO_PUBLIC_`: read at build time only). Optional — defaults to the id in `app.json`. See "Application id". |
+| `APP_ID`                          | Overrides the application id of `app.json` (not `EXPO_PUBLIC_`: read at build time only). Optional, unset for Ardoise itself — for a fork publishing its own build. See "Application id". |
 
 ### Application id
 
-The id (`com.…`) is **permanent once the app is published** — on the Play Store it can
-never change — and the product name is not final, so it is a single value: `APP_ID`, read by
-`app.config.ts`, applied to both the Android `package` and the iOS `bundleIdentifier`.
-`app.json` still carries the Expo template's `com.anonymous.splitcount`, which is fine to
-develop under but must never ship.
+The id is **`app.ardoise`** (`android.package` in `app.json`), applied by `app.config.ts` to
+both the Android `package` and the iOS `bundleIdentifier`. It is **permanent once the app
+is published** — on the Play Store it can never change. `APP_ID` overrides it.
 
 - It must look like `com.example.app` (dot-separated, each part starting with a letter,
   letters/digits/underscores only); anything else fails the config with a message.
-- An EAS build whose profile name starts with `production` **fails** while the id is still
-  the `com.anonymous…` placeholder. Set `APP_ID` (an EAS environment variable, see "Builds
-  and updates (EAS)") before the first production build.
-- Changing it later, before publishing, is cheap: change `APP_ID`, create the matching
-  Google OAuth **Android** client (it is matched by package name + signing SHA-1), rebuild.
-  Native projects must be regenerated (`npm run prebuild --workspace @ardoise/mobile`),
-  and an installed build under the old id is a different app.
+- An EAS build whose profile name starts with `production` **fails** if the id is the Expo
+  template's `com.anonymous…` placeholder: a guard against shipping under an id that cannot
+  be kept.
+- The Google OAuth **Android** client is matched by this id + the signing SHA-1 (see
+  "Google sign-in"). Changing the id means a new client and regenerated native projects
+  (`npm run prebuild --workspace @ardoise/mobile`); an installed build under the old id is
+  a different app, side by side with the new one.
 - The tests are in `src/lib/app-config.test.ts`. They live under `src/` deliberately:
   next to `app.config.ts`, `@jest/globals` becomes the first file `tsc` sees and flips which
   global `fetch` typing wins, breaking the typecheck of every test that mocks `fetch`.
@@ -250,9 +248,10 @@ Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
 
 ## Deep links
 
-The app registers the `splitcount` URL scheme (`scheme` in `app.json`). Friend invitations
-use it: the link a user shares points at the API (`/i/<code>`), and that page tries to open
-`splitcount://invite/<code>`.
+The app registers the `ardoise` URL scheme (`scheme` in `app.json`; the server's landing
+page and `pending-invite.ts` repeat it and must match). Invitations use it: the link a user
+shares points at the API (`/i/<code>`), and that page tries to open
+`ardoise://invite/<code>`.
 
 The code is captured by `InviteLinkHandler`, which sits **above** the auth gate — someone
 following a link may not have an account yet — and parked in `pendingInvite` until a
@@ -261,7 +260,7 @@ session exists.
 Testing a deep link without the web page:
 
 ```bash
-npx uri-scheme open splitcount://invite/<code> --android
+npx uri-scheme open ardoise://invite/<code> --android
 ```
 
 (`--ios` on macOS.) The landing-page URL form is recognised too, so
@@ -286,8 +285,8 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
 - After changing the Google config or client IDs, regenerate native code:
   `npm run prebuild --workspace @ardoise/mobile`, then rebuild (`npm run
   mobile:android` / `mobile:ios`).
-- **Android**: the OAuth Android client is matched by package name (`APP_ID`, else
-  `com.anonymous.splitcount`) + the signing certificate SHA-1. For a debug build, add the
+- **Android**: the OAuth Android client is matched by package name (`app.ardoise`) + the
+  signing certificate SHA-1. For a debug build, add the
   debug keystore SHA-1 (`cd android && ./gradlew signingReport`) to the Google Cloud
   Android client, or sign-in fails silently.
 - Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual

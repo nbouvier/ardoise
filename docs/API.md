@@ -154,7 +154,7 @@ Response `200`, discriminated on `kind`:
 ### `GET /i/:code`
 
 The public HTML page an invitation link points to. Not JSON: it tries to open
-`splitcount://invite/<code>`, and otherwise shows who is inviting (and which group, for a
+`ardoise://invite/<code>`, and otherwise shows who is inviting (and which group, for a
 group invitation), the code to enter manually, and the store links when they are
 configured. Served with `Cache-Control: no-store`.
 

@@ -8,11 +8,11 @@ import appConfig from '../../app.config';
 type ExpoConfig = ReturnType<typeof appConfig>;
 type ConfigContext = Parameters<typeof appConfig>[0];
 
-const PLACEHOLDER = 'com.anonymous.splitcount';
+const PLACEHOLDER = 'com.anonymous.ardoise';
 
 const base: ExpoConfig = {
-  name: 'SplitCount',
-  slug: 'splitcount',
+  name: 'Ardoise',
+  slug: 'ardoise',
   android: { package: PLACEHOLDER },
   plugins: [],
 };

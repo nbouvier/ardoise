@@ -77,7 +77,7 @@ describe('GET /i/:code', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
-    expect(response.body).toContain(`splitcount://invite/${code}`);
+    expect(response.body).toContain(`ardoise://invite/${code}`);
     expect(response.body).toContain('Ada Lovelace');
     expect(response.body).toContain(code);
   });
@@ -90,7 +90,7 @@ describe('GET /i/:code', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('Ada Lovelace');
     expect(response.body).toContain('Corsica 2026');
-    expect(response.body).toContain(`splitcount://invite/${code}`);
+    expect(response.body).toContain(`ardoise://invite/${code}`);
   });
 
   it('never lets the code be cached', async () => {
@@ -164,7 +164,7 @@ describe('GET /i/:code', () => {
     expect(response.statusCode).toBe(404);
     expect(response.headers['content-type']).toContain('text/html');
     expect(response.body).toContain('no longer valid');
-    expect(response.body).not.toContain('splitcount://invite');
+    expect(response.body).not.toContain('ardoise://invite');
   });
 
   it('shows the same page for a malformed code', async () => {

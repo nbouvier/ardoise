@@ -10,7 +10,7 @@ import { inviteCodeSchema } from '@ardoise/shared';
  */
 
 /** The app's own URL scheme. Must match `scheme` in `app.json`. */
-const APP_SCHEME = 'splitcount';
+const APP_SCHEME = 'ardoise';
 /** Path of the invitation landing page served by the API. */
 const LANDING_PREFIX = '/i/';
 
@@ -18,7 +18,7 @@ const LANDING_PREFIX = '/i/';
  * Extract an invitation code from a deep link or a landing-page URL, or return
  * null when the URL is about something else.
  *
- * Recognised: `splitcount://invite/<code>` and `https://<host>/i/<code>`.
+ * Recognised: `ardoise://invite/<code>` and `https://<host>/i/<code>`.
  */
 export function parseInviteUrl(url: string | null | undefined): string | null {
   if (!url) {
