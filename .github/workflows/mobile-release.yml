@@ -1,0 +1,70 @@
+name: Mobile release
+
+# Builds the Android app on EAS, or publishes an over-the-air update of its JavaScript.
+# Manual on purpose: every EAS build counts against the plan, and an update reaches
+# installed apps within minutes. Rules for choosing between the two, the profiles and
+# the one-time EAS setup: docs/MOBILE.md ("Builds and updates (EAS)").
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'build: a new binary. update: JavaScript only, no native change since the last build'
+        required: true
+        type: choice
+        options: [build, update]
+      profile:
+        description: 'staging (APK, staging API) · production (AAB for the Play Store) · production-apk (APK for direct download)'
+        required: true
+        type: choice
+        options: [staging, production, production-apk]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The production profiles wait for the reviewer configured on the `production` environment.
+    environment: ${{ inputs.profile == 'staging' && 'staging' || 'production' }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      ACTION: ${{ inputs.action }}
+      PROFILE: ${{ inputs.profile }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+        working-directory: .
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Check the tests pass first
+        run: npm test
+
+      - name: Build
+        if: env.ACTION == 'build'
+        # --no-wait: the build runs on EAS; follow it from the link it prints
+        # or at expo.dev, and install/submit the artifact from there.
+        run: eas build --platform android --profile "$PROFILE" --non-interactive --no-wait
+
+      - name: Publish an update
+        if: env.ACTION == 'update'
+        run: |
+          # An update targets a channel, and production-apk shares production's.
+          channel="${PROFILE%-apk}"
+          environment=$([ "$channel" = staging ] && echo preview || echo production)
+          eas update --branch "$channel" --environment "$environment" \
+            --message "$(git log -1 --pretty=%s)" --non-interactive

@@ -1,7 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createDatabase, migrateToLatest, type DatabaseHandle } from './client.js';
+import {
+  assertMigrated,
+  countPendingMigrations,
+  createDatabase,
+  migrateToLatest,
+  type DatabaseHandle,
+} from './client.js';
 import { sessions, users } from './schema.js';
 
 describe('database migrations', () => {
@@ -48,5 +54,38 @@ describe('database migrations', () => {
 
   it('runs migrations idempotently', async () => {
     await expect(migrateToLatest(handle)).resolves.not.toThrow();
+  });
+});
+
+describe('pending migrations', () => {
+  let handle: DatabaseHandle;
+
+  beforeAll(async () => {
+    handle = await createDatabase();
+  });
+
+  afterAll(async () => {
+    await handle.close();
+  });
+
+  it('counts every migration as pending on a database that was never migrated', async () => {
+    await expect(countPendingMigrations(handle)).resolves.toBeGreaterThan(0);
+    await expect(assertMigrated(handle)).rejects.toThrow(/pending/);
+  });
+
+  it('counts none once migrated', async () => {
+    await migrateToLatest(handle);
+
+    await expect(countPendingMigrations(handle)).resolves.toBe(0);
+    await expect(assertMigrated(handle)).resolves.toBeUndefined();
+  });
+
+  it('counts the migrations after the last one applied', async () => {
+    // Forget the latest migration, as if the database predated it.
+    await handle.db.execute(
+      sql`delete from drizzle.__drizzle_migrations where created_at = (select max(created_at) from drizzle.__drizzle_migrations)`,
+    );
+
+    await expect(countPendingMigrations(handle)).resolves.toBe(1);
   });
 });

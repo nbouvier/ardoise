@@ -50,6 +50,11 @@ packages/
                    inferred types) shared by both apps. No React Native, no Node-only
                    APIs, no secrets. Built to dist/ (ESM); consumers resolve types
                    straight from src/ so a rebuild is only needed for runtime/bundling.
+deploy/            Everything that runs on the server machine: the Compose stack of one
+                   environment, the deploy / backup scripts and their tests, and the
+                   Caddy proxy (deploy/proxy/). Synced to the machine by every deploy.
+                   See docs/OPERATIONS.md.
+Dockerfile         The API server's image (built from the repo root).
 docs/              Living documentation (this folder). Transverse, stays at the root.
 docs/specs/        Feature specifications — source of truth for established behavior.
 docs/guidelines/   Authoring conventions.
@@ -187,13 +192,28 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-02 | Security headers come from `@fastify/helmet` with a deny-everything default CSP; the invitation landing page overrides it per response with a hash-pinned CSP (`contentSecurityPolicyFor`), not `unsafe-inline` | The API serves JSON only, so nothing needs to be allowed. The landing page is the one HTML document and needs its inline style and script; its script embeds the invitation code, so the hash is computed per response. `Referrer-Policy: no-referrer` also keeps the code (in the URL) from leaking to the store links |
 | 2026-10-02 | Graceful shutdown on SIGTERM / SIGINT (`shutdown.ts`): `app.close()` plus a periodic sweep of idle keep-alive connections, bounded by `SHUTDOWN_TIMEOUT_SECONDS` | A deploy or scale-down must not cut requests in half. Fastify alone leaves a connection that was busy at shutdown open for its 72s keep-alive timeout — found by the tests, and exactly what a load balancer's connections look like — so the sweep is what makes the drain finish in milliseconds instead of hitting the timeout |
 | 2026-10-02 | The Postgres pool has an `error` listener that logs `db.pool.error` (`db/client.ts`) | `pg.Pool` emits `error` for a broken idle connection; unhandled, that crashes the process on any database restart or failover |
+| 2026-10-03 | In production, migrations are a separate release step (`src/scripts/migrate.ts`); the server only verifies the schema is current (`migrations: 'verify'` in `db/plugin.ts`) and refuses to start otherwise | Migrating at startup lets N instances race on the same migrations. One explicit step, run once before the new version starts, also makes a failed migration block the release. The check turns "new image on an old schema" into a startup error instead of runtime 500s. Development and tests keep migrating at startup |
+| 2026-10-03 | The server runs as a Docker image on a VPS: Compose stack per environment (Postgres + server) behind one Caddy proxy; `deploy.sh` backs up, migrates once, starts the server and rolls back if it is unhealthy | Nothing may depend on a hosting provider: a Linux box with Docker is the lowest common denominator. Compose over an orchestrator because there is one machine and one server instance. Scripts (tested against a fake `docker`, `deploy/test.sh`) rather than ad-hoc commands, so the order and the failure handling are reviewed code. Details and limits: `docs/OPERATIONS.md` |
+| 2026-10-03 | Two environments, production and staging, both on the VPS; staging deploys on every merge to `main`, production promotes the image staging already ran | CI must not push straight to production. Promoting the same image means production never runs a build nobody has seen. No demo environment (decided: not worth it) |
+| 2026-10-03 | Mobile releases are built on EAS (profiles `staging`, `production`, `production-apk`), triggered manually from GitHub Actions; JavaScript-only changes ship as EAS Update on a channel per profile, with `runtimeVersion` = the `appVersion` policy. Android only | Reproducible builds with a keystore held by EAS, and fixes without store review. Manual because builds are metered and an update is live in minutes. `appVersion` over `fingerprint` for predictability with the monorepo and local dev builds, at the cost of a rule to remember (bump `version` with any native change) — see `docs/MOBILE.md` |
+| 2026-10-03 | The application id is `APP_ID` (`app.config.ts`), and a `production*` EAS build refuses the template's `com.anonymous…` placeholder | The id is permanent once published and the name is not final: keep it one value, and make publishing under the placeholder impossible rather than unlikely |
+| 2026-10-04 | Off-machine backups go to S3-compatible object storage located in Europe | A dump on the machine's own disk does not survive losing the machine; keeping the copy in Europe keeps users' data there too |
+| 2026-10-04 | The server image is multi-platform (`linux/amd64` + `linux/arm64`), built in CI with QEMU; the Dockerfile compiles on the builder's platform and only installs dependencies on the target's | ARM machines are common and cheap (the reference deployment runs on one), and nothing may depend on the provider's architecture. Emulating only `npm ci` keeps the build fast; installing on the target platform keeps a future native dependency correct |
+| 2026-10-04 | The daily off-site copy is `backup-offsite.sh`: the `backup.sh` dump, sent with restic (official image) to an S3-compatible bucket, retention 30 daily / 12 monthly applied there, reported to a healthchecks.io-style monitor | restic encrypts on the machine (the dumps hold users' financial data) and works with any S3 provider; one dump per snapshot under a fixed name and host keeps the retention and the restore simple. Running it in Docker means nothing more to install. The monitor catches what a script cannot report itself: a cron that stopped, a machine that is gone. Known gap: the machine's key can also delete (see `docs/OPERATIONS.md`, "Known limits") |
+| 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code, workspaces and app texts keep SplitCount for now | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. Renaming the code is a separate, larger change with no such deadline |
 
 ## Open items
 
+- No uptime monitor or alerting yet; the deployment itself stays provider-independent
+  (`docs/OPERATIONS.md`).
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
-- Development builds are local (`expo run:*`) for now; EAS Build not set up (see
+- Development builds are local (`expo run:*`). Release builds and OTA updates are
+  configured for EAS but not yet *used*: the Expo account, `eas init`, the EAS environment
+  variables, `EXPO_TOKEN` and the final `APP_ID` are still to be done (checklist in
   `docs/MOBILE.md`).
+- The product name and the application id (`APP_ID`) are not final; the id must be chosen
+  before the first production build, and the Google OAuth Android client created for it.
 - `users` is shared domain data: the auth feature owns the writes, everyone else reads
   through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
   third reader). `friendships` is now in the same position — `groups` reads it directly

@@ -1,0 +1,71 @@
+name: Deploy the server
+description: >
+  Copies the deploy scripts to the machine and runs deploy.sh there for one image
+  (pull, back up, migrate once, start, roll back if unhealthy). See docs/OPERATIONS.md.
+  Needs the repository checked out, and `packages: read` on the job.
+
+inputs:
+  host:
+    description: Machine to deploy to.
+    required: true
+  user:
+    description: SSH user on the machine (member of the docker group).
+    required: true
+  ssh-key:
+    description: Private key for that user.
+    required: true
+  known-hosts:
+    description: >
+      The machine's host key line(s), from `ssh-keyscan` run once and checked by a human.
+      The connection is refused if the key differs: it is what stops a man-in-the-middle
+      from receiving the registry token.
+    required: true
+  directory:
+    description: Environment directory on the machine, for example /opt/ardoise/staging.
+    required: true
+  image:
+    description: Full image reference to deploy, for example ghcr.io/owner/ardoise-server:sha-1a2b3c4.
+    required: true
+  registry-user:
+    description: User for the container registry login.
+    required: true
+  registry-token:
+    description: Token with read access to the image. Used for this deploy only.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+        SSH_USER: ${{ inputs.user }}
+        SSH_KEY: ${{ inputs.ssh-key }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+        DIRECTORY: ${{ inputs.directory }}
+        IMAGE: ${{ inputs.image }}
+        REGISTRY_USER: ${{ inputs.registry-user }}
+        REGISTRY_TOKEN: ${{ inputs.registry-token }}
+      run: |
+        set -euo pipefail
+
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+        remote=(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+                -o UserKnownHostsFile="$HOME/.ssh/known_hosts" "$SSH_USER@$HOST")
+
+        # What runs on the machine is what is in git. `.env` is not in this list: it
+        # lives on the machine only.
+        tar -C deploy -czf - compose.yaml deploy.sh backup.sh backup-offsite.sh compose.sh lib.sh \
+          | "${remote[@]}" "mkdir -p $(printf '%q' "$DIRECTORY") && tar -xzf - -C $(printf '%q' "$DIRECTORY")"
+
+        # The registry login is removed again below: the token dies with this job, the
+        # file it is written to should not outlive it.
+        printf '%s' "$REGISTRY_TOKEN" \
+          | "${remote[@]}" "docker login ghcr.io --username $(printf '%q' "$REGISTRY_USER") --password-stdin"
+        trap '"${remote[@]}" "docker logout ghcr.io" || true' EXIT
+
+        "${remote[@]}" "cd $(printf '%q' "$DIRECTORY") && ./deploy.sh $(printf '%q' "$IMAGE")"

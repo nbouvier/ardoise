@@ -95,6 +95,53 @@ concern.
 | Job | Runs | Fails the run when |
 | --- | --- | --- |
 | `secrets` | gitleaks (pinned version, checksum verified) over the whole git history, findings redacted | a secret is found in any reachable commit (see `docs/guidelines/SECURITY.md`) |
+| `verify` | `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` (both apps), `deploy/test.sh`, `docker compose config` on both compose files | any of them fails; or a compose file no longer resolves with `deploy/.env.example` (a required variable missing, a typo) |
+| `image` | builds the server `Dockerfile` for `linux/amd64` and `linux/arm64` (needs `secrets` and `verify`); on `main` also pushes it to GHCR as `sha-<7 chars>` | the image does not build for one of the two architectures |
+
+These are the same commands as "Validation" in `CLAUDE.md`: a green CI means those pass on
+a clean Linux checkout, with no leftover `dist/` or `.env`. Reproduce a CI failure with
+`npm ci && npm run lint && npm run typecheck && npm test` from the repo root (`npm ci`
+rebuilds `packages/shared`; a stale `dist/` is the usual cause of a local-only pass).
+
+`deploy/test.sh` checks the order and the failure handling of `deploy.sh` / `backup.sh` /
+`backup-offsite.sh` against a fake `docker` and `curl` (migration fails → the new server
+never starts; unhealthy server → previous image restored; a second concurrent deploy is
+refused; backup retention; off-site: the dump just taken is what restic receives, a
+failed dump or copy is reported to the monitor and never pruned after, an unreachable
+monitor does not fail the backup). It
+needs no Docker and runs in a second. What no automated test covers: the compose stack
+actually running, and the image under real traffic — that is what staging is for.
+
+### Rehearsing a deploy locally
+
+Before changing `Dockerfile`, `deploy/compose.yaml` or the deploy scripts, run the real
+`deploy.sh` once with a local Docker — it found a first-deploy race the fake `docker`
+cannot see (the Postgres healthcheck, now over TCP). In a throwaway directory holding
+copies of the `deploy/` scripts (`*.sh` but `test.sh`) and `compose.yaml`, and a `.env` with
+`DEPLOY_ENV=localtest` and a free `SERVER_PORT`:
+
+```bash
+docker run -d --rm --name sc-registry -p 127.0.0.1:5000:5000 registry:2
+docker build -t localhost:5000/ardoise-server:sha-0000001 .   # from the repo root
+docker push localhost:5000/ardoise-server:sha-0000001
+./deploy.sh localhost:5000/ardoise-server:sha-0000001          # in the throwaway dir
+```
+
+Worth checking: a first deploy on an empty volume, a second deploy (`pending: 0`), an
+image whose `CMD` exits (rollback to the previous tag, `release.env` unchanged), and the
+restore of `docs/OPERATIONS.md`. Clean up with `./compose.sh down -v` and
+`docker stop sc-registry`.
+
+An ARM image rehearses the same way on an x86 machine (Docker Desktop emulates it): build
+with `docker buildx build --platform linux/arm64 --load …`, slower but faithful.
+
+`backup-offsite.sh` needs an S3 endpoint: `rclone serve s3` stands in for the bucket
+(`rclone/rclone` image, `serve s3 --addr :9000 --auth-key <id>,<secret> /data`, then
+`mkdir /data/<bucket>` in the container). Point `RESTIC_REPOSITORY` at
+`s3:http://host.docker.internal:9000/<bucket>`, `restic init` once, run the script, then
+restore with the commands of `docs/OPERATIONS.md`. Stopping that container shows the
+outage path (restic retries ~15 minutes, then the run fails). Under Git Bash, set
+`MSYS_NO_PATHCONV=1` or container paths such as `/data` get rewritten.
 
 ## Current state
 
@@ -114,8 +161,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   - `src/shutdown.test.ts` drives `installGracefulShutdown` with a fake `process` against
     a really listening app: draining, the timeout and the idle-connection sweep over real
     sockets.
-  - Database: migrations (`src/db/client.test.ts`) and the pool error handler
-    (`src/db/pool.test.ts`).
+  - Database: migrations (`src/db/client.test.ts`, including the pending-migration count
+    the production startup check relies on), the pool error handler
+    (`src/db/pool.test.ts`) and the three plugin modes `apply` / `verify` / `skip`
+    (`src/db/plugin.test.ts`).
 - **Auth** (`src/features/auth/`): unit and integration tests.
 - **Invitations** (`src/features/invites/`): invitation codes and the landing page,
   including HTML escaping of both an inviter name and a group name.

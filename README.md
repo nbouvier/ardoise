@@ -15,7 +15,7 @@ What the product does today is summarised in `docs/PRODUCT.md`.
 
 ## Getting started
 
-Prerequisites: Node.js 22 or later (`.nvmrc` pins the recommended version), and a Google Cloud
+Prerequisites: Node.js 22 or later (CI uses the version in `.nvmrc`), and a Google Cloud
 project with OAuth client IDs — sign-in is Google only (`docs/specs/authentication.md`).
 
 ```bash
@@ -52,13 +52,20 @@ npm run typecheck
 npm test
 ```
 
+## Self-hosting
+
+The server ships as a Docker image and runs with Docker Compose behind a Caddy proxy on any
+Linux machine: `docs/DEPLOYMENT.md` (what the server requires) and `docs/OPERATIONS.md`
+(installing, deploying, backing up).
+
 ## Project layout
 
 - `apps/mobile/` — Expo client (`src/app/` routes, `src/features/`, `src/components/`, `src/lib/`)
 - `apps/server/` — Fastify API (`src/app.ts` factory, `src/features/`, `src/config/`, `drizzle/` migrations)
 - `packages/shared/` — API contract and shared arithmetic (Zod schemas, splits, statistics)
-- `.github/` — CI workflows
-- `docs/` — living documentation (architecture, product, API, mobile, testing, database, logging, design, deployment)
+- `deploy/` — what runs on the server machine: Compose stack, deploy and backup scripts, Caddy proxy
+- `.github/` — CI, deployment and mobile release workflows
+- `docs/` — living documentation (architecture, product, API, mobile, testing, database, logging, design, deployment, operations)
 - `docs/specs/` — feature specifications, the source of truth for established behavior
 - `docs/guidelines/` — authoring conventions for specs, testing, observability and secrets
 

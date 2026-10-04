@@ -1,0 +1,66 @@
+name: Deploy to production
+
+# Promotes an image that already ran on staging. Never builds: production runs
+# exactly the bytes staging validated. Start it from the Actions tab with the
+# `sha-…` tag shown in the "image" job of the staging run you are promoting.
+#
+# The `production` environment should require a reviewer (repository settings →
+# Environments): this is the one step with real users behind it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy, as published by CI (sha-1a2b3c4)'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Check the tag
+        run: |
+          if ! [[ "$IMAGE_TAG" =~ ^sha-[0-9a-f]{7,40}$ ]]; then
+            echo "image_tag must look like sha-1a2b3c4, got: $IMAGE_TAG" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+
+      - id: image
+        run: echo "reference=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ardoise-server:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/deploy
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          directory: /opt/ardoise/production
+          image: ${{ steps.image.outputs.reference }}
+          registry-user: ${{ github.actor }}
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Through the proxy and TLS, as a client sees it: the container being healthy
+      # does not prove the domain, the certificate and the proxy are.
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+            "${{ vars.PUBLIC_URL }}/health"

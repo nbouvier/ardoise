@@ -1,0 +1,17 @@
+{
+	# Contact for the certificate authority (expiry or problems with an issuance).
+	email {$ACME_EMAIL}
+}
+
+# Caddy sets X-Forwarded-For to the client's address and drops any value the client
+# sent, which is what the server's TRUST_PROXY=1 relies on (docs/DEPLOYMENT.md).
+
+{$PRODUCTION_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+{$STAGING_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3001
+}

@@ -74,6 +74,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     databaseUrl: env.DATABASE_URL,
     pgliteDataDir:
       env.NODE_ENV === 'development' ? env.PGLITE_DATA_DIR : undefined,
+    // Production instances run side by side: the release step migrates once,
+    // they only check it happened. See `docs/DEPLOYMENT.md`.
+    migrations: env.NODE_ENV === 'production' ? 'verify' : 'apply',
     ...options.db,
   });
 

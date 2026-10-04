@@ -1,6 +1,8 @@
 name: CI
 
-# Every pull request and every push to main. See docs/TESTING.md.
+# Every pull request and every merge to main runs the checks and builds the
+# server image. A merge to main also publishes the image and deploys it to
+# staging. See docs/OPERATIONS.md.
 
 on:
   push:
@@ -9,7 +11,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a branch makes the older run pointless; a run on main may be
+  # mid-deploy and must finish.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -39,3 +43,137 @@ jobs:
       # --redact: a finding must not print the secret it found into a public log.
       - name: Scan the history for secrets
         run: ./gitleaks git --redact --verbose --no-banner .
+
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Also builds @splitcount/shared (its `prepare` script), which both apps import.
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Deploy scripts
+        run: deploy/test.sh
+
+      # The compose files cannot be run here, but they can be parsed and resolved:
+      # a missing required variable or a typo fails now, not during a deploy.
+      - name: Compose files
+        env:
+          SERVER_IMAGE: ardoise-server:ci
+        run: |
+          cp deploy/.env.example deploy/.env.ci
+          echo 'LOG_LEVEL=debug' >> deploy/.env.ci
+          docker compose --profile release --env-file deploy/.env.ci -f deploy/compose.yaml config > resolved.yaml
+          # Optional settings reach the container when set in .env…
+          grep -q 'LOG_LEVEL: debug' resolved.yaml
+          # …and are left out when they are not (an empty value fails the server's validation).
+          if grep -q 'PLAY_STORE_URL: ""' resolved.yaml; then
+            echo 'PLAY_STORE_URL must not be passed as an empty string' >&2
+            exit 1
+          fi
+          docker compose --env-file deploy/proxy/.env.example -f deploy/proxy/compose.yaml config --quiet
+
+  image:
+    # A leaked secret blocks the publish and the staging deploy, like a failing test.
+    needs: [secrets, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # The image to deploy, by its `sha-` tag (one per commit, never moved).
+      reference: ${{ steps.reference.outputs.value }}
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: name
+        # Registry names are lowercase; the owner may not be.
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ardoise-server" >> "$GITHUB_OUTPUT"
+
+      # Emulates arm64 on the amd64 runner. Only the dependency install runs under
+      # it: the Dockerfile compiles on the runner's own platform.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: type=sha
+
+      # On a pull request the image is built (a broken Dockerfile fails the PR)
+      # but not published. Both architectures under one tag: the machine pulls its
+      # own (an amd64-only image fails on an ARM server with "exec format error").
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - id: reference
+        run: echo "value=${{ steps.name.outputs.image }}:sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    # Staging runs every merge to main. Production is promoted by hand from here:
+    # .github/workflows/deploy-production.yml.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.PUBLIC_URL }}
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/deploy
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          directory: /opt/ardoise/staging
+          image: ${{ needs.image.outputs.reference }}
+          registry-user: ${{ github.actor }}
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Through the proxy and TLS, as a client sees it: the container being healthy
+      # does not prove the domain, the certificate and the proxy are.
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+            "${{ vars.PUBLIC_URL }}/health"

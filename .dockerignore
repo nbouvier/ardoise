@@ -1,0 +1,17 @@
+# Allowlist: the server image needs the root manifests, the server, the shared
+# package and the mobile manifest (the lockfile covers it). Nothing else.
+*
+!package.json
+!package-lock.json
+!tsconfig.base.json
+!apps/server
+!apps/mobile/package.json
+!packages/shared
+
+# Whatever the above re-included but a build must not take from the host.
+**/node_modules
+**/dist
+**/.pglite
+**/*.tsbuildinfo
+**/.env
+**/.env.*

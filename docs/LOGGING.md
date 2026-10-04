@@ -40,11 +40,22 @@ driver messages quote the value that was rejected, so treat these logs as sensit
 | --------------- | ----- | ------------------------------------ | ------- |
 | `db.pool.error` | error | `error` (`type`, `message`, `code`)  | The Postgres pool reported an error on an idle connection (database restart, failover, network drop). The broken connection is discarded and replaced on the next query; queries that were running on it fail and surface as `http.request.failed`. Repeated occurrences mean the database is unstable. |
 
+### Release-step events
+
+Emitted by `npm run migrate:deploy` (`src/scripts/migrate.ts`), which runs once per
+release, outside the server process, and logs JSON on stdout like the server does.
+
+| Event                | Level | Fields                       | Meaning |
+| -------------------- | ----- | ---------------------------- | ------- |
+| `db.migrate.started`   | info  | `pending`                    | Number of migrations about to be applied (0 when the schema is already current). |
+| `db.migrate.completed` | info  | `applied`, `durationMs`      | The schema is up to date. |
+| `db.migrate.failed`    | error | `error` (`type`, `message`, `code`, `causeMessage`) | The step failed (bad configuration, unreachable database, a migration error); it exits 1 and the release must not go on. |
+
 ### Lifecycle events
 
 | Event                       | Level | Fields                    | Meaning |
 | --------------------------- | ----- | ------------------------- | ------- |
-| `server.start.failed`       | error | —                         | The process could not start (bad port, migration failure…); it exits 1. |
+| `server.start.failed`       | error | —                         | The process could not start (bad port, pending migrations in production, unreachable database…); it exits 1. |
 | `server.shutdown.started`   | info  | `signal`, `timeoutMs`     | SIGTERM / SIGINT received: the server stopped accepting connections and is draining. |
 | `server.shutdown.completed` | info  | —                         | Drained and database closed; the process exits 0. |
 | `server.shutdown.timeout`   | error | `timeoutMs`               | In-flight requests did not finish in time; the process exits 1 anyway. Something is holding a request open. |

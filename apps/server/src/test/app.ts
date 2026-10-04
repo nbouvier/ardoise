@@ -27,7 +27,7 @@ export async function createTestContext(
 ): Promise<TestContext> {
   const handle = await createTestDatabase();
   const app = buildApp({
-    db: { handle, runMigrations: false },
+    db: { handle, migrations: 'skip' },
     auth: options.auth,
     invites: options.invites,
     groups: options.groups,
