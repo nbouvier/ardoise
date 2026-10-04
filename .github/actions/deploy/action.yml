@@ -59,7 +59,7 @@ runs:
 
         # What runs on the machine is what is in git. `.env` is not in this list: it
         # lives on the machine only.
-        tar -C deploy -czf - compose.yaml deploy.sh backup.sh compose.sh lib.sh \
+        tar -C deploy -czf - compose.yaml deploy.sh backup.sh backup-offsite.sh compose.sh lib.sh \
           | "${remote[@]}" "mkdir -p $(printf '%q' "$DIRECTORY") && tar -xzf - -C $(printf '%q' "$DIRECTORY")"
 
         # The registry login is removed again below: the token dies with this job, the

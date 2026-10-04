@@ -79,8 +79,11 @@ deploys the image staging already ran, it is never rebuilt.
    ```
    Production and staging must have different `POSTGRES_PASSWORD` and `AUTH_JWT_SECRET`,
    and different `SERVER_PORT` (3000 / 3001, matching the Caddyfile).
+8. **Off-site backups** (production): `backup-offsite.env` and the daily cron, see
+   "Backups" below.
 
-The scripts (`deploy.sh`, `backup.sh`, `compose.sh`, `lib.sh`, `compose.yaml`) are **not**
+The scripts (`deploy.sh`, `backup.sh`, `backup-offsite.sh`, `compose.sh`, `lib.sh`,
+`compose.yaml`) are **not**
 installed by hand: every deploy copies them from the repository into the environment's
 directory, so what runs on the machine is what is in git.
 
@@ -185,23 +188,58 @@ Images stay on the machine and in the registry; the registry keeps the `sha-…`
 
 ## Backups
 
-`backup.sh` writes `backups/splitcount-<UTC timestamp>.dump` (PostgreSQL custom format)
-and keeps the newest `BACKUP_KEEP` (default 30). Taken **automatically before every
-deploy**; also schedule one daily, as the deploy user (`crontab -e`):
+Two layers:
 
-```cron
-15 3 * * * /opt/splitcount/production/backup.sh >> /opt/splitcount/production/backups/cron.log 2>&1
+- **On the machine.** `backup.sh` writes `backups/splitcount-<UTC timestamp>.dump`
+  (PostgreSQL custom format) and keeps the newest `BACKUP_KEEP` (default 30). Taken
+  **automatically before every deploy**: the way back from a bad migration.
+- **Off the machine, daily.** A dump on the machine's own disk does not survive losing the
+  machine (provider incident, deleted VPS, ransomware). `backup-offsite.sh` runs
+  `backup.sh`, sends the new dump to a [restic](https://restic.net) repository in
+  S3-compatible object storage (the reference deployment uses a bucket in Europe), then
+  applies the retention there: **30 daily, 12 monthly**. restic encrypts everything
+  before it leaves the machine, which matters: the dumps hold every user's e-mail, name
+  and expenses. restic runs from its official image (`restic/restic`, version pinned in
+  the script): nothing to install.
+
+### Setting up the off-site copy (production, once)
+
+1. A **private bucket** and an access key limited to it. A **restic repository** in it:
+   from any computer with restic, `restic init` with the variables of
+   `deploy/backup-offsite.env.example`. Keep
+   `RESTIC_PASSWORD` in a password manager too: without it every backup is unreadable.
+2. On the machine, `backup-offsite.env` next to the scripts, from
+   `deploy/backup-offsite.env.example`, `chmod 600`.
+3. A **check at a cron monitor** (healthchecks.io or anything speaking its protocol):
+   period 1 day, grace 1 hour. Its ping URL is `PING_URL` in `backup-offsite.env`. The
+   script pings `/start`, then the URL on success or `/fail` on failure; the monitor
+   alerts on a failure, and on silence — a cron that stopped, a machine that is gone, a
+   run stuck past the grace time.
+4. The cron, as the deploy user (`crontab -e`), away from any automatic-reboot window of
+   the machine:
+   ```cron
+   15 3 * * * /opt/splitcount/production/backup-offsite.sh >> /opt/splitcount/production/backups/cron.log 2>&1
+   ```
+5. Run it once by hand, check the monitor turned green, then **restore from the bucket**
+   (below).
+
+Staging holds disposable data: its pre-deploy dumps are enough.
+
+Each snapshot holds one dump, named `/splitcount.dump`, under the host
+`splitcount-<DEPLOY_ENV>`. To look at the repository from the machine:
+
+```bash
+cd /opt/splitcount/production
+docker run --rm --env-file backup-offsite.env restic/restic:0.18.0 snapshots
 ```
 
-**A dump on the machine's own disk does not survive losing the machine** (provider
-incident, deleted VPS, ransomware), so it is copied off the machine on a schedule. The
-reference deployment sends its backups to S3-compatible object storage located in Europe
-(the provider's backup service, or `rclone` / `rsync` to a bucket or another host when
-self-hosting elsewhere). Whatever the mechanism, check that the copy **includes
-`backups/`** and runs after the daily dump. The dumps contain every user's email and
-name: keep the destination private and encrypted.
+If the storage is unreachable, restic retries for about 15 minutes, then the run fails
+(and the monitor says so). A run killed hard can leave a stale lock that makes the next
+one fail: `… restic/restic:0.18.0 unlock`.
 
 ### Restoring
+
+From a dump on the machine:
 
 ```bash
 cd /opt/splitcount/production
@@ -209,6 +247,15 @@ cd /opt/splitcount/production
 ./compose.sh exec -T db pg_restore --username splitcount --dbname splitcount \
   --clean --if-exists --no-owner < backups/splitcount-<timestamp>.dump
 ./compose.sh start server
+```
+
+From the off-site copy (the machine is new, or its dumps are gone): fetch the dump, then
+the same commands with that file.
+
+```bash
+docker run --rm --env-file backup-offsite.env restic/restic:0.18.0 \
+  dump --host splitcount-production latest /splitcount.dump > restored.dump
+# an older one: `snapshots`, then `dump <snapshot id> /splitcount.dump`
 ```
 
 Prefer to rehearse on staging first: copy a production dump there and restore it. **Test
@@ -233,6 +280,7 @@ any change to how backups are taken.
 | `.env` of an environment | that environment's directory, mode 600 | Edit, then `./compose.sh up -d server` (recreates the container with the new values). Changing `AUTH_JWT_SECRET` signs every user out. Changing `POSTGRES_PASSWORD` here does not change it *inside* an existing database: alter the role first (`./compose.sh exec db psql -U splitcount -c "alter user splitcount password '…'"`), then edit. |
 | Google OAuth client IDs | `GOOGLE_CLIENT_IDS` | Public identifiers, not secrets. |
 | CI → machine SSH key | repository secrets (see "Automated deploys") | Generate a new pair, replace the public key in `authorized_keys`, then the secret. |
+| `backup-offsite.env` | production's directory, mode 600; `RESTIC_PASSWORD` also in a password manager | Bucket key: create a new one, edit, revoke the old. `RESTIC_PASSWORD`: `restic key add` then `restic key remove` the old one (re-encrypting the data is not needed), then edit. |
 
 Nothing secret is in git, in an image, or in a build log. The mobile app holds no server
 secret (`docs/MOBILE.md`).
@@ -242,5 +290,9 @@ secret (`docs/MOBILE.md`).
 - Single machine, single database: no replication, no automatic failover. The database
   runs in a container with a named volume on the machine's disk.
 - No zero-downtime deploys (above).
-- No uptime monitor or alerting yet (above).
+- No uptime monitor or alerting yet (above), except for the off-site backup's own check.
+- The machine holds a bucket key that can delete as well as write (`restic forget
+  --prune` needs it): whoever takes over the machine can erase the off-site copies too.
+  Not solved yet; the candidates are an object lock / retention rule on the bucket, or
+  pruning from another computer with a key the machine does not have.
 - Rate-limit counters are per process (`docs/DEPLOYMENT.md`).

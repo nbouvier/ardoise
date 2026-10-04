@@ -103,9 +103,12 @@ a clean Linux checkout, with no leftover `dist/` or `.env`. Reproduce a CI failu
 `npm ci && npm run lint && npm run typecheck && npm test` from the repo root (`npm ci`
 rebuilds `packages/shared`; a stale `dist/` is the usual cause of a local-only pass).
 
-`deploy/test.sh` checks the order and the failure handling of `deploy.sh` / `backup.sh`
-against a fake `docker` (migration fails → the new server never starts; unhealthy server
-→ previous image restored; a second concurrent deploy is refused; backup retention). It
+`deploy/test.sh` checks the order and the failure handling of `deploy.sh` / `backup.sh` /
+`backup-offsite.sh` against a fake `docker` and `curl` (migration fails → the new server
+never starts; unhealthy server → previous image restored; a second concurrent deploy is
+refused; backup retention; off-site: the dump just taken is what restic receives, a
+failed dump or copy is reported to the monitor and never pruned after, an unreachable
+monitor does not fail the backup). It
 needs no Docker and runs in a second. What no automated test covers: the compose stack
 actually running, and the image under real traffic — that is what staging is for.
 
@@ -114,7 +117,7 @@ actually running, and the image under real traffic — that is what staging is f
 Before changing `Dockerfile`, `deploy/compose.yaml` or the deploy scripts, run the real
 `deploy.sh` once with a local Docker — it found a first-deploy race the fake `docker`
 cannot see (the Postgres healthcheck, now over TCP). In a throwaway directory holding
-copies of the five `deploy/` scripts and `compose.yaml`, and a `.env` with
+copies of the `deploy/` scripts (`*.sh` but `test.sh`) and `compose.yaml`, and a `.env` with
 `DEPLOY_ENV=localtest` and a free `SERVER_PORT`:
 
 ```bash
@@ -131,6 +134,14 @@ restore of `docs/OPERATIONS.md`. Clean up with `./compose.sh down -v` and
 
 An ARM image rehearses the same way on an x86 machine (Docker Desktop emulates it): build
 with `docker buildx build --platform linux/arm64 --load …`, slower but faithful.
+
+`backup-offsite.sh` needs an S3 endpoint: `rclone serve s3` stands in for the bucket
+(`rclone/rclone` image, `serve s3 --addr :9000 --auth-key <id>,<secret> /data`, then
+`mkdir /data/<bucket>` in the container). Point `RESTIC_REPOSITORY` at
+`s3:http://host.docker.internal:9000/<bucket>`, `restic init` once, run the script, then
+restore with the commands of `docs/OPERATIONS.md`. Stopping that container shows the
+outage path (restic retries ~15 minutes, then the run fails). Under Git Bash, set
+`MSYS_NO_PATHCONV=1` or container paths such as `/data` get rewritten.
 
 ## Current state
 

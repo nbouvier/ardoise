@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Checks the order and the failure handling of deploy.sh and backup.sh against a
-# stand-in for `docker` that records its calls. No Docker needed:
+# Checks the order and the failure handling of deploy.sh, backup.sh and
+# backup-offsite.sh against stand-ins for `docker` and `curl` that record their
+# calls. No Docker needed:
 #
 #   deploy/test.sh
 #
@@ -24,11 +25,13 @@ check() { # check <description> <condition...>
 
 # A throwaway copy of the scripts with a fake `docker` first in PATH. The fake
 # logs "<arguments> [SERVER_IMAGE=<value>]", fails when that line contains
-# $FAIL_ON, and prints something when asked to run pg_dump.
+# $FAIL_ON, prints something when asked to run pg_dump, and keeps what restic is
+# given to back up in $SHIM_LOG.stdin. A fake `curl` logs "curl <arguments>" to the
+# same log and fails the same way.
 fresh_sandbox() {
   sandbox=$(mktemp -d)
   mkdir "$sandbox/bin"
-  cp "$here/deploy.sh" "$here/backup.sh" "$here/lib.sh" "$sandbox/"
+  cp "$here/deploy.sh" "$here/backup.sh" "$here/backup-offsite.sh" "$here/lib.sh" "$sandbox/"
   : > "$sandbox/.env"
   export SHIM_LOG="$sandbox/docker.log"
   : > "$SHIM_LOG"
@@ -41,9 +44,19 @@ if [ -n "${FAIL_ON:-}" ] && [[ "$line" == *"$FAIL_ON"* ]]; then
 fi
 case "$line" in
   *pg_dump*) echo PGDMP ;;
+  *'backup --stdin'*) cat > "$SHIM_LOG.stdin" ;;
 esac
 SHIM
-  chmod +x "$sandbox/bin/docker" "$sandbox/deploy.sh" "$sandbox/backup.sh"
+  cat > "$sandbox/bin/curl" <<'SHIM'
+#!/usr/bin/env bash
+line="curl $*"
+echo "$line" >> "$SHIM_LOG"
+if [ -n "${FAIL_ON:-}" ] && [[ "$line" == *"$FAIL_ON"* ]]; then
+  exit 1
+fi
+SHIM
+  chmod +x "$sandbox/bin/docker" "$sandbox/bin/curl" "$sandbox/deploy.sh" "$sandbox/backup.sh" \
+    "$sandbox/backup-offsite.sh"
   export PATH="$sandbox/bin:$PATH"
   unset FAIL_ON SERVER_IMAGE
 }
@@ -56,6 +69,11 @@ before() { # before <a> <b>: both logged, and a first
   b=$(line_of "$2")
   [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
 }
+
+echo '# the scripts run on the machine are executable (the deploy copies their mode)'
+for script in deploy.sh backup.sh backup-offsite.sh compose.sh; do
+  check "$script" test -x "$here/$script"
+done
 
 echo '# deploy: happy path'
 fresh_sandbox
@@ -118,6 +136,67 @@ BACKUP_KEEP=3 "$sandbox/backup.sh" > /dev/null
 check 'keeps the newest N' test "$(ls "$sandbox"/backups/*.dump | wc -l)" -eq 3
 check 'drops the oldest' test ! -e "$sandbox/backups/splitcount-20260101T000000Z.dump"
 check 'keeps the one just taken' bash -c 'ls "$1"/backups/*.dump | grep -qv 2026010' _ "$sandbox"
+
+# An environment with off-site backups configured, pinging a monitor.
+fresh_offsite_sandbox() {
+  fresh_sandbox
+  echo 'DEPLOY_ENV=production' > "$sandbox/.env"
+  printf '%s\n' 'RESTIC_REPOSITORY=s3:https://s3.example.com/bucket' \
+    'PING_URL=https://ping.example.com/check' > "$sandbox/backup-offsite.env"
+}
+ping_success_last() { tail -1 "$SHIM_LOG" | grep -q 'https://ping.example.com/check$'; }
+
+echo '# off-site backup: happy path'
+fresh_offsite_sandbox
+"$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'exits 0' test $? -eq 0
+check 'signals the start first' before 'ping.example.com/check/start' 'pg_dump'
+check 'dumps before copying' before 'pg_dump' 'backup --stdin'
+check 'copies the dump just taken' grep -qx PGDMP "$SHIM_LOG.stdin"
+check 'copies under a fixed host name' logged '--hostname splitcount-production'
+check 'applies the retention after the copy' before 'backup --stdin' 'forget --host splitcount-production'
+check 'signals success last' ping_success_last
+check 'never signals a failure' bash -c '! grep -qF -- "/check/fail" "$SHIM_LOG"'
+
+echo '# off-site backup: the dump fails'
+fresh_offsite_sandbox
+FAIL_ON='pg_dump' "$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'exits non-zero' test $? -ne 0
+check 'copies nothing' bash -c '! grep -qF -- "backup --stdin" "$SHIM_LOG"'
+check 'signals the failure' logged 'ping.example.com/check/fail'
+
+echo '# off-site backup: the copy fails'
+fresh_offsite_sandbox
+FAIL_ON='backup --stdin' "$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'exits non-zero' test $? -ne 0
+check 'applies no retention' bash -c '! grep -qF -- "forget" "$SHIM_LOG"'
+check 'signals the failure' logged 'ping.example.com/check/fail'
+
+echo '# off-site backup: the retention fails'
+fresh_offsite_sandbox
+FAIL_ON='forget' "$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'exits non-zero' test $? -ne 0
+check 'signals the failure' logged 'ping.example.com/check/fail'
+
+echo '# off-site backup: the monitor is unreachable'
+fresh_offsite_sandbox
+FAIL_ON='ping.example.com' "$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'still exits 0' test $? -eq 0
+check 'still copies and applies the retention' logged 'forget --host splitcount-production'
+
+echo '# off-site backup: no monitor configured'
+fresh_offsite_sandbox
+echo 'RESTIC_REPOSITORY=s3:https://s3.example.com/bucket' > "$sandbox/backup-offsite.env"
+"$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'exits 0' test $? -eq 0
+check 'pings nothing' bash -c '! grep -q "^curl" "$SHIM_LOG"'
+
+echo '# off-site backup: not configured'
+fresh_offsite_sandbox
+rm "$sandbox/backup-offsite.env"
+"$sandbox/backup-offsite.sh" > /dev/null 2>&1
+check 'refuses' test $? -ne 0
+check 'touches nothing' test ! -s "$SHIM_LOG"
 
 if [ "$failures" -ne 0 ]; then
   printf '\n%d check(s) failed\n' "$failures"
