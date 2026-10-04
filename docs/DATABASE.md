@@ -123,12 +123,9 @@ insert uses `ON CONFLICT DO NOTHING`), and the cascade takes it away with the fr
 It stores no name — the API returns the *other* member's name, so each side sees who they
 share with.
 
-Since 2026-09-14 this row is created **eagerly**, inside `POST /invites/:code/accept`
-(`friendsPlugin` calls `groupsRepository.createPairGroup` directly — see
-`docs/ARCHITECTURE.md`), not lazily on first access. A friendship from before that change
-may still be missing its group; `npm run backfill:pair-groups --workspace @splitcount/server`
-finds every friendship with none and creates it, idempotently (safe to run more than
-once).
+This row is created **eagerly**, inside `POST /invites/:code/accept` (`friendsPlugin`
+calls `groupsRepository.createPairGroup` directly — see `docs/ARCHITECTURE.md`), in the
+same step as the friendship itself.
 
 **Nesting** (`docs/specs/groups.md`): a group can have sub-groups through `parent_id`, a
 self-referential FK that cascades — deleting a group deletes its entire sub-tree for free,
@@ -323,8 +320,3 @@ shared history.
   (`parent_id NULL`, `depth 0`) automatically, since the column defaults to `0`.
 - Migration `0008_*` — adds `group_members.favorited_at`, nullable, no backfill needed
   (favorites, `docs/specs/favorites.md`).
-- 2026-09-14 — no schema change, but a behaviour one worth logging here: the pair group is
-  now created eagerly, at friendship creation, instead of lazily on first access (see
-  above). `npm run backfill:pair-groups --workspace @splitcount/server` is a one-time,
-  idempotent data backfill (not a drizzle-kit migration) for any friendship that predates
-  this.

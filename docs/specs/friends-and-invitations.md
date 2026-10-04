@@ -191,10 +191,6 @@ Persisted data (see `docs/DATABASE.md`):
 - **Friendship**: one row per pair, stored in a canonical order so the same relationship
   cannot be recorded twice.
 
-A friendship created before pair-group creation became eager (2026-09-14) may predate its
-group; `npm run backfill:pair-groups --workspace @splitcount/server` creates the missing
-ones once, idempotently (`docs/DATABASE.md`).
-
 The invitation **code is stored in clear**, unlike refresh tokens. It must be redisplayable
 ("copy my link again"), and it only grants a narrow, expiring, revocable capability: to
 become a friend of one specific user, subject to that user's own acceptance step.
