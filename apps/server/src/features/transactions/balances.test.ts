@@ -1,4 +1,4 @@
-import { splitByShares } from '@splitcount/shared';
+import { splitByShares } from '@ardoise/shared';
 import { describe, expect, it } from 'vitest';
 
 import type { TransactionParticipantRow, TransactionRow } from '../../db/schema.js';

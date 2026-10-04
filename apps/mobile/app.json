@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "SplitCount",
-    "slug": "splitcount",
+    "name": "Ardoise",
+    "slug": "ardoise",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "splitcount",
+    "scheme": "ardoise",
     "userInterfaceStyle": "automatic",
     "android": {
       "adaptiveIcon": {
@@ -15,7 +15,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.splitcount"
+      "package": "app.ardoise"
     },
     "web": {
       "output": "static",

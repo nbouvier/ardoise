@@ -2,7 +2,7 @@ import {
   addGroupMembersRequestSchema,
   createGroupRequestSchema,
   updateGroupRequestSchema,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';

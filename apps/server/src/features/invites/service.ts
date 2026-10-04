@@ -4,7 +4,7 @@ import type {
   Invite,
   InviteKind,
   InvitePreview,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import { env } from '../../config/env.js';
 import type { InviteRow } from '../../db/schema.js';

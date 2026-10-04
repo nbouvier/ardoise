@@ -11,7 +11,7 @@ import { countPendingMigrations, createDatabase, migrateToLatest } from '../db/c
  *
  * Needs only `DATABASE_URL`. Run from the built output, where drizzle-kit (a
  * dev dependency) is not installed: `node apps/server/dist/scripts/migrate.js`,
- * or `npm run migrate:deploy --workspace @splitcount/server`. Safe to repeat.
+ * or `npm run migrate:deploy --workspace @ardoise/server`. Safe to repeat.
  * Exits 1 when it fails, which must block the release.
  */
 async function main(): Promise<void> {

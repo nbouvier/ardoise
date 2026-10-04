@@ -5,7 +5,7 @@ import {
   type GroupDetail,
   type GroupSummary,
   type Invite,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import { expectNoContent, parsedJson, type AuthorizedFetch } from './client';
 

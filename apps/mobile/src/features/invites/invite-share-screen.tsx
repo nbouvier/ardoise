@@ -1,4 +1,4 @@
-import type { Invite } from '@splitcount/shared';
+import type { Invite } from '@ardoise/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -178,7 +178,7 @@ export function InviteShareScreen({
         }>
         <ThemedText type="subtitle">Can’t create a link</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-          We couldn’t reach SplitCount. Check your connection and try again.
+          We couldn’t reach Ardoise. Check your connection and try again.
         </ThemedText>
         <Button label="Try again" variant="secondary" onPress={retry} />
       </ThemedView>

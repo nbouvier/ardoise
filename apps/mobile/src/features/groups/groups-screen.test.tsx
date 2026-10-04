@@ -1,4 +1,4 @@
-import type { GroupSummary } from '@splitcount/shared';
+import type { GroupSummary } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 

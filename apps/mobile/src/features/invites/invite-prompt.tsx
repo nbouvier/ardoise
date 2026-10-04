@@ -1,4 +1,4 @@
-import type { AcceptInviteResult } from '@splitcount/shared';
+import type { AcceptInviteResult } from '@ardoise/shared';
 import { useSyncExternalStore } from 'react';
 import { Modal, StyleSheet } from 'react-native';
 

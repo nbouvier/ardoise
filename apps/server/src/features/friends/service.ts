@@ -1,4 +1,4 @@
-import type { FriendEntry, Invite } from '@splitcount/shared';
+import type { FriendEntry, Invite } from '@ardoise/shared';
 
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';

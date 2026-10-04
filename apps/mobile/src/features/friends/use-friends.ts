@@ -1,4 +1,4 @@
-import type { FriendEntry } from '@splitcount/shared';
+import type { FriendEntry } from '@ardoise/shared';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';

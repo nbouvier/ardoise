@@ -1,4 +1,4 @@
-import type { AcceptInviteResult, InvitePreview } from '@splitcount/shared';
+import type { AcceptInviteResult, InvitePreview } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -136,7 +136,7 @@ describe('AcceptInviteScreen', () => {
 
     await renderScreen();
 
-    expect(await screen.findByText(/Can’t reach SplitCount/)).toBeTruthy();
+    expect(await screen.findByText(/Can’t reach Ardoise/)).toBeTruthy();
 
     await fireEvent.press(screen.getByRole('button', { name: /try again/i }));
 

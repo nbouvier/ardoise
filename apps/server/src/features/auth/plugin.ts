@@ -2,7 +2,7 @@ import {
   googleAuthRequestSchema,
   logoutRequestSchema,
   refreshRequestSchema,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 

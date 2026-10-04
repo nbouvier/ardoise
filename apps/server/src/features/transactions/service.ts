@@ -1,4 +1,4 @@
-import { DEFAULT_TRANSACTION_CATEGORY, splitByShares, splitSumsTo } from '@splitcount/shared';
+import { DEFAULT_TRANSACTION_CATEGORY, splitByShares, splitSumsTo } from '@ardoise/shared';
 import type {
   Balance,
   CreateTransactionRequest,
@@ -11,7 +11,7 @@ import type {
   TransactionKind,
   TransactionsListScope,
   UpdateTransactionRequest,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import type { TransactionParticipantRow, TransactionRow } from '../../db/schema.js';
 import { GroupAccessError } from '../groups/membership.js';

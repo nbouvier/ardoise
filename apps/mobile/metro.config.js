@@ -1,4 +1,4 @@
-// Metro configuration for use inside the SplitCount monorepo.
+// Metro configuration for use inside the Ardoise monorepo.
 // https://docs.expo.dev/guides/monorepos/
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');

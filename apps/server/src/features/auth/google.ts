@@ -2,7 +2,7 @@ import { OAuth2Client } from 'google-auth-library';
 
 import { env } from '../../config/env.js';
 
-/** The subset of a verified Google identity SplitCount consumes. */
+/** The subset of a verified Google identity Ardoise consumes. */
 export interface GoogleIdentity {
   sub: string;
   email: string;

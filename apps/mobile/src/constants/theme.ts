@@ -1,5 +1,5 @@
 /**
- * SplitCount's design tokens — the single source of colour, spacing, radius and
+ * Ardoise's design tokens — the single source of colour, spacing, radius and
  * elevation for the mobile client. See `docs/DESIGN.md` for the rationale and
  * for the rules every screen follows; nothing here is meant to be re-derived or
  * overridden locally.

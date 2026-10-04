@@ -4,7 +4,7 @@ Living document. Update it whenever a structural decision is made or changed.
 
 ## Overview
 
-SplitCount is an npm-workspaces monorepo with a mobile client and a backend API. The
+Ardoise is an npm-workspaces monorepo with a mobile client and a backend API. The
 **server is the source of truth** for all shared data; the mobile client reads and writes
 exclusively through the HTTP API.
 
@@ -46,7 +46,7 @@ apps/
                    Fastify plugin (plugin.ts). SQL migrations in server/drizzle/.
       test/        Test helpers (in-memory DB, ready app).
 packages/
-  shared/          @splitcount/shared — platform-neutral API contract (Zod schemas +
+  shared/          @ardoise/shared — platform-neutral API contract (Zod schemas +
                    inferred types) shared by both apps. No React Native, no Node-only
                    APIs, no secrets. Built to dist/ (ESM); consumers resolve types
                    straight from src/ so a rebuild is only needed for runtime/bundling.
@@ -73,17 +73,17 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 
 | Workspace              | Justification                                                        |
 | ---------------------- | ------------------------------------------------------------------- |
-| `@splitcount/shared`   | Request and response shapes must stay identical on both sides; duplicated Zod schemas would drift. It also holds the arithmetic both sides must agree on to the cent: the split rounding (`transactions.ts` — the client previews a split live, the server recomputes it as the authority), the category breakdown (`statistics.ts`) and the reimbursement plan (`reimbursements.ts`, derived from balances on the client). One implementation each, never two. Modules: `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
+| `@ardoise/shared`   | Request and response shapes must stay identical on both sides; duplicated Zod schemas would drift. It also holds the arithmetic both sides must agree on to the cent: the split rounding (`transactions.ts` — the client previews a split live, the server recomputes it as the authority), the category breakdown (`statistics.ts`) and the reimbursement plan (`reimbursements.ts`, derived from balances on the client). One implementation each, never two. Modules: `auth.ts`, `categories.ts`, `friends.ts`, `groups.ts`, `invites.ts`, `reimbursements.ts`, `statistics.ts`, `transactions.ts`. |
 
 ## Client / server contract
 
 - REST over HTTP/JSON. Request and response shapes are validated with Zod on the server;
-  the schemas live in `@splitcount/shared` and the client validates responses with them.
-- When a type or schema is needed on both sides, it moves into `@splitcount/shared`
+  the schemas live in `@ardoise/shared` and the client validates responses with them.
+- When a type or schema is needed on both sides, it moves into `@ardoise/shared`
   rather than being duplicated.
 - The mobile client treats the server as authoritative: no offline write model yet.
 - Auth: the client sends a Google ID token, the server verifies it and returns a
-  SplitCount session (short access JWT + rotating refresh token). The client stores the
+  Ardoise session (short access JWT + rotating refresh token). The client stores the
   refresh token in the OS secure store and refreshes transparently on 401.
 - The API is JSON everywhere except `GET /i/:code`, the public invitation landing page,
   which is HTML because a browser opens it before the app is involved.
@@ -133,10 +133,10 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | Vitest for server tests                                   | Fast, native TS/ESM                         |
 | 2026-09-09 | PostgreSQL + Drizzle; PGlite embedded in dev/test         | SQL-first, strong types; no external service to run tests |
 | 2026-09-09 | Mobile runs as an Expo development build, not Expo Go     | Native modules + upcoming Google sign-in     |
-| 2026-09-09 | `@splitcount/shared` workspace for the API contract       | First shared client/server contract (auth)   |
+| 2026-09-09 | `@ardoise/shared` workspace for the API contract       | First shared client/server contract (auth)   |
 | 2026-09-09 | Auth: Google ID token verified server-side → own session | Google tokens are short-lived; we need persistent, revocable sessions |
 | 2026-09-09 | Session = short JWT access token + rotating DB refresh token | Persistent sign-in + real server-side sign-out / revocation |
-| 2026-09-10 | Invitation links hosted by the API (`GET /i/:code`) + `splitcount://` scheme | No domain or store presence yet; Universal/App Links slot in later without changing the contract |
+| 2026-09-10 | Invitation links hosted by the API (`GET /i/:code`) + the app's own URL scheme (`ardoise://` since 2026-10-04) | No domain or store presence yet; Universal/App Links slot in later without changing the contract |
 | 2026-09-10 | No deferred deep linking: the landing page shows a code to type in | A third-party attribution SDK (Branch, AppsFlyer) is not worth it before the app is in stores |
 | 2026-09-10 | Friendships stored once per pair, in a canonical order | The unique constraint alone rules out duplicates, including under concurrent acceptance |
 | 2026-09-10 | `FriendSummary` (no email) is how another user is exposed | A public invitation preview must not leak the inviter's email address |
@@ -148,7 +148,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-14 | Pair groups are created eagerly, the moment a friendship is — `friends` calls `groupsRepository.createPairGroup` directly (instantiated in `friendsPlugin`, the same "borrow a repository" pattern `ledger` already uses), not through the `groups` service | The Friends list is sourced from the pair group itself (id, favorite marker) rather than a parallel query, so the group must already exist by the time a friendship is listed — a get-or-create on every read was the alternative, and a write on a `GET` is worse than creating it once, up front |
 | 2026-09-11 | A non-member gets `404` for a group, never `403` | A `403` would confirm the group exists |
 | 2026-09-11 | One migrated PGlite per *test file*, truncated between tests | A database per test cost seconds each; same isolation, suite down from 92s to 17s |
-| 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@splitcount/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
+| 2026-09-11 | Split arithmetic (`splitByShares`, largest-remainder rounding) lives in `@ardoise/shared` | The client's live split preview and the server's authoritative recomputation must always agree; two implementations of cent rounding will eventually drift |
 | 2026-09-11 | A shares split defaults every participant to weight 1; there is no separate "equal" mode | An equal split *is* a shares split where everyone is weighted the same — a dedicated mode would just be that one case with its own code path |
 | 2026-09-11 | Balances are computed on the fly from `transactions` / `transaction_participants`, not stored | No denormalized total to keep in sync while the feature is new; revisit if querying at scale becomes a real cost (see Open items) |
 | 2026-09-11 | Transactions are the one thing that works on a pair group like a standard group | Every other direct pair-group route is refused by `assertNotPairGroup`; transactions must not share that guard, or the pair group could never hold anything. (Creating a *sub-group* under it is a second, later exception — 2026-09-12 below — since that acts on the new group, not the pair group itself) |
@@ -158,7 +158,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-11 | Each friend's balance rides on `GET /friends` rather than its own route; `friendSummarySchema` is left untouched | The friend list has no useful state without the amounts, and a second call would show names before figures. The summary shape is reused by group members, transaction participants and invitation previews, none of which have a balance |
 | 2026-09-11 | The transaction date field uses `@expo/ui`'s `community/datetime-picker`, not a new dependency | `@expo/ui` was already a dependency but not yet linked into the native build; reusing it (SwiftUI `DatePicker` on iOS, a Material dialog on Android) needs the same native rebuild a brand-new picker library would have, for zero added dependency footprint |
 | 2026-09-12 | A group's per-category breakdown is derived on the client, from the transactions the group screen already holds — no endpoint, no stored aggregate | It is the same call the screen already makes, and a second round trip would show a chart after the list it summarises. Valid only while the list is unpaginated (see Open items) |
-| 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@splitcount/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
+| 2026-09-12 | The breakdown itself (`categoryBreakdown`) lives in `@ardoise/shared`, not in the mobile app | Same reasoning as the split arithmetic: the rule for what counts as spending, and the percentage rounding, must have one definition — and moving it behind an endpoint later is then an import change, not a rewrite |
 | 2026-09-12 | Each category carries its own colour in the shared preset list | A chart and its legend describing different colours for the same category is a defect the type system can prevent; the colour is part of the category, not of the screen |
 | 2026-09-12 | The donut is drawn with `react-native-svg` rather than stacked views | Thirteen arcs, exact hit-testing per slice and one implementation across iOS, Android and web. It is a native dependency, so it costs a dev-build rebuild (`docs/MOBILE.md`) |
 | 2026-09-12 | Groups can nest via a single nullable `groups.parent_id`, not a materialised path or a closure table | The write path (create, delete) is simple and the read path (ancestors, descendants) is a bounded recursive query, since depth is capped; a closure table would trade that simplicity for write-time upkeep this scale does not need yet |
@@ -196,24 +196,23 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-03 | The server runs as a Docker image on a VPS: Compose stack per environment (Postgres + server) behind one Caddy proxy; `deploy.sh` backs up, migrates once, starts the server and rolls back if it is unhealthy | Nothing may depend on a hosting provider: a Linux box with Docker is the lowest common denominator. Compose over an orchestrator because there is one machine and one server instance. Scripts (tested against a fake `docker`, `deploy/test.sh`) rather than ad-hoc commands, so the order and the failure handling are reviewed code. Details and limits: `docs/OPERATIONS.md` |
 | 2026-10-03 | Two environments, production and staging, both on the VPS; staging deploys on every merge to `main`, production promotes the image staging already ran | CI must not push straight to production. Promoting the same image means production never runs a build nobody has seen. No demo environment (decided: not worth it) |
 | 2026-10-03 | Mobile releases are built on EAS (profiles `staging`, `production`, `production-apk`), triggered manually from GitHub Actions; JavaScript-only changes ship as EAS Update on a channel per profile, with `runtimeVersion` = the `appVersion` policy. Android only | Reproducible builds with a keystore held by EAS, and fixes without store review. Manual because builds are metered and an update is live in minutes. `appVersion` over `fingerprint` for predictability with the monorepo and local dev builds, at the cost of a rule to remember (bump `version` with any native change) — see `docs/MOBILE.md` |
-| 2026-10-03 | The application id is `APP_ID` (`app.config.ts`), and a `production*` EAS build refuses the template's `com.anonymous…` placeholder | The id is permanent once published and the name is not final: keep it one value, and make publishing under the placeholder impossible rather than unlikely |
+| 2026-10-03 | The application id is one value (`app.json`, overridable by `APP_ID` in `app.config.ts`) applied to both platforms, and a `production*` EAS build refuses the template's `com.anonymous…` placeholder | The id is permanent once published: keep it one value, and make publishing under the placeholder impossible rather than unlikely |
+| 2026-10-04 | The app's permanent identifiers are Ardoise's: application id `app.ardoise`, Expo slug `ardoise`, URL scheme `ardoise` (in the app and in the server's landing page) | All three are frozen by first use — the id by the first store upload, the slug by `eas init`, the scheme by the links users share — so they take the final name before any of that happens |
 | 2026-10-04 | Off-machine backups go to S3-compatible object storage located in Europe | A dump on the machine's own disk does not survive losing the machine; keeping the copy in Europe keeps users' data there too |
 | 2026-10-04 | The server image is multi-platform (`linux/amd64` + `linux/arm64`), built in CI with QEMU; the Dockerfile compiles on the builder's platform and only installs dependencies on the target's | ARM machines are common and cheap (the reference deployment runs on one), and nothing may depend on the provider's architecture. Emulating only `npm ci` keeps the build fast; installing on the target platform keeps a future native dependency correct |
 | 2026-10-04 | The daily off-site copy is `backup-offsite.sh`: the `backup.sh` dump, sent with restic (official image) to an S3-compatible bucket, retention 30 daily / 12 monthly applied there, reported to a healthchecks.io-style monitor | restic encrypts on the machine (the dumps hold users' financial data) and works with any S3 provider; one dump per snapshot under a fixed name and host keeps the retention and the restore simple. Running it in Docker means nothing more to install. The monitor catches what a script cannot report itself: a cron that stopped, a machine that is gone. Known gap: the machine's key can also delete (see `docs/OPERATIONS.md`, "Known limits") |
-| 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code, workspaces and app texts keep SplitCount for now | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. Renaming the code is a separate, larger change with no such deadline |
+| 2026-10-04 | The deployment is named `ardoise` (the product's new name) before the first deploy: `/opt/ardoise`, Compose projects `ardoise-<env>`, database role and name, image `ardoise-server`, backup files and restic host. The code followed the same day (workspaces `@ardoise/*`, app identifiers, texts) | Those names are fixed by the first deploy (volume names derive from the project, the role lives in the database, the image path in the registry): changing them later means migrating data. The code has no such deadline but one name everywhere is simpler |
 
 ## Open items
 
-- No uptime monitor or alerting yet; the deployment itself stays provider-independent
-  (`docs/OPERATIONS.md`).
+- No alerting on log events yet, only an external uptime monitor and the backup check;
+  the deployment itself stays provider-independent (`docs/OPERATIONS.md`).
 - Access / refresh token lifetimes are first guesses (~15 min / ~60 days); tune before a
   public release.
 - Development builds are local (`expo run:*`). Release builds and OTA updates are
   configured for EAS but not yet *used*: the Expo account, `eas init`, the EAS environment
-  variables, `EXPO_TOKEN` and the final `APP_ID` are still to be done (checklist in
-  `docs/MOBILE.md`).
-- The product name and the application id (`APP_ID`) are not final; the id must be chosen
-  before the first production build, and the Google OAuth Android client created for it.
+  variables and `EXPO_TOKEN` are still to be done (checklist in `docs/MOBILE.md`), and the
+  Google OAuth Android client for `app.ardoise`.
 - `users` is shared domain data: the auth feature owns the writes, everyone else reads
   through `features/users/repository.ts` (extracted 2026-09-11, when `groups` became the
   third reader). `friendships` is now in the same position — `groups` reads it directly

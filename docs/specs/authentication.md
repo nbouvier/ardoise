@@ -2,7 +2,7 @@
 
 ## Context
 
-SplitCount stores all shared data (groups, expenses, balances) on the server, which is
+Ardoise stores all shared data (groups, expenses, balances) on the server, which is
 the source of truth. Every future feature needs to know **who** is acting and to scope
 data to that person. This feature establishes identity: a user signs in with their
 Google account, stays signed in across app launches, and can sign out.
@@ -12,7 +12,7 @@ identity claim it has not verified against Google.
 
 ## User story
 
-As a **person opening SplitCount**, I want to **sign in once with my Google account and
+As a **person opening Ardoise**, I want to **sign in once with my Google account and
 stay signed in**, so that **I can use the app without re-authenticating every time and
 without managing another password**.
 
@@ -35,7 +35,7 @@ without managing another password**.
 
 ### Session model (part of the contract)
 
-- Sign-in exchanges a Google ID token for a SplitCount session: a short-lived **access
+- Sign-in exchanges a Google ID token for an Ardoise session: a short-lived **access
   token** (~15 minutes) and a longer-lived **refresh token** (~60 days).
 - The refresh token is **rotated** on every use: the previous one becomes invalid.
 - Sign-out revokes the current refresh token server-side.
@@ -132,7 +132,7 @@ Persisted data (see `docs/DATABASE.md`):
 - **Session**: owning user, refresh-token hash (unique), expiry, created / last-used /
   revoked timestamps.
 
-Request/response shapes are shared between client and server via `@splitcount/shared`.
+Request/response shapes are shared between client and server via `@ardoise/shared`.
 
 Client persistence: the refresh token is stored in the OS secure store
 (`expo-secure-store`); the access token is kept in memory only.

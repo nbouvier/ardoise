@@ -21,7 +21,7 @@ describe('transactions routes', () => {
   beforeAll(async () => {
     ({ app, reset } = await createTestContext({
       auth: { googleVerifier: google },
-      invites: { now: () => clock, inviteTtlSeconds: 3600, publicBaseUrl: 'https://splitcount.test' },
+      invites: { now: () => clock, inviteTtlSeconds: 3600, publicBaseUrl: 'https://ardoise.test' },
       groups: { now: () => clock },
       transactions: { now: () => clock },
     }));

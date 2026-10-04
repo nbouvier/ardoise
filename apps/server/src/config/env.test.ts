@@ -11,8 +11,8 @@ const base = {
 const production = {
   ...base,
   NODE_ENV: 'production',
-  DATABASE_URL: 'postgres://user:pass@db.internal:5432/splitcount',
-  PUBLIC_BASE_URL: 'https://api.splitcount.app',
+  DATABASE_URL: 'postgres://user:pass@db.internal:5432/ardoise',
+  PUBLIC_BASE_URL: 'https://api.ardoise.test',
   TRUST_PROXY: '1',
 };
 

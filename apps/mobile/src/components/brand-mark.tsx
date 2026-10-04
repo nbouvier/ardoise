@@ -7,7 +7,7 @@ export interface BrandMarkProps {
 }
 
 /**
- * SplitCount's mark: a rounded tile split down the middle, one half brand, one
+ * Ardoise's mark: a rounded tile split down the middle, one half brand, one
  * half accent, with a coin on the seam — the product in one glyph, "one thing,
  * divided between people".
  *
@@ -19,13 +19,13 @@ export function BrandMark({ size = 96 }: BrandMarkProps) {
   const theme = useTheme();
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel="SplitCount">
+    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel="Ardoise">
       <Defs>
-        <ClipPath id="splitcount-tile">
+        <ClipPath id="ardoise-tile">
           <Rect x="0" y="0" width="100" height="100" rx="28" />
         </ClipPath>
       </Defs>
-      <G clipPath="url(#splitcount-tile)">
+      <G clipPath="url(#ardoise-tile)">
         <Rect x="0" y="0" width="100" height="100" fill={theme.primary} />
         {/* The right half, in the accent hue: the same tile, split. */}
         <Rect x="50" y="0" width="50" height="100" fill={theme.accent} />

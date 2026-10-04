@@ -42,7 +42,7 @@ export function SignInScreen() {
           <View style={[styles.logoDisc, { backgroundColor: theme.primarySoft }]}>
             <BrandMark size={88} />
           </View>
-          <ThemedText type="title">SplitCount</ThemedText>
+          <ThemedText type="title">Ardoise</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.tagline}>
             Share expenses with the people you split with.
           </ThemedText>

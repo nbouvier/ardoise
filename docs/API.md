@@ -7,8 +7,8 @@ route is added, changed or removed.
 
 - REST over HTTP, JSON request and response bodies.
 - Request and response shapes are validated with Zod on the server; the schemas are
-  shared with the client via `@splitcount/shared`.
-- Authentication: SplitCount issues its own session after verifying a Google ID token.
+  shared with the client via `@ardoise/shared`.
+- Authentication: Ardoise issues its own session after verifying a Google ID token.
   Protected routes require `Authorization: Bearer <accessToken>`. The access token is a
   short-lived (~15 min) HS256 JWT; the client refreshes it with the rotating refresh
   token. Auth failures return `401` with `{ "error": "<code>" }`; validation failures
@@ -45,7 +45,7 @@ Response `200`:
 
 ### `POST /auth/google`
 
-Exchange a Google ID token for a SplitCount session. Verifies the token against
+Exchange a Google ID token for an Ardoise session. Verifies the token against
 `GOOGLE_CLIENT_IDS`, creates the user on first sign-in.
 
 Request:
@@ -154,7 +154,7 @@ Response `200`, discriminated on `kind`:
 ### `GET /i/:code`
 
 The public HTML page an invitation link points to. Not JSON: it tries to open
-`splitcount://invite/<code>`, and otherwise shows who is inviting (and which group, for a
+`ardoise://invite/<code>`, and otherwise shows who is inviting (and which group, for a
 group invitation), the code to enter manually, and the store links when they are
 configured. Served with `Cache-Control: no-store`.
 
@@ -175,7 +175,7 @@ Response `200`:
 {
   "invite": {
     "code": "Zx3k9QpL2mN7vR1sT4uW8g",
-    "url": "https://api.splitcount.example/i/Zx3k9QpL2mN7vR1sT4uW8g",
+    "url": "https://api.ardoise.example/i/Zx3k9QpL2mN7vR1sT4uW8g",
     "expiresAt": "2026-09-17T12:00:00.000Z"
   }
 }
@@ -475,7 +475,7 @@ transaction — there is no per-transaction ownership.
 `weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
 a single-participant amount split).
 
-**Categories** are a fixed, closed preset list (`@splitcount/shared`'s `categories.ts`) —
+**Categories** are a fixed, closed preset list (`@ardoise/shared`'s `categories.ts`) —
 `groceries`, `restaurant`, `leisure`, `housing`, `transport`, `travel`, `health`,
 `shopping`, `bills`, `gifts`, `education`, `pets`, `other`. `other` is the default for a
 transaction recorded without one; it is a real category, not a stand-in for "none" — a
@@ -619,7 +619,7 @@ Response `200`:
 ```
 
 > **The reimbursement plan has no route.** Who should pay whom to clear a group is
-> derived from these balances by `planReimbursements` in `@splitcount/shared`, on the
+> derived from these balances by `planReimbursements` in `@ardoise/shared`, on the
 > client, so the plan and the balance list can never disagree
 > (`docs/specs/reimbursements.md`). Acting on it uses the ordinary
 > `POST /groups/:groupId/transactions` with `kind: "transfer"`; there is no settlement

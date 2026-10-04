@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendSummary } from '@ardoise/shared';
 import { Fragment, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 

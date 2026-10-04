@@ -6,7 +6,7 @@ import type {
   GroupSummary,
   Invite,
   UpdateGroupRequest,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 
 import type { GroupRow } from '../../db/schema.js';
 import { InviteError } from '../invites/codes.js';

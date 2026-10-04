@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 const DEFAULT_BASE_URL = 'http://localhost:3000';
 
 /**
- * Base URL of the SplitCount API. Sourced from the Expo config `extra`
+ * Base URL of the Ardoise API. Sourced from the Expo config `extra`
  * (`app.config.ts`, driven by `EXPO_PUBLIC_API_BASE_URL`), falling back to the
  * local dev server.
  */

@@ -63,7 +63,7 @@ export function CustomTabList(props: TabListProps) {
         type="surface"
         style={[styles.innerContainer, { borderColor: colors.border }]}>
         <ThemedText type="sectionTitle" themeColor="primary" style={styles.brandText}>
-          SplitCount
+          Ardoise
         </ThemedText>
 
         {props.children}

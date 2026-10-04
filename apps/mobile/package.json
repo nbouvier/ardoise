@@ -1,12 +1,12 @@
 {
-  "name": "@splitcount/mobile",
+  "name": "@ardoise/mobile",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@expo/ui": "~57.0.17",
     "@react-native-google-signin/google-signin": "^16.1.5",
-    "@splitcount/shared": "^1.0.0",
+    "@ardoise/shared": "^1.0.0",
     "expo": "~57.0.21",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.17",
@@ -69,7 +69,7 @@
       "^@/(.*)$": "<rootDir>/src/$1"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|@splitcount/shared))",
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|@ardoise/shared))",
       "/node_modules/react-native-reanimated/plugin/",
       "/node_modules/@react-native/babel-preset/"
     ]

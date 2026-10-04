@@ -5,7 +5,7 @@ import { groupInvitePreviewSchema, groupSummarySchema } from './groups.js';
 
 /**
  * What an invitation leads to. There is a **single code space**: the client
- * captures `splitcount://invite/<code>` without knowing what it is for, and the
+ * captures `ardoise://invite/<code>` without knowing what it is for, and the
  * server says. That is why one landing page and one pair of public routes serve
  * both friendships and groups.
  */

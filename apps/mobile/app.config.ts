@@ -7,14 +7,14 @@ const APP_ID_FORMAT = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const PLACEHOLDER_APP_ID = /^com\.anonymous(\.|$)/;
 
 /**
- * The application id (Android package, iOS bundle identifier): `APP_ID` when set,
- * else what `app.json` says. It is permanent once an app is published, and the
- * product name is not final, so it is one variable rather than a literal in two places.
- * An EAS `production*` build refuses the template placeholder, so that a release
- * cannot go out under an id that cannot be kept.
+ * The application id (Android package, iOS bundle identifier): what `app.json` says,
+ * unless `APP_ID` overrides it (a fork publishing its own build). It is permanent once
+ * an app is published, so it is one value applied to both platforms. An EAS
+ * `production*` build refuses the template placeholder, so that a release cannot go
+ * out under an id that cannot be kept.
  */
 function resolveAppId(config: Partial<ExpoConfig>): string {
-  const appId = process.env.APP_ID ?? config.android?.package ?? 'com.anonymous.splitcount';
+  const appId = process.env.APP_ID ?? config.android?.package ?? 'app.ardoise';
 
   if (!APP_ID_FORMAT.test(appId)) {
     throw new Error(`APP_ID "${appId}" is not a valid application id (for example com.example.app)`);
@@ -58,8 +58,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...(easProjectId
       ? { updates: { ...config.updates, url: `https://u.expo.dev/${easProjectId}` } }
       : {}),
-    name: config.name ?? 'SplitCount',
-    slug: config.slug ?? 'splitcount',
+    name: config.name ?? 'Ardoise',
+    slug: config.slug ?? 'ardoise',
     android: {
       ...config.android,
       package: appId,

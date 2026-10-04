@@ -1,4 +1,4 @@
-import type { SplitInput, Transaction } from '@splitcount/shared';
+import type { SplitInput, Transaction } from '@ardoise/shared';
 
 /** Rebuilds a `SplitInput` from a stored transaction's participants. */
 export function splitFrom(transaction: Transaction): SplitInput {

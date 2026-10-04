@@ -7,9 +7,9 @@ current setup and state.
 
 | Workspace       | Runner    | Command                                     |
 | --------------- | --------- | ------------------------------------------- |
-| `apps/mobile`   | jest-expo | `npm run test --workspace @splitcount/mobile` |
-| `apps/server`   | Vitest    | `npm run test --workspace @splitcount/server` |
-| `packages/shared` | Vitest  | `npm run test --workspace @splitcount/shared` |
+| `apps/mobile`   | jest-expo | `npm run test --workspace @ardoise/mobile` |
+| `apps/server`   | Vitest    | `npm run test --workspace @ardoise/server` |
+| `packages/shared` | Vitest  | `npm run test --workspace @ardoise/shared` |
 
 From the repository root:
 
@@ -54,14 +54,14 @@ the 10s/5s defaults — a spurious failure that says nothing about the code. The
 are a ceiling for setup, not a licence for slow tests: a *test* that needs seconds is
 doing too much.
 
-The root `npm test` runs `pretest` first, which builds `@splitcount/shared` so both apps
+The root `npm test` runs `pretest` first, which builds `@ardoise/shared` so both apps
 resolve its compiled output.
 
 ## Client tests
 
 `jest-expo` is configured. Import test globals explicitly from `@jest/globals` (ambient
 `@types/jest` is not wired). Use `@testing-library/react-native` for component tests.
-`transformIgnorePatterns` also transforms `@splitcount/shared`; native modules are mocked
+`transformIgnorePatterns` also transforms `@ardoise/shared`; native modules are mocked
 (`__mocks__/`), and injected fakes (`GoogleModule`, `TokenStore`) keep native code out of
 `AuthClient` tests. `@expo/ui`'s date picker is mocked the same way
 (`__mocks__/@expo/ui/community/datetime-picker.tsx`, mapped explicitly in `moduleNameMapper`

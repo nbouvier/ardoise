@@ -1,4 +1,4 @@
-import type { Balance } from '@splitcount/shared';
+import type { Balance } from '@ardoise/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';

@@ -1,4 +1,4 @@
-import type { GroupDetail } from '@splitcount/shared';
+import type { GroupDetail } from '@ardoise/shared';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 

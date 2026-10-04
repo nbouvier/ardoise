@@ -7,7 +7,7 @@ import {
   type Transaction,
   type TransactionCategory,
   type TransactionKind,
-} from '@splitcount/shared';
+} from '@ardoise/shared';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 

@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendSummary } from '@ardoise/shared';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';

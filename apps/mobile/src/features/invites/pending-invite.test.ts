@@ -10,32 +10,32 @@ beforeEach(() => {
 
 describe('parseInviteUrl', () => {
   it('reads a code from the app deep link', () => {
-    expect(parseInviteUrl(`splitcount://invite/${CODE}`)).toBe(CODE);
+    expect(parseInviteUrl(`ardoise://invite/${CODE}`)).toBe(CODE);
   });
 
   it('reads a code from the landing-page URL', () => {
-    expect(parseInviteUrl(`https://api.splitcount.test/i/${CODE}`)).toBe(CODE);
+    expect(parseInviteUrl(`https://api.ardoise.test/i/${CODE}`)).toBe(CODE);
   });
 
   it('ignores a query string or fragment', () => {
     expect(parseInviteUrl(`https://api.test/i/${CODE}?utm=whatsapp`)).toBe(CODE);
-    expect(parseInviteUrl(`splitcount://invite/${CODE}#x`)).toBe(CODE);
+    expect(parseInviteUrl(`ardoise://invite/${CODE}#x`)).toBe(CODE);
   });
 
   it('tolerates the host-style deep link Expo produces', () => {
-    // `splitcount://` links can arrive with the first segment parsed as a host.
-    expect(parseInviteUrl(`splitcount://app/invite/${CODE}`)).toBe(CODE);
+    // `ardoise://` links can arrive with the first segment parsed as a host.
+    expect(parseInviteUrl(`ardoise://app/invite/${CODE}`)).toBe(CODE);
   });
 
   it('ignores URLs that are not invitations', () => {
-    expect(parseInviteUrl('splitcount://account')).toBeNull();
+    expect(parseInviteUrl('ardoise://account')).toBeNull();
     expect(parseInviteUrl('https://example.com/')).toBeNull();
     expect(parseInviteUrl(null)).toBeNull();
     expect(parseInviteUrl(undefined)).toBeNull();
   });
 
   it('rejects a code that cannot be one', () => {
-    expect(parseInviteUrl('splitcount://invite/short')).toBeNull();
+    expect(parseInviteUrl('ardoise://invite/short')).toBeNull();
     expect(parseInviteUrl('https://api.test/i/has spaces in it')).toBeNull();
   });
 });

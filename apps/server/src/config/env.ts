@@ -77,7 +77,7 @@ const envSchema = z.object({
         .filter((id) => id.length > 0),
     )
     .pipe(z.array(z.string().min(1)).min(1)),
-  /** Secret used to sign SplitCount access tokens (JWT HS256). Server-only. */
+  /** Secret used to sign Ardoise access tokens (JWT HS256). Server-only. */
   AUTH_JWT_SECRET: z.string().min(16),
   /** Access-token lifetime in seconds. */
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),

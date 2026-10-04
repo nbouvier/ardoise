@@ -1,4 +1,4 @@
-# SplitCount — product overview
+# Ardoise — product overview
 
 Concise, high-level view of the product and its current capabilities. Detailed behaviour
 lives in `docs/specs/`.

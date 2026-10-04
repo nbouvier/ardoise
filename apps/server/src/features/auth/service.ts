@@ -1,4 +1,4 @@
-import type { AuthSession, UserProfile } from '@splitcount/shared';
+import type { AuthSession, UserProfile } from '@ardoise/shared';
 
 import type { UserRow } from '../../db/schema.js';
 

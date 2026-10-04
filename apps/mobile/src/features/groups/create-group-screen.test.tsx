@@ -1,4 +1,4 @@
-import type { FriendSummary, GroupDetail } from '@splitcount/shared';
+import type { FriendSummary, GroupDetail } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -83,7 +83,7 @@ describe('CreateGroupScreen', () => {
 
     await fireEvent.changeText(
       screen.getByLabelText('Invitation code'),
-      'https://api.splitcount.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
+      'https://api.ardoise.test/i/Zx3k9QpL2mN7vR1sT4uW8g',
     );
     await fireEvent.press(screen.getByRole('button', { name: /^join$/i }));
 

@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@splitcount/shared';
+import type { FriendSummary } from '@ardoise/shared';
 import { inArray, eq } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';

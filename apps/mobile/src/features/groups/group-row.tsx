@@ -1,4 +1,4 @@
-import type { GroupSummary } from '@splitcount/shared';
+import type { GroupSummary } from '@ardoise/shared';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Breadcrumb } from '@/components/breadcrumb';

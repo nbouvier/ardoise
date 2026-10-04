@@ -316,7 +316,7 @@ its own.
 - **No new persisted data.** The breakdown itself is still derived on the fly, the way
   balances are (`docs/ARCHITECTURE.md`); nesting adds a data-fetching question, not a
   storage one.
-- **The aggregation lives in `@splitcount/shared`** as a pure function operating on a flat
+- **The aggregation lives in `@ardoise/shared`** as a pure function operating on a flat
   list of transactions, unchanged by sub-groups: scope is resolved into *which*
   transactions are handed to it, not into new logic inside it. The rule for what counts —
   and the percentage rounding — keeps its one definition.

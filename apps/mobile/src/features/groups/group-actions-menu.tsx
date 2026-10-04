@@ -1,4 +1,4 @@
-import type { GroupKind, GroupRole } from '@splitcount/shared';
+import type { GroupKind, GroupRole } from '@ardoise/shared';
 
 import { IconMenuButton, type IconMenuOption } from '@/components/icon-menu-button';
 
