@@ -225,6 +225,14 @@ What each suite covers, by workspace and feature. Paths are relative to the work
 
 ### `apps/mobile`
 
+- **Error reporting** (`src/lib/error-reporting.test.ts`, `src/lib/logger.test.ts`,
+  `@sentry/react-native`, `expo-constants` and `expo-updates` mocked): off without a DSN,
+  the environment from the update channel, which errors are reportable, breadcrumbs and
+  events scrubbed (sensitive keys, invitation codes), the logger's routing of each level,
+  and `errorFields` staying printable while carrying the original error. The module keeps
+  "started" state, so each test loads a fresh copy (`jest.isolateModules`); the pure
+  functions are imported normally, since an isolated copy would see different error
+  classes and break `instanceof`.
 - **Shared building blocks**: API clients (`src/lib/api/`, shared fakes in
   `src/test-utils/`); `src/lib/stable-order.test.ts`, the order-preserving merge behind
   "a row does not jump when I favorite it" — known ids keep their position, a fresh field
