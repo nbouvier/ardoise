@@ -35,6 +35,11 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       ACTION: ${{ inputs.action }}
       PROFILE: ${{ inputs.profile }}
+      # Source-map upload of an update, so its crash reports have readable stack traces
+      # (a build uploads its own, on EAS, from the EAS environment variables).
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT_MOBILE }}
     steps:
       - uses: actions/checkout@v5
 
@@ -60,6 +65,20 @@ jobs:
         # or at expo.dev, and install/submit the artifact from there.
         run: eas build --platform android --profile "$PROFILE" --non-interactive --no-wait
 
+      # Before publishing: an update whose source maps cannot be uploaded would reach
+      # phones with unreadable crash reports.
+      - name: Check the Sentry upload is configured
+        if: env.ACTION == 'update'
+        run: |
+          missing=""
+          [ -n "$SENTRY_AUTH_TOKEN" ] || missing="$missing secret:SENTRY_AUTH_TOKEN"
+          [ -n "$SENTRY_ORG" ] || missing="$missing variable:SENTRY_ORG"
+          [ -n "$SENTRY_PROJECT" ] || missing="$missing variable:SENTRY_PROJECT_MOBILE"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing in the repository settings:$missing (docs/MOBILE.md, \"Error reporting (Sentry)\")"
+            exit 1
+          fi
+
       - name: Publish an update
         if: env.ACTION == 'update'
         run: |
@@ -68,3 +87,8 @@ jobs:
           environment=$([ "$channel" = staging ] && echo preview || echo production)
           eas update --branch "$channel" --environment "$environment" \
             --message "$(git log -1 --pretty=%s)" --non-interactive
+
+      - name: Upload the update's source maps to Sentry
+        if: env.ACTION == 'update'
+        # `eas update` left the bundles and their maps in dist/.
+        run: npx sentry-expo-upload-sourcemaps dist

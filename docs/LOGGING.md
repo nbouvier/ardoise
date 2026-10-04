@@ -79,11 +79,55 @@ not diagnostic context. The transaction id is enough to look it up.
 - Structured logger in `src/lib/logger.ts` (`logger.info/warn/error/debug`, plus
   `errorFields()` for safe error serialisation). Application code logs through it, never
   `console` directly.
-- Currently writes to the console sink; silent under `NODE_ENV=test`. A remote transport
-  can be added there without touching callers.
+- Two sinks: the console (silent under `NODE_ENV=test`), and error reporting — see
+  "Error reporting (Sentry)" below for what each level turns into there.
 - Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
   `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`.
   Never log tokens.
+
+## Error reporting (Sentry)
+
+Logs say what happened on one machine and are gone after a while; nobody reads a phone's
+console. Failures that need a human are also sent to **Sentry** (sentry.io, free plan,
+**EU data region**), which groups identical errors into one issue, counts the users it
+affects and alerts by e-mail. One Sentry project per app (`ardoise-mobile`,
+`ardoise-server`); production and staging are the `environment` of each report, not
+separate projects, and alert rules filter on `environment:production`.
+
+Reporting is **off without a DSN**: local development, tests and the web target never
+report. The free plan allows 5,000 errors a month for the whole organization and one
+member; past the quota, reports are dropped until the next month (no pay-as-you-go budget
+is set, so nothing is billed).
+
+### Mobile
+
+`src/lib/error-reporting.ts`, started from the root layout before the first render
+(build side and variables: `docs/MOBILE.md`, "Error reporting (Sentry)").
+
+| What | Becomes in Sentry |
+| --- | --- |
+| Uncaught JavaScript error, unhandled promise rejection, native crash | An issue (captured by the SDK itself). |
+| An error thrown while rendering | An issue, and the crash screen ("Something went wrong", *Try again*) instead of a blank app: the root `ErrorBoundary` in `src/app/_layout.tsx`. |
+| `logger.error(...)` | An issue, always (`captureException` when the fields came from `errorFields`, otherwise `captureMessage`). |
+| `logger.warn(event, errorFields(error))` | An issue **only if the error is unexpected**: not a `NetworkError` (no connection), not an `ApiError` (an API refusal; a 5xx is reported by the server), not a cancelled Google dialog. A contract mismatch, a native module failing or a plain bug is. |
+| Every log event (any level) | A breadcrumb: the trail of events attached to the next issue. |
+
+An issue is tagged `event:<log event name>`, so `groups.load.failed` in the logs and in
+Sentry are the same thing. `errorFields()` keeps the original error (and its stack) on a
+symbol key, invisible when the fields are printed, for the reporter to use.
+
+**What never leaves the phone.**
+
+- `sendDefaultPii: false`: no IP address, no device name. The user is attached as their
+  opaque internal id only (`setUser({ id })` on sign-in, cleared on sign-out) — no e-mail,
+  no name — so Sentry can count affected users.
+- Fields of reports and breadcrumbs whose name matches tokens, authorization, password,
+  secret, cookie, e-mail, amount, title, comment, picture or `…name` are replaced with
+  `[redacted]`, whatever their value.
+- Invitation codes are bearer secrets (whoever holds one can join): in any URL or message,
+  `/invites/<code>`, `/i/<code>` and `ardoise://invite/<code>` become `…/[code]`.
+- The console breadcrumbs are dropped (the logger's own, scrubbed ones replace them).
+- No performance tracing, no session replay, no screenshots.
 
 ## Shared rules (both apps)
 

@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { getApiBaseUrl } from '@/lib/api/config';
+import { setReportingUser } from '@/lib/error-reporting';
 
 import { AuthClient, type AuthState } from './auth-client';
 import { googleSignIn } from './google';
@@ -50,6 +51,13 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
   useEffect(() => {
     void authClient.bootstrap();
   }, [authClient]);
+
+  // Reports carry who hit them (the opaque id, nothing else), so Sentry can count
+  // the users an issue affects.
+  const userId = state.status === 'signedIn' ? state.user.id : null;
+  useEffect(() => {
+    setReportingUser(userId);
+  }, [userId]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

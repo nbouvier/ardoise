@@ -28,15 +28,32 @@ function resolveAppId(config: Partial<ExpoConfig>): string {
 }
 
 /**
+ * Sentry's config plugin, which uploads the JavaScript source maps and native debug
+ * symbols of a release build so that reported stack traces are readable. Organization
+ * and project come from `SENTRY_ORG` / `SENTRY_PROJECT` and the upload authenticates
+ * with `SENTRY_AUTH_TOKEN`: EAS environment variables, never committed. Debug builds
+ * upload nothing. See "Error reporting (Sentry)" in `docs/MOBILE.md`.
+ */
+function sentryPlugin(): [string, Record<string, string>] {
+  const options: Record<string, string> = {};
+  if (process.env.SENTRY_ORG) options.organization = process.env.SENTRY_ORG;
+  if (process.env.SENTRY_PROJECT) options.project = process.env.SENTRY_PROJECT;
+  if (process.env.SENTRY_URL) options.url = process.env.SENTRY_URL;
+  return ['@sentry/react-native/expo', options];
+}
+
+/**
  * Layers environment-driven values onto the static config in `app.json`:
- * the application id, the API base URL, the Google OAuth client IDs (not secret)
- * and the iOS URL scheme the Google SDK needs. See `docs/MOBILE.md`.
+ * the application id, the API base URL, the Google OAuth client IDs (not secret),
+ * the iOS URL scheme the Google SDK needs and the Sentry DSN (not secret either: it
+ * only lets a client send reports). See `docs/MOBILE.md`.
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appId = resolveAppId(config);
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? null;
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? null;
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+  const sentryDsn = process.env.SENTRY_DSN || null;
 
   const iosUrlScheme = iosClientId
     ? `com.googleusercontent.apps.${iosClientId.replace('.apps.googleusercontent.com', '')}`
@@ -73,12 +90,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       iosUrlScheme
         ? ['@react-native-google-signin/google-signin', { iosUrlScheme }]
         : '@react-native-google-signin/google-signin',
+      sentryPlugin(),
     ],
     extra: {
       ...config.extra,
       apiBaseUrl,
       googleWebClientId: webClientId,
       googleIosClientId: iosClientId,
+      sentryDsn,
     },
   };
 };
