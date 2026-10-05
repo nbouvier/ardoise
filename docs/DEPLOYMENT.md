@@ -62,6 +62,14 @@ the Compose stack passes `DEPLOY_ENV`, so `production` or `staging`). A `SENTRY_
 is not a URL is refused at startup rather than silently reporting nothing. See
 `docs/LOGGING.md`, "Error reporting (Sentry)".
 
+`ACCOUNT_DELETION_CONTACT` is the address account-deletion requests made without the app
+go to, shown on the public `GET /delete-account` page (`docs/specs/account-deletion.md`).
+Optional, and the page only describes the in-app path without it — but Google Play
+requires a way to ask for deletion without the app, so set it before the app is
+published. An address that is not an e-mail address is refused at startup. Requests that
+arrive there are carried out with the operator command (`docs/OPERATIONS.md`, "Deleted
+accounts").
+
 ## Database migrations
 
 In production the server **does not migrate**. Migrations run once per release, in a
@@ -185,11 +193,11 @@ Set on **every** response, errors and `429`s included, by `@fastify/helmet`
 | `X-Frame-Options`, `Cross-Origin-*-Policy`, `X-DNS-Prefetch-Control`… | helmet defaults | |
 | `X-Powered-By` | removed | |
 
-The invitation landing page (`GET /i/:code`) is the one HTML document and overrides the
-CSP for its own response: `default-src 'none'` plus its single inline `<style>` and
-`<script>` allowed **by SHA-256 hash**, computed from the response body by
-`contentSecurityPolicyFor` (`features/invites/landing.ts`) — per response, because the
-script contains the invitation code. There is no `unsafe-inline`. If you add an inline
+The two HTML documents — the invitation landing page (`GET /i/:code`) and the
+account-deletion page (`GET /delete-account`) — override the CSP for their own response:
+`default-src 'none'` plus their inline `<style>` and `<script>` allowed **by SHA-256
+hash**, computed from the response body by `contentSecurityPolicyFor` (`http/html.ts`) —
+per response, because the landing page's script contains the invitation code. There is no `unsafe-inline`. If you add an inline
 block or an external resource to the page, the policy follows automatically for inline
 `<style>` / `<script>`; anything else (an image, a font) needs the policy extended there.
 

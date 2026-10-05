@@ -236,9 +236,9 @@ An expense, income or transfer recorded in a group.
 | `occurred_on`   | date             | A calendar date, not a timestamp — no time zone drift      |
 | `comment`       | text, null       | Optional                                                   |
 | `category`      | text             | One of a fixed preset list; default `'other'`, never `NULL` |
-| `payer_id`      | uuid FK, null    | → `users.id`, `ON DELETE CASCADE`; `NULL` is Others        |
+| `payer_id`      | uuid FK, null    | → `users.id`, `ON DELETE RESTRICT`; `NULL` is Others       |
 | `split_mode`    | text             | `shares` or `amount`                                       |
-| `created_by`    | uuid FK          | → `users.id`, `ON DELETE CASCADE`; who recorded it         |
+| `created_by`    | uuid FK, null    | → `users.id`, `ON DELETE SET NULL`; who recorded it        |
 | `created_at`    | timestamptz      | `now()`                                                     |
 | `updated_at`    | timestamptz      | `now()`; refreshed on edit                                  |
 
@@ -264,7 +264,7 @@ One member's share of a transaction — or Others'.
 | ---------------- | ----------- | -------------------------------------------------------------------- |
 | `id`             | uuid PK     | `gen_random_uuid()`                                                   |
 | `transaction_id` | uuid FK     | → `transactions.id`, `ON DELETE CASCADE`                              |
-| `user_id`        | uuid FK, null | → `users.id`, `ON DELETE CASCADE`; `NULL` is Others                 |
+| `user_id`        | uuid FK, null | → `users.id`, `ON DELETE RESTRICT`; `NULL` is Others                |
 | `share_cents`    | integer     | ≥ 0; `shares` mode's computed output, or `amount` mode's input        |
 | `weight`         | integer, null | Set only in `shares` mode: the input the split was computed from     |
 
@@ -287,15 +287,30 @@ past transactions, so history is not rewritten. `Σ share_cents = amount_cents` 
 transaction is the core invariant — not expressible as a single-row `CHECK`, so it is
 enforced by the service inside the same database transaction that writes both tables.
 
-**`payer_id` and `created_by` cascade-delete like every other FK to `users.id`** in this
-schema, which means deleting a user's account would currently delete every transaction
-they paid for or recorded — including ones shared with people who remain in the group,
-silently breaking their balances. There is no account-deletion feature yet to trigger
-this, so it is left as-is for consistency with the rest of the schema. The planned
-account deletion turns a user's participations into Others (a `NULL` payer or participant)
-before the account goes, so shared history survives; the payer and participant FKs are
-then meant to become `ON DELETE RESTRICT`, so a deletion that skipped that step fails
-loudly instead of cascading.
+**`payer_id` and `user_id` refuse a user's deletion (`ON DELETE RESTRICT`)**, unlike every
+other FK to `users.id`: cascading would delete every transaction the user paid for or
+shared, including ones the other members still count on. Account deletion
+(`docs/specs/account-deletion.md`) turns the user's payments and shares into Others first,
+so a deletion path that forgot to would fail instead of silently rewriting other people's
+history. `created_by` is only who recorded the transaction, so it is forgotten
+(`ON DELETE SET NULL`) rather than refused.
+
+A transaction naming an account that was deleted while it was being written fails on one
+of those two keys; `transactions/repository.ts` turns that into `not_group_member` rather
+than a server error. Deletion locks the user row first, so a write in flight either
+finishes before it (and is anonymised with the rest) or waits and then fails that way.
+
+### `deleted_accounts`
+
+The id of every deleted account, and when — nothing else: no name, no e-mail, no Google
+id. A database restored from a backup taken before a deletion brings that account back;
+this list is what the operator re-applies deletions from (`docs/OPERATIONS.md`, "Deleted
+accounts").
+
+| Column       | Type        | Notes                                                    |
+| ------------ | ----------- | -------------------------------------------------------- |
+| `user_id`    | uuid PK     | The deleted account's id. No FK: that user no longer exists |
+| `deleted_at` | timestamptz | `now()`                                                    |
 
 ## Cascades worth knowing
 
@@ -311,10 +326,12 @@ loudly instead of cascading.
   through `groups.parent_id`'s own cascade, the same mechanism as every other cascade in
   this schema, not an application-level loop.
 - Deleting a **user** removes their sessions, friendships (and therefore their pair
-  groups), memberships and the invitations they issued. Standard groups they belonged to
-  survive; one left with no members at all is deleted by the service when its last member
-  leaves. It would also currently remove every transaction they paid for or recorded —
-  see the note under `transactions` above.
+  groups), memberships and the invitations they issued, and forgets them as the recorder
+  of transactions. It is **refused** while a transaction still names them as payer or
+  participant — see the note under `transaction_participants` above: account deletion
+  (`features/account/repository.ts`) anonymises those, passes on the groups they owned and
+  deletes the ones left empty, all in the same database transaction, before deleting the
+  row.
 - Deleting a **group** now also removes its transactions and their participants, the same
   way it already removes memberships and the invitation.
 
@@ -344,3 +361,8 @@ loudly instead of cascading.
   `transaction_participants_unique` as `NULLS NOT DISTINCT` so a transaction has at most one
   Others row. No backfill: every existing row names a user. Needs Postgres 15+ (production
   runs 17; the PGlite used in development and tests supports it too).
+- Migration `0010_*` — account deletion: `deleted_accounts` table;
+  `transactions.payer_id` and `transaction_participants.user_id` move to
+  `ON DELETE RESTRICT`; `transactions.created_by` becomes nullable with
+  `ON DELETE SET NULL`. Only constraints change, no data: nothing deletes users before
+  this release.

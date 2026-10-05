@@ -74,6 +74,19 @@ release, outside the server process, and logs JSON on stdout like the server doe
 **Never** log a transaction's title, comment or amount — user content and financial data,
 not diagnostic context. The transaction id is enough to look it up.
 
+### Account events
+
+`docs/specs/account-deletion.md`. The account id is all that identifies the person, before
+and after: never their name, e-mail address, or an amount they lose.
+
+| Event                        | Level | Fields | Meaning |
+| ---------------------------- | ----- | ------ | ------- |
+| `account.deleted`            | info  | `userId`, `friendshipsRemoved`, `groupsLeft`, `ownershipsPassed`, `groupsDeleted`, `transactionsAnonymised`, `transfersDeleted`; `source: 'operator'` from the command | An account was deleted, by its owner (`DELETE /me`) or by the operator command (`src/scripts/delete-accounts.ts`). These lines are also the only trace of a deletion outside the database (`docs/OPERATIONS.md`, "Known limits"). |
+| `account.delete.failed`      | error | `userId` (from the route), `error` (from the command) | Deletion failed and was rolled back entirely. From the route, the error itself follows as `http.request.failed`, which is reported to Sentry. |
+| `account.delete.absent`      | info  | `userId` | The operator command was given an id not in this database; it is only kept on the deleted-accounts list. |
+| `account.delete.invalid_id`  | warn  | `position` | The operator command was given something that is not an id; it is not echoed, it could be anything. The command exits 1. |
+| `account.delete.no_ids`      | error | — | The operator command was run without any id. |
+
 ## Client (`apps/mobile`)
 
 - Structured logger in `src/lib/logger.ts` (`logger.info/warn/error/debug`, plus

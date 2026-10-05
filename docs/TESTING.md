@@ -220,6 +220,27 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     transaction between two other members of the caller's group), the membership
     boundary (a group the caller has left serves nothing, even where they are still a
     participant), and the cap with same-day ties in recording order.
+- **Account deletion** (`src/features/account/`, `docs/specs/account-deletion.md`):
+  - generated ledger (`repository.test.ts`): every payer, Others included, against every
+    set of concerned parties in both split modes; after deleting one member, every row
+    equals the same ledger written with that member as Others from the start (merged
+    into an existing Others share, a transfer that became Others to Others gone), every
+    transaction still sums to its amount with at most one Others share, and the others'
+    balances are unchanged by the rewrite. Breaking the weight merge or keeping the
+    Others-to-Others transfers makes it fail;
+  - end to end (`plugin.test.ts`): an access token still within its lifetime and the
+    refresh token both refused after deletion; friendships end with their pair groups and
+    those groups' sub-groups; in a shared group the user's name and id appear nowhere,
+    amounts, dates, titles and the other shares are kept, and the remaining balances are
+    what Others implies; ownership passes to the earliest-joined member, per group;
+    a group left empty goes with its sub-groups; invitation links stop working; only the
+    id is kept and a new sign-in is a new account; all-or-nothing, checked by making the
+    very last write fail with a trigger; the deletion preview; the public page;
+  - the database itself refuses to delete a user still named on a transaction, and a
+    write naming an account deleted meanwhile is refused as `not_group_member` rather than
+    failing with a server error;
+  - the operator command's logic (`deleteAccounts`): deletes, keeps listing an id
+    already gone, refuses what is not an id, and repeating it changes nothing.
 
 ### `packages/shared`
 

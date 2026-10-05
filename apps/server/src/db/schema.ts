@@ -248,11 +248,14 @@ export const transactions = pgTable(
     // Always set — an uncategorised transaction is recorded as 'other'.
     category: text('category').notNull().default('other'),
     // `NULL` is Others — people outside the group — never a missing value.
-    payerId: uuid('payer_id').references(() => users.id, { onDelete: 'cascade' }),
+    // Deleting a user still named here is refused rather than cascaded: it
+    // would take other people's transactions with it. Account deletion turns
+    // the user into Others first (`docs/specs/account-deletion.md`).
+    payerId: uuid('payer_id').references(() => users.id, { onDelete: 'restrict' }),
     splitMode: text('split_mode').notNull(),
-    createdBy: uuid('created_by')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // `NULL` once the account that recorded it is deleted: who recorded a
+    // transaction is forgotten with them.
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -296,7 +299,8 @@ export const transactionParticipants = pgTable(
     transactionId: uuid('transaction_id')
       .notNull()
       .references(() => transactions.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    // Restricted like `transactions.payer_id`, for the same reason.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
     shareCents: integer('share_cents').notNull(),
     weight: integer('weight'),
   },
@@ -312,6 +316,17 @@ export const transactionParticipants = pgTable(
     index('transaction_participants_user_id_idx').on(table.userId),
   ],
 );
+
+/**
+ * Every deleted account's id, and nothing else about it. A database restored
+ * from a backup taken before a deletion brings that account back; this list is
+ * what the operator re-applies deletions from (`docs/OPERATIONS.md`). No
+ * foreign key: the user it names no longer exists.
+ */
+export const deletedAccounts = pgTable('deleted_accounts', {
+  userId: uuid('user_id').primaryKey(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;

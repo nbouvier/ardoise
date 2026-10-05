@@ -46,11 +46,18 @@ const STYLES = `
   }
   .stores { display: flex; gap: 12px; justify-content: center; }
   .stores a { color: #11181c; font-size: 14px; }
+  /* A page that is mostly text reads better left-aligned and a little wider. */
+  main:has(.prose) { max-width: 560px; text-align: left; }
+  .prose h2 { font-size: 16px; margin: 24px 0 8px; }
+  .prose ul { margin: 0 0 16px; padding-left: 20px; color: #687076; }
+  .prose li { margin-bottom: 8px; }
+  .prose a { color: #11181c; }
   @media (prefers-color-scheme: dark) {
     body { background: #151718; color: #ecedee; }
     .primary { background: #ecedee; color: #151718; }
     .code { background: #202425; color: #ecedee; }
     .stores a { color: #ecedee; }
+    .prose a { color: #ecedee; }
   }
 `;
 

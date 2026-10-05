@@ -282,9 +282,46 @@ docker run --rm --env-file backup-offsite.env restic/restic:0.18.0 \
 # an older one: `snapshots`, then `dump <snapshot id> /ardoise.dump`
 ```
 
+**Then delete again the accounts deleted since that backup** — a restore brings them
+back (`docs/specs/account-deletion.md`). Before restoring, while the current database is
+still readable, save its list of deleted accounts; after restoring, and before starting
+the server, re-apply it (see "Deleted accounts" below):
+
+```bash
+# before the restore
+./compose.sh exec -T db psql --username ardoise --dbname ardoise -At \
+  -c 'select user_id from deleted_accounts' > deleted-accounts.txt
+# after it (`run --rm migrate` first if the dump predates the running release)
+xargs -r ./compose.sh run --rm -T migrate \
+  node apps/server/dist/scripts/delete-accounts.js < deleted-accounts.txt
+```
+
+When the current database is gone, the newest backup's own list is all there is; see
+"Known limits".
+
 Prefer to rehearse on staging first: copy a production dump there and restore it. **Test
 a restore before you need one** — a backup nobody restored is a hope. Do it again after
 any change to how backups are taken.
+
+## Deleted accounts
+
+Users delete their account from the app (`docs/specs/account-deletion.md`). Two cases need
+the operator, both with the same command, which deletes an account exactly as the app does
+and is safe to repeat (an id no longer in the database is only kept on the
+`deleted_accounts` list):
+
+```bash
+./compose.sh run --rm -T migrate node apps/server/dist/scripts/delete-accounts.js <user id>...
+```
+
+- **A request by e-mail**, to `ACCOUNT_DELETION_CONTACT` (`docs/DEPLOYMENT.md`), from
+  someone without the app. Act on it only when it comes from the e-mail address of the
+  account's Google account. Find the id (`select id from users where email = '…'` with
+  `./compose.sh exec -T db psql --username ardoise --dbname ardoise`), run the command,
+  reply once done — within a month, as the public page says.
+- **After a restore**: re-apply the list, as in "Restoring" above.
+
+Each deletion logs `account.deleted` with the id and counts only (`docs/LOGGING.md`).
 
 ## Logs and monitoring
 
@@ -332,3 +369,7 @@ secret (`docs/MOBILE.md`).
   Not solved yet; the candidates are an object lock / retention rule on the bucket, or
   pruning from another computer with a key the machine does not have.
 - Rate-limit counters are per process (`docs/DEPLOYMENT.md`).
+- The deleted-accounts list lives in the database it protects. Losing the database loses
+  the deletions made since the newest backup: restoring it brings those accounts back,
+  and only `account.deleted` lines still in the server's Docker logs (if the machine
+  survived) can tell which. Restore, then re-apply those ids with the command above.
