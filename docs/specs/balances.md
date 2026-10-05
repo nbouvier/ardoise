@@ -40,8 +40,10 @@ going group by group**.
   means they owe the group. Every current member appears, including at zero.
 - A member who left the group with an unsettled balance still appears.
 - A group's balances always sum to zero.
-- The rule, unchanged: the payer is credited the amount, each concerned member is debited
-  their share; an `income` reverses both signs. See `docs/specs/transactions.md`.
+- The rule: the payer is credited the concerned members' shares, each concerned member is
+  debited their share; an `income` reverses both signs. **Others** (people outside the
+  group) never enters a balance: their share is not credited to the payer, and what
+  Others paid is owed to no one. See `docs/specs/transactions.md`.
 
 **What changes here is visibility only.** The viewer's own balance and the per-member list
 both live on the group screen's **Balances** tab, in "Where everyone stands", the viewer's
@@ -82,6 +84,10 @@ as a group balance, only attributed to the pair rather than to the group:
 > paid), each signed the way its transaction's kind signs it.
 
 Positive means **they owe me**; negative means **I owe them**.
+
+Others is never "them": a share of Others in what I paid, or my share of what Others paid,
+is a debt with no one in the product and does not appear in any per-person figure — the
+same exclusion as in a group balance, which is what keeps the two consistent.
 
 This follows directly from the transactions record and nothing else, which gives it the
 properties the display depends on:
@@ -153,6 +159,8 @@ properties the display depends on:
   visible to them (`docs/specs/groups.md`).
 - **A deeply nested tree**: every level shows its own figure; none of them includes
   another.
+- **A transaction involving Others**: only its member-to-member part counts, in the group
+  balance, the per-person figure and the group-list figure alike.
 
 ## Acceptance criteria
 

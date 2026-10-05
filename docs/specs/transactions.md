@@ -50,6 +50,33 @@ move money:
 The payer does not have to be one of the people the transaction concerns (e.g. "Alice
 paid, split between Bob and Carole").
 
+### Others — people outside the group
+
+A shared cost often includes people who are not in the group: a friend of a friend at
+dinner, a neighbour the group advanced money to. **Others** stands for all of them at once.
+
+- **Others is not a person and not a member.** It is a single, anonymous stand-in for
+  "everyone outside the group", always available in every group (standard, sub-group or
+  pair group), whoever its members are.
+- **Others can be a concerned party of an expense or an income**, with a share like any
+  member — a weight in a shares split, an amount in a fixed split. A transaction has at
+  most one Others entry.
+- **What concerns Others stays outside the group.** Only money moving between members
+  counts, in balances (`docs/specs/balances.md`) and in statistics
+  (`docs/specs/group-statistics.md`): Others' share is treated as settled outside the app.
+  If I pay 60 € split 10 € for me, 10 € for member 1, 10 € for member 2 and 30 € for
+  Others, the group owes me 20 € — members 1 and 2's shares — not 50 €.
+- **A transaction whose only concerned party is Others is allowed.** It is a record that
+  moves no balance and no statistic (e.g. "advanced 40 € to the neighbour").
+- **Others can also be the payer, or either end of a transfer, as stored data** — the API
+  accepts it, and account deletion (anonymisation, planned) will produce it. The client
+  does not offer it as a choice: picking Others as payer, or as the recipient of a
+  transfer, has no use when recording by hand. A transaction already stored that way keeps
+  it when edited (see UX / UI considerations).
+- When Others is the payer, nothing it paid is owed to anyone in the group, so the
+  transaction moves no balance; its members' shares still count in statistics as what the
+  group consumed.
+
 ### Categories
 
 - A transaction can be tagged with a **category**, picked from a fixed, preset list —
@@ -115,7 +142,9 @@ concerns.
 - A group shows its transactions, most recent first (by date, then by recording order for
   same-day entries).
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
-  at it — their own share, so "what do I owe on this one" never needs mental math.
+  at it — their own share, so "what do I owe on this one" never needs mental math. That
+  figure is the transaction's effect on the viewer's balance, by the balance rule below:
+  a payer is not shown as owed Others' share.
 - Every entry shows its category's emoji next to its title — always present, since every
   transaction has a category (`Other` when none was chosen). It is not interactive in the
   list; changing it means opening the entry, as for any other field.
@@ -130,10 +159,12 @@ feature establishes, which that spec builds on.
   payer or a concerned member of. Positive means the group owes them; negative means they
   owe the group.
 - A balance is a straightforward sum, not a separate record: for an expense or a
-  transfer, the payer's balance goes up by the amount and each concerned member's goes
-  down by their share (the same person can be both, and the two net out); for an income
-  it is the reverse. Every transaction's own shares always sum to its amount, so a
-  group's balances always sum to zero.
+  transfer, the payer's balance goes up by the members' shares and each concerned
+  member's goes down by their share (the same person can be both, and the two net out);
+  for an income it is the reverse. Without Others the payer is credited the full amount.
+  **Others never enters a balance**: its share is not credited to the payer, and a
+  transaction Others paid credits no one and debits no one. Every member-to-member flow
+  has both ends inside the group, so a group's balances always sum to zero.
 - Every current member is shown, including at zero. A member who left the group but has
   an unsettled balance from transactions recorded while they were a member still counts
   toward the total — leaving does not erase what they owe or are owed.
@@ -163,7 +194,12 @@ feature establishes, which that spec builds on.
 - **A transfer with zero or more than one concerned member**, or **a transfer where the
   concerned member is the payer**: refused — a transfer to yourself is not meaningful.
 - **A payer or a concerned member who is not a member of the group**: refused. Both must
-  be resolved against the group's current membership at the time of the call.
+  be resolved against the group's current membership at the time of the call. Others is
+  never subject to this check — it is always available.
+- **Others appearing twice in a split**: refused, like any duplicate participant.
+- **Others as payer and as the transfer's recipient at once**: refused, like any transfer
+  to its own payer.
+- **A split whose only participant is Others**: accepted; it moves no balance.
 - **A member who has since left the group** still appears, by name, on transactions
   recorded while they were a member — the record does not rewrite history. They cannot be
   selected as payer or participant on a new or edited transaction. If they left with an
@@ -221,6 +257,18 @@ feature establishes, which that spec builds on.
       alone.
 - [ ] A transaction recorded before categories existed, or before `Other` became the
       default, reads as `Other` — never as a missing or blank category.
+- [ ] An expense or an income can include **Others**, offered as the last row of the
+      participant picker in every group, with a weight or a fixed amount like any member.
+- [ ] Others' share never reaches a balance: 60 € paid by me, 10 € each for me and two
+      members and 30 € for Others, leaves the group owing me exactly 20 €, and the group's
+      balances still sum to zero.
+- [ ] A transaction whose only concerned party is Others is accepted and moves no
+      balance.
+- [ ] The API accepts Others as payer and as either end of a transfer; such a transaction
+      moves no balance. The client offers neither choice, but editing a transaction
+      already stored that way keeps Others where it was.
+- [ ] A transaction lists Others by that name, wherever it appears (payer or
+      participant).
 
 ## Testing considerations
 
@@ -242,7 +290,13 @@ feature establishes, which that spec builds on.
   transactions gone) deserves a direct test, as it does for groups today.
 - **Balances sum to zero**: worth checking as a property across a generated set of
   transactions, not just a fixed example — it is the clearest signal the ledger is
-  internally consistent.
+  internally consistent. The generated set must include Others as participant and as
+  payer: it is exactly the case where "credit the payer the full amount" would break the
+  invariant.
+- **Every balance computation must exclude Others the same way** — the in-memory group
+  rule, the in-memory pairwise rule, and both SQL aggregates (per friend, per group). The
+  existing cross-check between the SQL aggregates and their in-memory oracles must run on
+  transactions involving Others.
 
 ## Data / API considerations
 
@@ -263,6 +317,12 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   their share of the amount (plus their weight, when the split is by shares).
 - Participants reference the user directly, not their membership row, so a transaction
   survives the participant later leaving the group.
+- **Others is the absence of a user**, not a user: a participant row or a payer with no
+  user stands for Others, everywhere — in the database, the request (`userId: null`,
+  `payerId: null`, `toUserId: null`) and the response (`user: null`, `payer: null`). There
+  is no "Others" account to keep out of friend lists, member lists or sign-in, and the
+  type system forces every reader of a participant to handle the case. At most one Others
+  row per transaction is guaranteed by the database.
 - Amounts are integer cents throughout the API and the database; no floating point.
 - The split-sum invariant (parts sum to the total) is enforced by the service in a
   transaction, not by a database constraint (a cross-row sum check isn't expressible as a
@@ -303,6 +363,14 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   The date uses a native picker (inline on iOS, a dialog on Android); on web, which has no
   native pickers, it stays a plain `YYYY-MM-DD` text field. See `docs/DESIGN.md` for the
   full layout.
+- **Others** is the last row of the participant picker, after every member, labelled
+  "Others" with a secondary line "People outside the group"; it behaves exactly like a
+  member row (weight or fixed amount, zero removes it). It is never pinned, and never
+  marked "Me". "Who paid" and a transfer's "To" do not offer it — unless the transaction
+  being edited already has Others there, in which case it is shown as the current value
+  and kept on save.
+- Wherever a transaction names someone — its row in a list, the form — Others reads
+  "Others", with a neutral placeholder wherever a member would show an avatar.
 - Tapping a transaction opens the same form pre-filled, in place of the Transactions tab's
   own content, with a destructive "Delete this transaction" action, confirmed. A suggested
   reimbursement from the Balances tab opens the same form the same way, switching to the

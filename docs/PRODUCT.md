@@ -51,7 +51,8 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   fixed preset list, each with an emoji shown next to the transaction in the list), who
   it's attributed to (defaulting to the recorder), and who it concerns. Splitting
   defaults to equal shares and can be changed to weighted shares or fixed amounts per
-  person. Any member can edit or delete any transaction. Works identically in the
+  person. A share can go to **Others** — people outside the group — which counts in no
+  balance and no statistic: only money between members does. Any member can edit or delete any transaction. Works identically in the
   implicit pair group; an archived group is read-only for transactions. See
   `docs/specs/transactions.md`.
 - **Balances** — a group shows where each member stands against it, and the viewer's own
