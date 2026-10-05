@@ -46,7 +46,8 @@ without managing another password**.
 - Web (`mobile:web`) sign-in. The sign-in screen renders on web but the action is
   disabled with a "coming soon" note; native iOS/Android is the target for this feature.
 - Any authentication method other than Google (email/password, Apple, magic links).
-- Account deletion, profile editing, linking multiple providers.
+- Profile editing, linking multiple providers. Account deletion is its own feature:
+  `docs/specs/account-deletion.md`.
 - Authorization rules for domain resources (groups/expenses) — there are no protected
   domain routes yet; this feature only ships the mechanism (`authenticate` guard) for
   later use.

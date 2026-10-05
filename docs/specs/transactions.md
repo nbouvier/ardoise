@@ -69,7 +69,7 @@ dinner, a neighbour the group advanced money to. **Others** stands for all of th
 - **A transaction whose only concerned party is Others is allowed.** It is a record that
   moves no balance and no statistic (e.g. "advanced 40 € to the neighbour").
 - **Others can also be the payer, or either end of a transfer, as stored data** — the API
-  accepts it, and account deletion (anonymisation, planned) will produce it. The client
+  accepts it, and account deletion produces it (`docs/specs/account-deletion.md`). The client
   does not offer it as a choice: picking Others as payer, or as the recipient of a
   transfer, has no use when recording by hand. A transaction already stored that way keeps
   it when edited (see UX / UI considerations).

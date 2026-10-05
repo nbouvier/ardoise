@@ -85,6 +85,13 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   friend's row on the friend list carries the same star, favoriting the implicit pair
   group behind it. Personal to the viewer, and independent of a group's archived state.
   See `docs/specs/favorites.md`.
+- **Account deletion** — a user deletes their account from the Account page, after a page
+  that spells out the loss and a final confirmation. Their profile, sign-in and friend
+  list go, and with them every group shared one-to-one with a friend. In every other group
+  their transactions stay, with their part turned into **Others**: their name disappears,
+  and what they were owed or owed in those groups disappears too. Groups they created pass
+  to the longest-standing member. A public web page describes it for Google Play and for
+  people without the app. See `docs/specs/account-deletion.md`.
 
 The product is not yet released; Android is the first target.
 
