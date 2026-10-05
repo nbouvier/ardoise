@@ -1,6 +1,6 @@
 import type { TransactionCategory } from './categories.js';
 import { TRANSACTION_CATEGORIES } from './categories.js';
-import type { Transaction } from './transactions.js';
+import { memberSharesCents, type Transaction } from './transactions.js';
 
 /**
  * What a breakdown measures — one of the two independent axes a group's
@@ -50,15 +50,18 @@ function amountOf(
   transaction: Transaction,
   { participantIds }: CategoryBreakdownOptions,
 ): number {
+  // What the members were *concerned by*, not what they paid — whoever paid,
+  // Others included. Others' own share is never counted: what concerns
+  // people outside the group is not the group's money
+  // (`docs/specs/group-statistics.md`).
   if (!participantIds) {
-    return transaction.amountCents;
+    return memberSharesCents(transaction);
   }
-  // What the selected members were *concerned by*, not what they paid:
-  // someone who paid for others without taking part contributes nothing to a
+  // Someone who paid for others without taking part contributes nothing to a
   // breakdown that excludes those others.
   const wanted = new Set(participantIds);
   return transaction.participants
-    .filter((participant) => wanted.has(participant.user.id))
+    .filter((participant) => participant.user !== null && wanted.has(participant.user.id))
     .reduce((sum, participant) => sum + participant.shareCents, 0);
 }
 

@@ -441,8 +441,8 @@ Shared error codes, beyond the ones `groups` already defines:
 | Status | Code                 | Meaning                                                        |
 | ------ | -------------------- | ---------------------------------------------------------------- |
 | `404`  | `transaction_not_found` | Unknown id, or it belongs to a different group than the URL's |
-| `400`  | `not_group_member`   | The payer, a concerned member, or a transfer's recipient isn't a current member of the group |
-| `400`  | `invalid_split`      | A fixed-amount split doesn't sum to the total, or a transfer targets the payer |
+| `400`  | `not_group_member`   | The payer, a concerned member, or a transfer's recipient isn't a current member of the group (never raised for Others) |
+| `400`  | `invalid_split`      | A fixed-amount split doesn't sum to the total, or a transfer targets the payer (Others to Others included) |
 
 `kind` is one of `expense` / `income` / `transfer`; `splitMode` is `shares` or `amount`.
 `category` is always one of a fixed preset list — never `null` — see "Categories" below.
@@ -474,6 +474,14 @@ transaction — there is no per-transaction ownership.
 
 `weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
 a single-participant amount split).
+
+**Others** — people outside the group (`docs/specs/transactions.md`) — is `null` wherever
+a person would be: `"payer": null`, or a participant `{ "user": null, … }`, at most one per
+transaction. It is not a user and has no profile to render; the client labels it
+"Others". Its share never reaches a balance: a payer is credited only the members'
+shares, and a transaction Others paid moves no balance at all — every balance route
+(`/groups/:groupId/transactions/balances`, a group's `viewerBalanceCents`, `/friends`'
+`balanceCents`) applies this same rule.
 
 **Categories** are a fixed, closed preset list (`@ardoise/shared`'s `categories.ts`) —
 `groceries`, `restaurant`, `leisure`, `housing`, `transport`, `travel`, `health`,
@@ -547,7 +555,11 @@ silently dropped rather than causing a `400`.
 ### `POST /groups/:groupId/transactions`
 
 Record a transaction. `payerId` and every concerned member must be current members of
-the group. Request, discriminated on `kind`:
+the group — or `null`, which is **Others** and is accepted anywhere a person is: as
+`payerId`, as a split participant's `userId` (at most once), and as either end of a
+transfer (`payerId` or `toUserId`, not both). A split whose only participant is Others is
+valid. `userId` is required on every participant: omitting it is `400 invalid_request`,
+never read as Others. Request, discriminated on `kind`:
 
 ```json
 {

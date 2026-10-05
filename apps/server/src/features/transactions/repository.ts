@@ -1,4 +1,4 @@
-import { and, desc, eq, exists, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
@@ -19,12 +19,14 @@ export interface TransactionFields {
   occurredOn: string;
   comment: string | null;
   category: string;
-  payerId: string;
+  /** `null` is Others — see `docs/specs/transactions.md`. */
+  payerId: string | null;
   splitMode: string;
 }
 
 export interface ParticipantInput {
-  userId: string;
+  /** `null` is Others. */
+  userId: string | null;
   shareCents: number;
   weight: number | null;
 }
@@ -229,6 +231,11 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       // Two passes rather than one union: each is a single indexed lookup
       // (`transactions_payer_id_idx`, `transaction_participants_user_id_idx`)
       // and merging two small maps is cheaper to read than a subquery.
+      //
+      // Others (a `NULL` payer or participant) is never a counterparty: what
+      // concerns people outside the group is settled outside the app. The
+      // `<>` comparisons below would already drop a `NULL`, but by accident
+      // of SQL's three-valued logic — the explicit `is not null` says it.
       const signedShare = sql`case when ${transactions.kind} = 'income'
         then -${transactionParticipants.shareCents}
         else ${transactionParticipants.shareCents} end`;
@@ -247,6 +254,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
         .where(
           and(
             eq(transactions.payerId, userId),
+            isNotNull(transactionParticipants.userId),
             // Paying for oneself is not a debt to oneself.
             ne(transactionParticipants.userId, userId),
           ),
@@ -266,6 +274,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
         )
         .where(
           and(
+            isNotNull(transactions.payerId),
             ne(transactions.payerId, userId),
             eq(transactionParticipants.userId, userId),
           ),
@@ -273,7 +282,11 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
         .groupBy(transactions.payerId);
 
       const balances = new Map<string, number>();
-      const add = (counterpartyId: string, deltaCents: number) => {
+      const add = (counterpartyId: string | null, deltaCents: number) => {
+        // Unreachable given the filters above; narrows the column type.
+        if (counterpartyId === null) {
+          return;
+        }
         balances.set(counterpartyId, (balances.get(counterpartyId) ?? 0) + deltaCents);
       };
 
@@ -293,24 +306,36 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       }
       const scope = [...groupIds];
 
-      // Credited: what `userId` paid in each group (reversed for an income).
-      const signedAmount = sql`case when ${transactions.kind} = 'income'
-        then -${transactions.amountCents} else ${transactions.amountCents} end`;
+      const signedShare = sql`case when ${transactions.kind} = 'income'
+        then -${transactionParticipants.shareCents} else ${transactionParticipants.shareCents} end`;
+
+      // Credited: what `userId` paid for members in each group (reversed for
+      // an income) — the members' shares, not the amount: Others' share is
+      // settled outside the group and owed to no one in it.
       const paid = await db
         .select({
           groupId: transactions.groupId,
-          deltaCents: sql<number>`sum(${signedAmount})::int`,
+          deltaCents: sql<number>`sum(${signedShare})::int`,
         })
         .from(transactions)
-        .where(and(eq(transactions.payerId, userId), inArray(transactions.groupId, scope)))
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            eq(transactions.payerId, userId),
+            isNotNull(transactionParticipants.userId),
+            inArray(transactions.groupId, scope),
+          ),
+        )
         .groupBy(transactions.groupId);
 
       // Debited: `userId`'s own share as a concerned participant, in each
       // group. Paying for oneself is not omitted here the way the per-friend
       // aggregate omits it — it is the same transaction's payer credit
       // netting against this debit, exactly as `computeBalances` does it.
-      const signedShare = sql`case when ${transactions.kind} = 'income'
-        then -${transactionParticipants.shareCents} else ${transactionParticipants.shareCents} end`;
+      // A transaction Others paid debits no one: no member is owed for it.
       const owed = await db
         .select({
           groupId: transactions.groupId,
@@ -322,7 +347,11 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
           eq(transactionParticipants.transactionId, transactions.id),
         )
         .where(
-          and(eq(transactionParticipants.userId, userId), inArray(transactions.groupId, scope)),
+          and(
+            eq(transactionParticipants.userId, userId),
+            isNotNull(transactions.payerId),
+            inArray(transactions.groupId, scope),
+          ),
         )
         .groupBy(transactions.groupId);
 

@@ -12,12 +12,20 @@ function transaction(overrides: {
   kind?: TransactionKind;
   category?: TransactionCategory;
   amountCents: number;
+  /** Keyed by user id; the key `others` is Others' share. */
   shares?: Record<string, number>;
+  /** Defaults to Alice; `null` is Others. */
+  payer?: Transaction['payer'];
 }): Transaction {
-  const { kind = 'expense', category = 'other', amountCents, shares } = overrides;
+  const { kind = 'expense', category = 'other', amountCents, shares, payer = alice } = overrides;
   const participants = Object.entries(shares ?? { alice: amountCents }).map(
     ([userId, shareCents]) => ({
-      user: userId === 'bob' ? bob : { ...alice, id: userId, name: userId },
+      user:
+        userId === 'others'
+          ? null
+          : userId === 'bob'
+            ? bob
+            : { ...alice, id: userId, name: userId },
       shareCents,
       weight: null,
     }),
@@ -32,7 +40,7 @@ function transaction(overrides: {
     occurredOn: '2026-01-01',
     comment: null,
     category,
-    payer: alice,
+    payer,
     splitMode: 'amount',
     participants,
     createdBy: alice.id,
@@ -110,6 +118,54 @@ describe('categoryBreakdown', () => {
 
   it('is empty for no transactions at all', () => {
     expect(categoryBreakdown([], groupSpending)).toEqual({ totalCents: 0, slices: [] });
+  });
+
+  describe('Others (people outside the group)', () => {
+    it('never counts Others’ share, even with everyone selected', () => {
+      // 60 € with 30 € for Others: the group itself consumed 30 €, not 60 €.
+      const result = categoryBreakdown(
+        [
+          transaction({
+            category: 'restaurant',
+            amountCents: 6000,
+            shares: { alice: 1000, bob: 2000, others: 3000 },
+          }),
+        ],
+        groupSpending,
+      );
+
+      expect(result.totalCents).toBe(3000);
+      expect(result.slices).toEqual([
+        { category: 'restaurant', amountCents: 3000, percent: 100 },
+      ]);
+    });
+
+    it('counts the members’ shares of a transaction Others paid', () => {
+      const result = categoryBreakdown(
+        [transaction({ amountCents: 1500, payer: null, shares: { alice: 1000, others: 500 } })],
+        groupSpending,
+      );
+
+      expect(result.totalCents).toBe(1000);
+    });
+
+    it('is empty for a transaction only Others takes part in', () => {
+      const result = categoryBreakdown(
+        [transaction({ amountCents: 4000, shares: { others: 4000 } })],
+        groupSpending,
+      );
+
+      expect(result).toEqual({ totalCents: 0, slices: [] });
+    });
+
+    it('leaves Others out of a chosen subset', () => {
+      const result = categoryBreakdown(
+        [transaction({ amountCents: 3000, shares: { alice: 1000, others: 2000 } })],
+        { type: 'spending', participantIds: ['alice', 'bob'] },
+      );
+
+      expect(result.totalCents).toBe(1000);
+    });
   });
 
   describe('a chosen subset of participants', () => {

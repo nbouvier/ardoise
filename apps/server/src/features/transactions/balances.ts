@@ -20,11 +20,16 @@ export function groupParticipantsByTransaction(
  * Net balance per user across a group's transactions. Positive: the group
  * owes them. Negative: they owe the group.
  *
- * An expense or a transfer credits the payer by the amount and debits each
- * participant by their share; an income is the reverse. The payer and a
- * participant can be the same person, and the two contributions simply add.
- * Every transaction's shares sum to its amount by construction, so the
- * result always sums to zero — see `docs/specs/transactions.md`.
+ * An expense or a transfer credits the payer by the members' shares and
+ * debits each member by their own share; an income is the reverse. The payer
+ * and a participant can be the same person, and the two contributions simply
+ * add.
+ *
+ * Only money between members counts (`docs/specs/transactions.md`): Others
+ * (a `null` participant) is not credited to the payer — without Others that
+ * is the full amount — and a transaction Others paid moves nothing at all.
+ * Every counted flow has both ends inside the group, so the result always
+ * sums to zero.
  */
 export function computeBalances(
   transactions: readonly TransactionRow[],
@@ -36,10 +41,16 @@ export function computeBalances(
   };
 
   for (const transaction of transactions) {
+    const payerId = transaction.payerId;
+    if (payerId === null) {
+      continue;
+    }
     const sign = signOf(transaction);
-    add(transaction.payerId, sign * transaction.amountCents);
     for (const participant of participantsByTransactionId.get(transaction.id) ?? []) {
-      add(participant.userId, -sign * participant.shareCents);
+      if (participant.userId !== null) {
+        add(payerId, sign * participant.shareCents);
+        add(participant.userId, -sign * participant.shareCents);
+      }
     }
   }
 
@@ -62,6 +73,9 @@ function signOf(transaction: TransactionRow): 1 | -1 {
  * transfer needs no special case — reimbursing someone is simply a transaction
  * where they are the single participant, so it cancels the debt by its amount.
  *
+ * Others (a `null` payer or participant) is never "that person": what it
+ * paid is owed to no one, and its share is owed by no one.
+ *
  * A transaction only ever involves people who shared its group, so the caller
  * does not have to filter by group: doing so on *current* membership would
  * wrongly drop what someone who has since left still owes.
@@ -82,13 +96,17 @@ export function computePairwiseBalances(
   };
 
   for (const transaction of transactions) {
+    const payerId = transaction.payerId;
+    if (payerId === null) {
+      continue;
+    }
     const sign = signOf(transaction);
     const participants = participantsByTransactionId.get(transaction.id) ?? [];
 
-    if (transaction.payerId === userId) {
+    if (payerId === userId) {
       for (const participant of participants) {
         // Paying for oneself is not a debt to oneself; it nets out.
-        if (participant.userId !== userId) {
+        if (participant.userId !== null && participant.userId !== userId) {
           add(participant.userId, sign * participant.shareCents);
         }
       }
@@ -97,7 +115,7 @@ export function computePairwiseBalances(
 
     for (const participant of participants) {
       if (participant.userId === userId) {
-        add(transaction.payerId, -sign * participant.shareCents);
+        add(payerId, -sign * participant.shareCents);
       }
     }
   }

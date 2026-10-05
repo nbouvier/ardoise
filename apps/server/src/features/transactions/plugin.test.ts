@@ -131,6 +131,13 @@ describe('transactions routes', () => {
     });
   };
 
+  /** The group as the caller sees it — carrying their own balance in it. */
+  async function getGroupOf(user: TestUser, groupId: string) {
+    const response = await app.inject({ method: 'GET', url: `/groups/${groupId}`, headers: user.headers });
+    expect(response.statusCode).toBe(200);
+    return response.json().group as { viewerBalanceCents: number };
+  }
+
   const getTx = (user: TestUser, groupId: string, txId: string) =>
     app.inject({
       method: 'GET',
@@ -167,7 +174,7 @@ describe('transactions routes', () => {
       headers: user.headers,
     });
 
-  function expense(payerId: string, participantIds: string[], amount = 900) {
+  function expense(payerId: string | null, participantIds: string[], amount = 900) {
     return {
       kind: 'expense',
       title: 'Groceries',
@@ -765,6 +772,291 @@ describe('transactions routes', () => {
       expect((await getBalances(alan, group.id)).statusCode).toBe(404);
     });
   });
+
+  describe('Others (people outside the group)', () => {
+    const balancesOf = async (user: TestUser, groupId: string) =>
+      new Map<string, number>(
+        (await getBalances(user, groupId))
+          .json()
+          .balances.map((b: { userId: string; amountCents: number }) => [b.userId, b.amountCents]),
+      );
+
+    async function trio() {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const group = await createdGroup(ada, 'Trip', [grace.userId, alan.userId]);
+      return { ada, grace, alan, group };
+    }
+
+    it('takes a share without it ever reaching a balance', async () => {
+      const { ada, grace, alan, group } = await trio();
+
+      // The spec's example: 60 € paid by Ada, 10 € each for her, Grace and
+      // Alan, 30 € for Others — the group owes Ada 20 €, not 50 €.
+      const tx = await createdTx(ada, group.id, {
+        ...expense(ada.userId, [], 6000),
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: ada.userId, amount: 1000 },
+            { userId: grace.userId, amount: 1000 },
+            { userId: alan.userId, amount: 1000 },
+            { userId: null, amount: 3000 },
+          ],
+        },
+      });
+
+      const others = tx.participants.find((p: { user: unknown }) => p.user === null);
+      expect(others).toEqual({ user: null, shareCents: 3000, weight: null });
+
+      const balances = await balancesOf(ada, group.id);
+      expect(balances).toEqual(
+        new Map([
+          [ada.userId, 2000],
+          [grace.userId, -1000],
+          [alan.userId, -1000],
+        ]),
+      );
+      // The group's own figure, aggregated separately, says the same.
+      expect((await getGroupOf(ada, group.id)).viewerBalanceCents).toBe(2000);
+    });
+
+    it('takes a weight in a shares split, like any member', async () => {
+      const { ada, grace, group } = await trio();
+
+      const tx = await createdTx(ada, group.id, {
+        ...expense(ada.userId, [], 900),
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: grace.userId, weight: 1 },
+            { userId: null, weight: 2 },
+          ],
+        },
+      });
+
+      const shares = new Map(
+        tx.participants.map((p: { user: { id: string } | null; shareCents: number }) => [
+          p.user?.id ?? null,
+          p.shareCents,
+        ]),
+      );
+      expect(shares).toEqual(
+        new Map([
+          [grace.userId, 300],
+          [null, 600],
+        ]),
+      );
+      expect((await balancesOf(ada, group.id)).get(ada.userId)).toBe(300);
+    });
+
+    it('accepts a split whose only participant is Others, moving no balance', async () => {
+      const { ada, group } = await trio();
+
+      const response = await createTx(ada, group.id, {
+        ...expense(ada.userId, [], 4000),
+        split: { mode: 'shares', participants: [{ userId: null, weight: 1 }] },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect([...(await balancesOf(ada, group.id)).values()]).toEqual([0, 0, 0]);
+    });
+
+    it('accepts Others as the payer, moving no balance', async () => {
+      const { ada, grace, group } = await trio();
+
+      const tx = await createdTx(ada, group.id, expense(null, [ada.userId, grace.userId], 800));
+
+      expect(tx.payer).toBeNull();
+      expect([...(await balancesOf(ada, group.id)).values()]).toEqual([0, 0, 0]);
+      // Still Ada's, as one of the people it concerns.
+      const recent = (await listRecent(ada)).json().transactions as {
+        transaction: { id: string; payer: unknown };
+      }[];
+      expect(recent.map((entry) => [entry.transaction.id, entry.transaction.payer])).toEqual([
+        [tx.id, null],
+      ]);
+    });
+
+    it('accepts Others at either end of a transfer, moving no balance', async () => {
+      const { ada, grace, group } = await trio();
+      const transfer = { kind: 'transfer', title: 'Paid back', amount: 500, occurredOn: '2026-09-11' };
+
+      const toOthers = await createdTx(ada, group.id, {
+        ...transfer,
+        payerId: ada.userId,
+        toUserId: null,
+      });
+      const fromOthers = await createdTx(ada, group.id, {
+        ...transfer,
+        payerId: null,
+        toUserId: grace.userId,
+      });
+
+      expect(toOthers.participants).toEqual([{ user: null, shareCents: 500, weight: null }]);
+      expect(fromOthers.payer).toBeNull();
+      expect([...(await balancesOf(ada, group.id)).values()]).toEqual([0, 0, 0]);
+    });
+
+    it('refuses a transfer from Others to Others', async () => {
+      const { ada, group } = await trio();
+
+      const response = await createTx(ada, group.id, {
+        kind: 'transfer',
+        title: 'Nothing',
+        amount: 500,
+        occurredOn: '2026-09-11',
+        payerId: null,
+        toUserId: null,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'invalid_split' });
+    });
+
+    it('refuses Others twice in one split', async () => {
+      const { ada, group } = await trio();
+
+      const response = await createTx(ada, group.id, {
+        ...expense(ada.userId, [], 900),
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: null, weight: 1 },
+            { userId: null, weight: 2 },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'invalid_request' });
+    });
+
+    it('is guaranteed at most one row per transaction by the database itself', async () => {
+      const { ada, group } = await trio();
+      const tx = await createdTx(ada, group.id, {
+        ...expense(ada.userId, [], 900),
+        split: { mode: 'shares', participants: [{ userId: null, weight: 1 }] },
+      });
+
+      await expect(
+        app.db
+          .insert(transactionParticipants)
+          .values({ transactionId: tx.id, userId: null, shareCents: 0, weight: null }),
+      ).rejects.toThrow();
+    });
+
+    it('is available in the implicit pair group too', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const pair = await pairGroupOf(ada, grace.userId);
+
+      const response = await createTx(ada, pair.id, {
+        ...expense(ada.userId, [], 900),
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: grace.userId, weight: 1 },
+            { userId: null, weight: 2 },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+    });
+
+    it('stays where it was when the transaction is edited', async () => {
+      const { ada, grace, group } = await trio();
+      const tx = await createdTx(ada, group.id, expense(null, [grace.userId], 800));
+
+      const edited = await updateTx(ada, group.id, tx.id, {
+        ...expense(null, [], 1000),
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: grace.userId, weight: 1 },
+            { userId: null, weight: 1 },
+          ],
+        },
+      });
+      expect(edited.statusCode).toBe(200);
+
+      const fetched = (await getTx(ada, group.id, tx.id)).json().transaction;
+      expect(fetched.payer).toBeNull();
+      expect(
+        fetched.participants.map((p: { user: { id: string } | null }) => p.user?.id ?? null).sort(),
+      ).toEqual([grace.userId, null].sort());
+    });
+
+    it('never makes a friend owe for Others, and agrees with the group figure', async () => {
+      // A mixed ledger in one group: the friend list's per-friend aggregate,
+      // the group list's per-group aggregate and the group's own balances are
+      // three separate computations; with Others on every side, they must
+      // still tell the same story.
+      const { ada, grace, alan, group } = await trio();
+      await createdTx(ada, group.id, {
+        ...expense(ada.userId, [], 6000),
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: ada.userId, amount: 1000 },
+            { userId: grace.userId, amount: 1000 },
+            { userId: alan.userId, amount: 1000 },
+            { userId: null, amount: 3000 },
+          ],
+        },
+      });
+      await createdTx(grace, group.id, {
+        ...expense(grace.userId, [], 999),
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: ada.userId, weight: 1 },
+            { userId: null, weight: 2 },
+          ],
+        },
+      });
+      await createdTx(alan, group.id, expense(null, [ada.userId, alan.userId], 700));
+      await createdTx(ada, group.id, {
+        kind: 'income',
+        title: 'Refund',
+        amount: 500,
+        occurredOn: '2026-09-12',
+        payerId: ada.userId,
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: alan.userId, amount: 200 },
+            { userId: null, amount: 300 },
+          ],
+        },
+      });
+
+      const balances = await balancesOf(ada, group.id);
+      expect([...balances.values()].reduce((sum, value) => sum + value, 0)).toBe(0);
+      for (const user of [ada, grace, alan]) {
+        expect((await getGroupOf(user, group.id)).viewerBalanceCents).toBe(balances.get(user.userId));
+      }
+
+      // Ada: +2000 (60 € example) − 333 (Grace's 9.99 €, a third hers)
+      // − 200 (the refund she holds for Alan) = 1467.
+      expect(balances.get(ada.userId)).toBe(1467);
+      const friends = (
+        await app.inject({ method: 'GET', url: '/friends', headers: ada.headers })
+      ).json().friends as { id: string; balanceCents: number }[];
+      expect(new Map(friends.map((friend) => [friend.id, friend.balanceCents]))).toEqual(
+        new Map([
+          [grace.userId, 1000 - 333],
+          [alan.userId, 1000 - 200],
+        ]),
+      );
+    });
+  });
+
   describe('GET /me/transactions', () => {
     it('lists what involves the caller across every group they belong to', async () => {
       const ada = await signIn('ada');

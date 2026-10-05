@@ -3,6 +3,7 @@ import {
   categoryDefinition,
   type CreateTransactionRequest,
   type GroupDetail,
+  type PartyId,
   type SplitInput,
   type Transaction,
   type TransactionCategory,
@@ -26,7 +27,7 @@ import { errorFields, logger } from '@/lib/logger';
 import { AmountInput } from './amount-input';
 import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
-import { MemberDropdownField } from './member-dropdown-field';
+import { MemberDropdownField, type PartyChoice } from './member-dropdown-field';
 import { SplitEditor } from './split-editor';
 import { splitFrom } from './transaction-request';
 
@@ -103,17 +104,29 @@ export function TransactionFormScreen({
   const [category, setCategory] = useState<TransactionCategory>(
     initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
   );
-  const [payerId, setPayerId] = useState(initial?.payer.id ?? start?.payerId ?? viewerId);
+  // `null` is Others: only ever the stored payer of a transaction being
+  // edited, and a choice only there (`docs/specs/transactions.md`). Written
+  // out rather than chained with `??`, which would turn Others into the viewer.
+  const [payerId, setPayerId] = useState<PartyId>(
+    initial ? (initial.payer?.id ?? null) : (start?.payerId ?? viewerId),
+  );
+  // Others is offered back in "Who paid" / "To" only where this transaction
+  // was stored with it, so picking a member there can be undone.
+  const storedOthersPayer = initial !== undefined && initial.payer === null;
+  const storedOthersRecipient =
+    initial?.kind === 'transfer' && initial.participants[0]?.user === null;
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
       ? splitFrom(initial)
       : defaultSplit(members.map((m) => m.id)),
   );
-  const [toUserId, setToUserId] = useState<string | null>(
-    initial?.kind === 'transfer'
-      ? (initial.participants[0]?.user.id ?? null)
-      : (start?.toUserId ?? null),
-  );
+  const [recipient, setRecipient] = useState<PartyChoice>(() => {
+    if (initial?.kind === 'transfer') {
+      const stored = initial.participants[0];
+      return stored ? { status: 'picked', id: stored.user?.id ?? null } : { status: 'unset' };
+    }
+    return start?.toUserId ? { status: 'picked', id: start.toUserId } : { status: 'unset' };
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
@@ -124,7 +137,7 @@ export function TransactionFormScreen({
   const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(occurredOn) && !Number.isNaN(Date.parse(occurredOn));
   const splitValid =
     kind === 'transfer'
-      ? toUserId !== null && toUserId !== payerId
+      ? recipient.status === 'picked' && recipient.id !== payerId
       : split.participants.length > 0 &&
         (split.mode === 'shares' ||
           split.participants.reduce((sum, p) => sum + p.amount, 0) === amountCents);
@@ -140,7 +153,12 @@ export function TransactionFormScreen({
       payerId,
     };
     if (kind === 'transfer') {
-      return { kind: 'transfer', ...common, toUserId: toUserId! };
+      // Unreachable: `canSubmit` needs a recipient. Failing loudly beats
+      // sending Others for a recipient nobody picked.
+      if (recipient.status !== 'picked') {
+        throw new Error('A transfer needs a recipient');
+      }
+      return { kind: 'transfer', ...common, toUserId: recipient.id };
     }
     return { kind, ...common, split };
   }
@@ -248,9 +266,10 @@ export function TransactionFormScreen({
           <MemberDropdownField
             accessibilityLabel={kind === 'income' ? 'Who received it' : 'Who paid'}
             members={members}
-            selectedId={payerId}
+            selected={{ status: 'picked', id: payerId }}
             onSelect={setPayerId}
             viewerId={viewerId}
+            offerOthers={storedOthersPayer}
           />
         </View>
 
@@ -280,10 +299,11 @@ export function TransactionFormScreen({
             <MemberDropdownField
               accessibilityLabel="To"
               members={members}
-              selectedId={toUserId}
-              onSelect={setToUserId}
+              selected={recipient}
+              onSelect={(id) => setRecipient({ status: 'picked', id })}
               viewerId={viewerId}
               excludeId={payerId}
+              offerOthers={storedOthersRecipient}
             />
           </View>
         ) : (

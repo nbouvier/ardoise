@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTransactionRequestSchema, splitByShares, splitInputSchema, splitSumsTo } from './transactions.js';
+import {
+  balanceEffectCents,
+  createTransactionRequestSchema,
+  memberSharesCents,
+  splitByShares,
+  splitInputSchema,
+  splitSumsTo,
+  type Transaction,
+} from './transactions.js';
 
 describe('splitByShares', () => {
   it('splits evenly when the total divides exactly', () => {
@@ -44,6 +52,21 @@ describe('splitByShares', () => {
 
     expect(result.find((r) => r.userId === 'alpha')?.shareCents).toBe(1);
     expect(result.filter((r) => r.shareCents === 0)).toHaveLength(4);
+  });
+
+  it('breaks a remainder tie with Others after every member', () => {
+    // 0.02 / 3: two of the three get a cent; Others, ordered last, does not.
+    const result = splitByShares(2, [
+      { userId: null, weight: 1 },
+      { userId: 'b', weight: 1 },
+      { userId: 'a', weight: 1 },
+    ]);
+
+    expect(result).toEqual([
+      { userId: null, shareCents: 0 },
+      { userId: 'b', shareCents: 1 },
+      { userId: 'a', shareCents: 1 },
+    ]);
   });
 
   it('keeps the caller’s participant order in the result', () => {
@@ -123,6 +146,38 @@ describe('splitInputSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts Others as a participant, alongside members or alone', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    for (const participants of [
+      [
+        { userId: id, weight: 1 },
+        { userId: null, weight: 3 },
+      ],
+      [{ userId: null, weight: 1 }],
+    ]) {
+      expect(splitInputSchema.safeParse({ mode: 'shares', participants }).success).toBe(true);
+    }
+  });
+
+  it('rejects Others twice', () => {
+    const result = splitInputSchema.safeParse({
+      mode: 'amount',
+      participants: [
+        { userId: null, amount: 100 },
+        { userId: null, amount: 200 },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a participant with no userId at all, rather than reading it as Others', () => {
+    const result = splitInputSchema.safeParse({
+      mode: 'shares',
+      participants: [{ weight: 1 }],
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('createTransactionRequestSchema', () => {
@@ -151,6 +206,22 @@ describe('createTransactionRequestSchema', () => {
       toUserId: otherId,
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts Others as the payer, or at either end of a transfer', () => {
+    const base = { title: 'Something', amount: 2000, occurredOn: '2026-09-11' };
+    for (const request of [
+      {
+        ...base,
+        kind: 'expense',
+        payerId: null,
+        split: { mode: 'shares', participants: [{ userId: otherId, weight: 1 }] },
+      },
+      { ...base, kind: 'transfer', payerId: null, toUserId: otherId },
+      { ...base, kind: 'transfer', payerId, toUserId: null },
+    ]) {
+      expect(createTransactionRequestSchema.safeParse(request).success).toBe(true);
+    }
   });
 
   it('rejects a transfer missing toUserId', () => {
@@ -186,5 +257,76 @@ describe('createTransactionRequestSchema', () => {
       split: { mode: 'shares', participants: [{ userId: payerId, weight: 1 }] },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('balanceEffectCents', () => {
+  const me = { id: 'me', name: 'Me', picture: null };
+  const m1 = { id: 'm1', name: 'Member 1', picture: null };
+  const m2 = { id: 'm2', name: 'Member 2', picture: null };
+
+  function effectFixture(
+    kind: Transaction['kind'],
+    payer: Transaction['payer'],
+    shares: [Transaction['participants'][number]['user'], number][],
+  ): Pick<Transaction, 'kind' | 'payer' | 'participants'> {
+    return {
+      kind,
+      payer,
+      participants: shares.map(([user, shareCents]) => ({ user, shareCents, weight: null })),
+    };
+  }
+
+  it('credits the payer the members’ shares only, never Others’', () => {
+    // The spec's example: 60 € paid by me, 10 € each for me and two members,
+    // 30 € for Others — the group owes me 20 €, not 50 €.
+    const transaction = effectFixture('expense', me, [
+      [me, 1000],
+      [m1, 1000],
+      [m2, 1000],
+      [null, 3000],
+    ]);
+
+    expect(memberSharesCents(transaction)).toBe(3000);
+    expect(balanceEffectCents(transaction, 'me')).toBe(2000);
+    expect(balanceEffectCents(transaction, 'm1')).toBe(-1000);
+    expect(balanceEffectCents(transaction, 'm2')).toBe(-1000);
+  });
+
+  it('moves nothing when Others is the only participant', () => {
+    const transaction = effectFixture('expense', me, [[null, 4000]]);
+    expect(balanceEffectCents(transaction, 'me')).toBe(0);
+  });
+
+  it('moves nothing when Others paid', () => {
+    const transaction = effectFixture('expense', null, [
+      [me, 1000],
+      [m1, 500],
+    ]);
+    expect(balanceEffectCents(transaction, 'me')).toBe(0);
+    expect(balanceEffectCents(transaction, 'm1')).toBe(0);
+  });
+
+  it('reverses both signs for an income', () => {
+    const transaction = effectFixture('income', me, [
+      [m1, 1000],
+      [null, 500],
+    ]);
+    expect(balanceEffectCents(transaction, 'me')).toBe(-1000);
+    expect(balanceEffectCents(transaction, 'm1')).toBe(1000);
+  });
+
+  it('sums to zero over the members, whatever Others takes', () => {
+    const transaction = effectFixture('expense', m1, [
+      [me, 333],
+      [m1, 334],
+      [m2, 333],
+      [null, 1000],
+    ]);
+    const total = ['me', 'm1', 'm2'].reduce(
+      (sum, id) => sum + balanceEffectCents(transaction, id),
+      0,
+    );
+    expect(total).toBe(0);
   });
 });

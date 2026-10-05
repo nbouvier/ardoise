@@ -47,6 +47,57 @@ describe('TransactionRow', () => {
     expect(screen.getByText('—')).toBeTruthy();
   });
 
+  describe('Others', () => {
+    const me = ada;
+    const member1 = grace;
+    const member2 = { id: 'alan', name: 'Alan Turing', picture: null };
+
+    // The spec's example: 60 € paid by me, 10 € each for me and two members,
+    // 30 € for Others.
+    const withOthers: Transaction = {
+      ...expense,
+      amountCents: 6000,
+      payer: me,
+      splitMode: 'amount',
+      participants: [
+        { user: me, shareCents: 1000, weight: null },
+        { user: member1, shareCents: 1000, weight: null },
+        { user: member2, shareCents: 1000, weight: null },
+        { user: null, shareCents: 3000, weight: null },
+      ],
+    };
+
+    it('credits the payer the members’ shares only, never Others’', async () => {
+      await render(<TransactionRow transaction={withOthers} viewerId={me.id} />);
+
+      expect(screen.getByText('+20.00')).toBeTruthy();
+    });
+
+    it('debits a member their own share', async () => {
+      await render(<TransactionRow transaction={withOthers} viewerId={member1.id} />);
+
+      expect(screen.getByText('−10.00')).toBeTruthy();
+    });
+
+    it('names Others as the payer and moves nothing for anyone', async () => {
+      const paidByOthers: Transaction = { ...withOthers, payer: null };
+      await render(<TransactionRow transaction={paidByOthers} viewerId={me.id} />);
+
+      expect(screen.getByText(/Others$/)).toBeTruthy();
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+
+    it('shows a dash when Others is the only participant', async () => {
+      const onlyOthers: Transaction = {
+        ...withOthers,
+        participants: [{ user: null, shareCents: 6000, weight: null }],
+      };
+      await render(<TransactionRow transaction={onlyOthers} viewerId={me.id} />);
+
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+  });
+
   it('calls onPress with the transaction', async () => {
     const onPress = jest.fn();
     await render(<TransactionRow transaction={expense} viewerId={ada.id} onPress={onPress} />);

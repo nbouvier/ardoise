@@ -42,7 +42,8 @@ function transaction({
   kind?: TransactionKind;
   category?: TransactionCategory;
   amountCents: number;
-  shares?: { ada?: number; grace?: number };
+  /** `others` is Others' share — the stand-in for people outside the group. */
+  shares?: { ada?: number; grace?: number; others?: number };
   occurredOn?: string;
 }): Transaction {
   sequence += 1;
@@ -64,6 +65,9 @@ function transaction({
       ...(split.grace === undefined
         ? []
         : [{ user: grace, shareCents: split.grace, weight: null }]),
+      ...(split.others === undefined
+        ? []
+        : [{ user: null, shareCents: split.others, weight: null }]),
     ],
     createdBy: ada.id,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -237,6 +241,40 @@ describe('StatisticsScreen', () => {
     expect(screen.getByRole('button', { name: 'Participants: Ada' })).toBeTruthy();
   });
 
+  it('counts only the members’ shares of a transaction that includes Others', async () => {
+    // 60 € with 30 € for Others: the group consumed 30 €, with everybody selected.
+    await renderScreen([
+      transaction({
+        category: 'restaurant',
+        amountCents: 6000,
+        shares: { ada: 1000, grace: 2000, others: 3000 },
+      }),
+    ]);
+
+    expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+    expect(screen.getByRole('button', { name: 'Bar & Restaurant, 30.00, 100%' })).toBeTruthy();
+  });
+
+  it('shows nothing for a transaction only Others takes part in', async () => {
+    await renderScreen([transaction({ amountCents: 4000, shares: { others: 4000 } })]);
+
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
+  });
+
+  it('never lists Others among the participants', async () => {
+    await renderScreen([
+      transaction({ amountCents: 3000, shares: { ada: 1000, others: 2000 } }),
+    ]);
+    await screen.findByTestId('statistics-centre-amount');
+
+    await openMoreOptions();
+    await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.queryByRole('checkbox', { name: 'Others' })).toBeNull();
+    expect(screen.queryByText('Others')).toBeNull();
+  });
+
   it('marks the viewer’s own row “Me” in the participant checklist', async () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
     await screen.findByTestId('statistics-centre-amount');
@@ -312,7 +350,7 @@ describe('StatisticsScreen', () => {
   it('shows a placeholder ring alongside the explanation for an empty group', async () => {
     await renderScreen([]);
 
-    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
     expect(screen.getByTestId('donut-chart')).toBeTruthy();
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('0.00');
   });
@@ -350,7 +388,7 @@ describe('StatisticsScreen', () => {
     mockFetchTransactions.mockResolvedValue({ transactions: [], excludedSubgroupCount: 0 });
     await fireEvent.press(retry);
 
-    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
   });
 
   it('waits on the transactions rather than showing an empty chart', async () => {
@@ -360,7 +398,7 @@ describe('StatisticsScreen', () => {
     );
 
     expect(screen.getByTestId('statistics-loading')).toBeTruthy();
-    expect(screen.queryByText(/Nothing spent yet/)).toBeNull();
+    expect(screen.queryByText(/Nothing spent between members yet/)).toBeNull();
   });
 
   describe('sub-groups', () => {

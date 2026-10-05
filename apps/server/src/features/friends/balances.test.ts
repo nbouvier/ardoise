@@ -342,6 +342,37 @@ describe('friend balances', () => {
     expect(adaFriends.map((friend) => friend.id)).toEqual([grace.userId]);
   });
 
+  it('never counts what concerns Others', async () => {
+    const ada = await signIn('ada');
+    const grace = await signIn('grace');
+    await befriend(ada, grace);
+    const group = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+
+    // Ada pays 60 €: 20 € for Grace, 40 € for people outside the group.
+    await createdTx(ada, group.id, {
+      kind: 'expense',
+      title: 'Dinner',
+      amount: 6000,
+      occurredOn: '2026-09-11',
+      payerId: ada.userId,
+      split: {
+        mode: 'amount',
+        participants: [
+          { userId: grace.userId, amount: 2000 },
+          { userId: null, amount: 4000 },
+        ],
+      },
+    });
+    // And someone outside the group paid 10 € for both of them.
+    await createdTx(ada, group.id, {
+      ...equalExpense(ada, 1000, [ada.userId, grace.userId]),
+      payerId: null,
+    });
+
+    expect(await balanceOf(ada, grace.userId)).toBe(2000);
+    expect(await balanceOf(grace, ada.userId)).toBe(-2000);
+  });
+
   it('agrees with the readable rule it implements, across groups', async () => {
     // The SQL aggregate and `computePairwiseBalances` are two statements of
     // the same rule; this is what stops them drifting apart.
@@ -370,6 +401,35 @@ describe('friend balances', () => {
           { userId: alan.userId, weight: 1 },
         ],
       },
+    });
+    // Others on every side: a share of it, paying, and receiving a transfer.
+    await createdTx(grace, trip.id, {
+      kind: 'expense',
+      title: 'Dinner with friends of friends',
+      amount: 6000,
+      occurredOn: '2026-09-12',
+      payerId: grace.userId,
+      split: {
+        mode: 'amount',
+        participants: [
+          { userId: ada.userId, amount: 1000 },
+          { userId: grace.userId, amount: 1000 },
+          { userId: alan.userId, amount: 1000 },
+          { userId: null, amount: 3000 },
+        ],
+      },
+    });
+    await createdTx(ada, trip.id, {
+      ...equalExpense(ada, 900, [ada.userId, alan.userId]),
+      payerId: null,
+    });
+    await createdTx(alan, trip.id, {
+      kind: 'transfer',
+      title: 'Advance to the neighbour',
+      amount: 250,
+      occurredOn: '2026-09-12',
+      payerId: alan.userId,
+      toUserId: null,
     });
 
     const repository = createTransactionsRepository(app.db);

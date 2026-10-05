@@ -122,6 +122,71 @@ describe('computeBalances', () => {
 
     expect(balances.get('departed')).toBe(-300);
   });
+
+  describe('with Others (people outside the group)', () => {
+    it('credits the payer the members’ shares only, never Others’', () => {
+      // The spec's example: 60 € paid by Alice, 10 € each for her, Bob and
+      // Carole, 30 € for Others — the group owes Alice 20 €, not 50 €.
+      const tx = transaction({ id: 'tx-1', payerId: 'alice', amountCents: 6000 });
+      const participants = [
+        participant({ transactionId: 'tx-1', userId: 'alice', shareCents: 1000 }),
+        participant({ transactionId: 'tx-1', userId: 'bob', shareCents: 1000 }),
+        participant({ transactionId: 'tx-1', userId: 'carole', shareCents: 1000 }),
+        participant({ transactionId: 'tx-1', userId: null, shareCents: 3000 }),
+      ];
+
+      const balances = computeBalances([tx], byTx(participants));
+
+      expect(balances).toEqual(
+        new Map([
+          ['alice', 2000],
+          ['bob', -1000],
+          ['carole', -1000],
+        ]),
+      );
+    });
+
+    it('moves nothing when Others is the only participant', () => {
+      const tx = transaction({ id: 'tx-1', payerId: 'alice', amountCents: 4000 });
+      const participants = [participant({ transactionId: 'tx-1', userId: null, shareCents: 4000 })];
+
+      expect(computeBalances([tx], byTx(participants)).size).toBe(0);
+    });
+
+    it('moves nothing when Others paid, for an expense or a transfer', () => {
+      const rows = [
+        transaction({ id: 'tx-1', payerId: null, amountCents: 600 }),
+        transaction({ id: 'tx-2', kind: 'transfer', payerId: null, amountCents: 200 }),
+      ];
+      const participants = [
+        participant({ transactionId: 'tx-1', userId: 'alice', shareCents: 300 }),
+        participant({ transactionId: 'tx-1', userId: 'bob', shareCents: 300 }),
+        participant({ transactionId: 'tx-2', userId: 'alice', shareCents: 200 }),
+      ];
+
+      expect(computeBalances(rows, byTx(participants)).size).toBe(0);
+    });
+
+    it('moves nothing for a transfer to Others', () => {
+      const tx = transaction({ id: 'tx-1', kind: 'transfer', payerId: 'alice', amountCents: 500 });
+      const participants = [participant({ transactionId: 'tx-1', userId: null, shareCents: 500 })];
+
+      expect(computeBalances([tx], byTx(participants)).size).toBe(0);
+    });
+
+    it('reverses both sides for an income', () => {
+      const tx = transaction({ id: 'tx-1', kind: 'income', payerId: 'alice', amountCents: 900 });
+      const participants = [
+        participant({ transactionId: 'tx-1', userId: 'bob', shareCents: 400 }),
+        participant({ transactionId: 'tx-1', userId: null, shareCents: 500 }),
+      ];
+
+      const balances = computeBalances([tx], byTx(participants));
+
+      expect(balances.get('alice')).toBe(-400);
+      expect(balances.get('bob')).toBe(400);
+    });
+  });
 });
 
 describe('computePairwiseBalances', () => {
@@ -222,21 +287,44 @@ describe('computePairwiseBalances', () => {
     expect(fromAlice.get('departed')).toBe(300);
   });
 
+  it('never makes Others a counterparty, whichever side it is on', () => {
+    const rows = [
+      transaction({ id: 'tx-1', payerId: 'alice', amountCents: 6000 }),
+      transaction({ id: 'tx-2', payerId: null, amountCents: 800 }),
+    ];
+    const participants = [
+      participant({ transactionId: 'tx-1', userId: 'alice', shareCents: 1000 }),
+      participant({ transactionId: 'tx-1', userId: 'bob', shareCents: 2000 }),
+      participant({ transactionId: 'tx-1', userId: null, shareCents: 3000 }),
+      participant({ transactionId: 'tx-2', userId: 'alice', shareCents: 400 }),
+      participant({ transactionId: 'tx-2', userId: 'bob', shareCents: 400 }),
+    ];
+
+    const fromAlice = computePairwiseBalances('alice', rows, byTx(participants));
+    const fromBob = computePairwiseBalances('bob', rows, byTx(participants));
+
+    // Bob owes Alice his 20 €; Others' 30 € and what Others paid are no one's.
+    expect(fromAlice).toEqual(new Map([['bob', 2000]]));
+    expect(fromBob).toEqual(new Map([['alice', -2000]]));
+  });
+
   it('sums back to the group balance, for every member of a generated ledger', () => {
     // The load-bearing property: whatever the ledger, splitting a member's
     // group balance across their counterparties must lose nothing and invent
     // nothing. It is what keeps the per-person figure and the per-group one
-    // from ever drifting apart.
+    // from ever drifting apart. Others is in the ledger on both sides — the
+    // case where crediting a payer the full amount would break it.
     const members = ['alice', 'bob', 'carole', 'dave'];
+    const parties = [...members, null];
     const rows: TransactionRow[] = [];
     const participants: TransactionParticipantRow[] = [];
     let index = 0;
 
     for (const amountCents of [1, 7, 100, 999, 1234]) {
-      for (const payerId of members) {
-        // Every non-empty subset of the members, as the people it concerns.
-        for (let mask = 1; mask < 1 << members.length; mask += 1) {
-          const concerned = members.filter((_, bit) => (mask & (1 << bit)) !== 0);
+      for (const payerId of parties) {
+        // Every non-empty subset of the parties, as the ones it concerns.
+        for (let mask = 1; mask < 1 << parties.length; mask += 1) {
+          const concerned = parties.filter((_, bit) => (mask & (1 << bit)) !== 0);
           const id = `tx-${(index += 1)}`;
           const isTransfer = concerned.length === 1 && concerned[0] !== payerId;
 
@@ -274,10 +362,13 @@ describe('computePairwiseBalances', () => {
     const byTransaction = byTx(participants);
     const groupBalances = computeBalances(rows, byTransaction);
 
+    expect([...groupBalances.keys()].sort()).toEqual([...members].sort());
+    expect([...groupBalances.values()].reduce((sum, value) => sum + value, 0)).toBe(0);
     for (const member of members) {
       const pairwise = computePairwiseBalances(member, rows, byTransaction);
       const total = [...pairwise.values()].reduce((sum, value) => sum + value, 0);
 
+      expect([...pairwise.keys()].every((key) => key !== null)).toBe(true);
       expect(total).toBe(groupBalances.get(member));
     }
   });

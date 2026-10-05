@@ -34,6 +34,17 @@ export const transactionAmountSchema = z
 export const transactionTitleSchema = z.string().trim().min(1).max(80);
 export const transactionCommentSchema = z.string().trim().min(1).max(500);
 
+/**
+ * Who a transaction names — a payer, a participant, a transfer's recipient:
+ * a member's user id, or `null` for **Others**, the single anonymous stand-in
+ * for everyone outside the group. Others is the absence of a user, never an
+ * account, so it can never surface as a friend, a member or a sign-in. It is
+ * nullable rather than optional on purpose: a forgotten field is a validation
+ * error, never a silent Others. See `docs/specs/transactions.md`.
+ */
+export const partyIdSchema = z.uuid().nullable();
+export type PartyId = z.infer<typeof partyIdSchema>;
+
 /** How much a participant counts for, relative to the others, in a shares split. */
 export const shareWeightSchema = z.number().int().min(1).max(1000);
 
@@ -41,19 +52,22 @@ export const shareWeightSchema = z.number().int().min(1).max(1000);
 export const shareCentsSchema = z.number().int().min(0).max(MAX_TRANSACTION_AMOUNT_CENTS);
 
 export const sharesSplitParticipantSchema = z.object({
-  userId: z.uuid(),
+  userId: partyIdSchema,
   weight: shareWeightSchema,
 });
 export type SharesSplitParticipant = z.infer<typeof sharesSplitParticipantSchema>;
 
 export const amountSplitParticipantSchema = z.object({
-  userId: z.uuid(),
+  userId: partyIdSchema,
   amount: shareCentsSchema,
 });
 export type AmountSplitParticipant = z.infer<typeof amountSplitParticipantSchema>;
 
-/** No duplicate participant, in either split mode — each person appears once. */
-function hasUniqueUserIds(participants: readonly { userId: string }[]): boolean {
+/**
+ * No duplicate participant, in either split mode — each person appears once,
+ * and Others (`null`) at most once.
+ */
+function hasUniqueUserIds(participants: readonly { userId: PartyId }[]): boolean {
   return new Set(participants.map((p) => p.userId)).size === participants.length;
 }
 
@@ -85,7 +99,8 @@ const transactionCommonFields = {
    * transaction; see `transactionSchema.category` below.
    */
   category: transactionCategorySchema.optional(),
-  payerId: z.uuid(),
+  /** `null` is Others: accepted by the API, not offered by the client. */
+  payerId: partyIdSchema,
 };
 
 /**
@@ -108,8 +123,11 @@ export const createTransactionRequestSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('transfer'),
     ...transactionCommonFields,
-    /** The one person being reimbursed. Must differ from `payerId`. */
-    toUserId: z.uuid(),
+    /**
+     * The one person being reimbursed. Must differ from `payerId`. `null` is
+     * Others: accepted by the API, not offered by the client.
+     */
+    toUserId: partyIdSchema,
   }),
 ]);
 export type CreateTransactionRequest = z.infer<typeof createTransactionRequestSchema>;
@@ -117,9 +135,12 @@ export type CreateTransactionRequest = z.infer<typeof createTransactionRequestSc
 export const updateTransactionRequestSchema = createTransactionRequestSchema;
 export type UpdateTransactionRequest = CreateTransactionRequest;
 
-/** A transaction's participant as returned by the API, resolved to a live user. */
+/**
+ * A transaction's participant as returned by the API, resolved to a live user
+ * — or `null` for Others.
+ */
 export const transactionParticipantSchema = z.object({
-  user: friendSummarySchema,
+  user: friendSummarySchema.nullable(),
   shareCents: z.number().int(),
   /** Only meaningful when the transaction's `splitMode` is `shares`. */
   weight: z.number().int().nullable(),
@@ -136,7 +157,8 @@ export const transactionSchema = z.object({
   comment: z.string().nullable(),
   /** Always set — an uncategorised transaction is stored and returned as `other`. */
   category: transactionCategorySchema,
-  payer: friendSummarySchema,
+  /** `null` is Others — only ever stored data, never picked in the client. */
+  payer: friendSummarySchema.nullable(),
   splitMode: splitModeSchema,
   participants: z.array(transactionParticipantSchema),
   createdBy: z.uuid(),
@@ -226,8 +248,22 @@ export type BalancesResponse = z.infer<typeof balancesResponseSchema>;
 // here so the two can never drift into splitting the same input differently.
 
 export interface SplitShare {
-  userId: string;
+  userId: PartyId;
   shareCents: number;
+}
+
+/** Lexicographic on user id, Others (`null`) after every member — a fixed, total order. */
+function compareParties(a: PartyId, b: PartyId): number {
+  if (a === b) {
+    return 0;
+  }
+  if (a === null) {
+    return 1;
+  }
+  if (b === null) {
+    return -1;
+  }
+  return a < b ? -1 : 1;
 }
 
 /**
@@ -235,8 +271,9 @@ export interface SplitShare {
  * to the cent with the largest-remainder method: each participant first gets
  * `floor(total * weight / totalWeight)`, then the leftover cents (always
  * fewer than the participant count) go one by one to the largest fractional
- * remainders. Ties break on `userId` (lexicographic), so the same input
- * always splits the same way — on the client and on the server alike.
+ * remainders. Ties break on `userId` (lexicographic, Others last), so the
+ * same input always splits the same way — on the client and on the server
+ * alike.
  *
  * The result always sums to exactly `totalCents`.
  */
@@ -261,12 +298,12 @@ export function splitByShares(
 
   let leftover = totalCents - withRemainders.reduce((sum, p) => sum + p.shareCents, 0);
 
-  // Largest remainder first; lexicographic userId breaks ties deterministically.
+  // Largest remainder first; the party order breaks ties deterministically.
   const byRemainder = [...withRemainders].sort((a, b) => {
     if (b.remainder !== a.remainder) {
       return b.remainder - a.remainder;
     }
-    return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
+    return compareParties(a.userId, b.userId);
   });
 
   for (const entry of byRemainder) {
@@ -283,4 +320,49 @@ export function splitByShares(
 /** Whether a set of shares sums to exactly `totalCents` — the split invariant. */
 export function splitSumsTo(totalCents: number, shares: readonly SplitShare[]): boolean {
   return shares.reduce((sum, share) => sum + share.shareCents, 0) === totalCents;
+}
+
+// --- What a transaction means inside the group ---------------------------
+//
+// Others (people outside the group) never enters a balance or a statistic:
+// only money moving between members counts. These read that rule off the API
+// shape, for the client; the server applies the same rule to its own rows
+// (`apps/server/src/features/transactions/balances.ts`).
+
+/**
+ * What the group's members were concerned by: every participant's share
+ * except Others'. Equal to the amount unless part of it was for Others.
+ */
+export function memberSharesCents(transaction: Pick<Transaction, 'participants'>): number {
+  return transaction.participants
+    .filter((participant) => participant.user !== null)
+    .reduce((sum, participant) => sum + participant.shareCents, 0);
+}
+
+/**
+ * The transaction's effect on `userId`'s balance in its group. Positive: it
+ * moved money toward them. The payer is credited the members' shares — never
+ * Others' — and each member is debited their own; an income reverses both. A
+ * transaction Others paid is owed to no one in the group, so it moves nothing.
+ *
+ * E.g. 60 € paid by me, 10 € each for me and two members and 30 € for Others
+ * is +20 for me — what the two members owe — not +50.
+ */
+export function balanceEffectCents(
+  transaction: Pick<Transaction, 'kind' | 'payer' | 'participants'>,
+  userId: string,
+): number {
+  if (transaction.payer === null) {
+    return 0;
+  }
+  const sign = transaction.kind === 'income' ? -1 : 1;
+  let net = 0;
+  if (transaction.payer.id === userId) {
+    net += sign * memberSharesCents(transaction);
+  }
+  const own = transaction.participants.find((participant) => participant.user?.id === userId);
+  if (own) {
+    net -= sign * own.shareCents;
+  }
+  return net;
 }

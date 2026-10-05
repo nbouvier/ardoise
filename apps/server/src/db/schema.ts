@@ -247,9 +247,8 @@ export const transactions = pgTable(
     // This CHECK is the one place that list is duplicated; keep both in sync.
     // Always set — an uncategorised transaction is recorded as 'other'.
     category: text('category').notNull().default('other'),
-    payerId: uuid('payer_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // `NULL` is Others — people outside the group — never a missing value.
+    payerId: uuid('payer_id').references(() => users.id, { onDelete: 'cascade' }),
     splitMode: text('split_mode').notNull(),
     createdBy: uuid('created_by')
       .notNull()
@@ -281,6 +280,12 @@ export const transactions = pgTable(
  *
  * References the user, not their membership row: a transaction outlives a
  * participant leaving the group, so history does not rewrite itself.
+ *
+ * A `NULL` `user_id` is **Others**, the stand-in for everyone outside the
+ * group (`docs/specs/transactions.md`); like `transactions.payer_id`, it is
+ * never a missing value. The unique constraint treats nulls as equal, so a
+ * transaction has at most one Others row, exactly as it has at most one row
+ * per member.
  */
 export const transactionParticipants = pgTable(
   'transaction_participants',
@@ -291,14 +296,14 @@ export const transactionParticipants = pgTable(
     transactionId: uuid('transaction_id')
       .notNull()
       .references(() => transactions.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     shareCents: integer('share_cents').notNull(),
     weight: integer('weight'),
   },
   (table) => [
-    unique('transaction_participants_unique').on(table.transactionId, table.userId),
+    unique('transaction_participants_unique')
+      .on(table.transactionId, table.userId)
+      .nullsNotDistinct(),
     check('transaction_participants_share_non_negative', sql`${table.shareCents} >= 0`),
     check(
       'transaction_participants_weight_positive',

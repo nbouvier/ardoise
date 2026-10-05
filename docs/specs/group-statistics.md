@@ -41,8 +41,10 @@ viewer switches between:
   The two are never mixed into one chart: they move money in opposite directions, and a
   single chart summing them would be meaningless. Spending is the default.
 - **Participants** — every group member is selectable, **all of them selected by
-  default**. With everyone selected, each transaction contributes its full amount, whoever
-  paid — "the group" in full. Deselecting members narrows the breakdown to the sum of only
+  default**. With everyone selected, each transaction contributes the sum of every
+  member's share, whoever paid — "the group" in full. That is its full amount unless part
+  of it was for **Others** (people outside the group, `docs/specs/transactions.md`):
+  Others' share is never counted, and Others is never selectable here. Deselecting members narrows the breakdown to the sum of only
   the selected members' own shares of each transaction; selecting the viewer alone
   reproduces what used to be called the "Me" scope. At least one member must stay selected
   for the chart to mean anything. The current selection is named in one field — "Everybody"
@@ -78,8 +80,10 @@ another: money moving inside a group, not money the group (or its sub-groups) sp
 received. Excluding them is what keeps the totals honest.
 
 For each type, participant selection and scope, every matching transaction — the group's
-own, plus those of its sub-groups when scope includes them — contributes its amount (or
-the sum of the selected members' shares of it) to its category. The result is:
+own, plus those of its sub-groups when scope includes them — contributes the sum of the
+selected members' shares of it to its category (its full amount when everyone is selected
+and nothing went to Others). Who paid does not matter, Others included: what the members
+consumed counts even if someone outside the group paid for it. The result is:
 
 - a **total** — the sum over every category;
 - per category with a non-zero amount: its **amount** and its **percentage of the
@@ -152,6 +156,9 @@ its own.
 - **A group whose transactions are all transfers**: the same empty state — nothing was
   spent or received. The wording must not read as an error, since the group plainly has
   transactions.
+- **A group whose spending all concerns Others**: the same empty state too, and its wording
+  ("Nothing spent between members yet.") stays true for it — something was recorded, but
+  none of it was spent on members.
 - **No income at all** (the common case) while the Income type is selected: an empty
   state specific to that combination ("nothing recorded as income"), with the type
   toggle still available to switch back.
@@ -219,6 +226,9 @@ its own.
 - [ ] Deselecting every member shows an empty state asking for at least one, rather than a
       zero chart.
 - [ ] Transfers never appear in any breakdown and never affect any total.
+- [ ] Others' share of a transaction is never counted, with everyone selected or not, and
+      Others is not offered in the participant checklist; members' shares of a
+      transaction Others paid are counted.
 - [ ] A transaction with no explicit category counts under `Other`.
 - [ ] Tapping an arc or a legend row shows that category's amount and percentage in the
       centre of the donut; deselecting restores the total.
@@ -280,6 +290,8 @@ its own.
   amount, and must count a transaction a selected member paid for but does not
   participate in as zero — a likely confusion between "paid" and "concerned". Selecting
   more than one member must sum their shares, not the transaction's full amount.
+- **Everyone selected is no longer "the full amount"**: a transaction partly for Others
+  must contribute only its members' shares — the regression this rule exists to prevent.
 - Ordering (largest first) and the exclusion of zero categories are cheap to assert and
   easy to regress.
 - **Scope must never leak an unjoined sub-group's amounts.** A test generating a tree

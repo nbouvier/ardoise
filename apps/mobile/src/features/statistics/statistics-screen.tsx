@@ -81,7 +81,8 @@ function emptyMessage(
       : 'Nothing recorded as income in the selected date range.';
   }
   return type === 'spending'
-    ? 'Nothing spent yet. Transfers between members don’t count — they only move money around.'
+    ? // "between members": true too of a group whose spending all went to Others.
+      'Nothing spent between members yet. Transfers don’t count — they only move money around.'
     : 'Nothing recorded as income yet.';
 }
 
@@ -149,9 +150,10 @@ export function StatisticsScreen({
     () =>
       categoryBreakdown(dateFilteredTransactions, {
         type,
-        // Passing `null` for "everyone" rather than every member id keeps the
-        // group total exactly `transaction.amountCents`, immune to any
-        // rounding remainder a shares split assigned only to some of them.
+        // Passing `null` for "everyone" rather than every member id lets
+        // `categoryBreakdown` apply its own rule — the members' shares, never
+        // Others' — instead of summing whichever ids happen to be listed.
+        // Others is not a member, so it is not in this list at all.
         participantIds: everyoneSelected ? null : [...selectedMemberIds],
       }),
     [dateFilteredTransactions, type, everyoneSelected, selectedMemberIds],

@@ -177,7 +177,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   including HTML escaping of both an inviter name and a group name.
 - **Friends** (`src/features/friends/`): the invitation lifecycle, friendship symmetry,
   and `GET /friends` carrying the pair group's `groupId` and `favorite`, personal to the
-  caller, with favorited friends first (`docs/specs/favorites.md`).
+  caller, with favorited friends first (`docs/specs/favorites.md`). Friend balances
+  (`balances.test.ts`): the per-friend SQL aggregate cross-checked against its in-memory
+  oracle `computePairwiseBalances` on a ledger with Others on every side, and Others never
+  counted between two friends.
 - **Groups** (`src/features/groups/`), unit and integration:
   - membership authorization on every route, archiving, deletion cascades, group
     invitations;
@@ -197,6 +200,15 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     roll-up.
 - **Transactions** (`src/features/transactions/`), unit and integration:
   - the balance calculation in isolation (sign convention, sum to zero);
+  - **Others** (`docs/specs/transactions.md`): the spec's 60 € example, an only-Others
+    split, Others as payer and at either end of a transfer, income — none of it reaching a
+    balance. The generated-ledger property (group balances sum to zero, a member's pairwise
+    balances sum back to their group balance) runs with Others as both payer and
+    participant. End to end: the API accepts Others everywhere and refuses it twice in a
+    split or at both ends of a transfer; the database itself refuses a second Others row;
+    an edit keeps it; and on one mixed ledger the group's balances, each member's
+    `viewerBalanceCents` (the per-group SQL aggregate) and `/friends` (the per-friend one)
+    all agree. These Others tests fail against the pre-Others rules;
   - end to end: every split shape, archived-group read-only behaviour, cross-group
     transaction access, cascade deletion;
   - the pair-group regression: transactions must **not** be refused by the guard that
@@ -212,13 +224,18 @@ What each suite covers, by workspace and feature. Paths are relative to the work
 ### `packages/shared`
 
 - **Splits** (`splitByShares`): the sum invariant across many generated totals, weights
-  and group sizes; rounding determinism; tie-breaking. The transaction request schema's
-  shape per kind.
+  and group sizes; rounding determinism; tie-breaking, Others last. The transaction request
+  schema's shape per kind, and Others (`null`): accepted as participant, payer and either
+  transfer end, refused twice, never inferred from a missing `userId`.
+- **Balance effect** (`balanceEffectCents`, `memberSharesCents`): the client's statement of
+  the balance rule — the spec's Others example, only-Others, an Others payer, income, and
+  members summing to zero.
 - **Categories**: unique keys, and an emoji, a label and a distinct colour each.
 - **Statistics** (`categoryBreakdown`): kind filtering (transfers never count), a
   selected subset of participants counted by their own shares rather than what they paid
   (one member, several summed, an empty selection), ordering, and the two sum invariants —
-  amounts to the total, percentages to exactly 100 — across many generated shapes.
+  amounts to the total, percentages to exactly 100 — across many generated shapes. Others'
+  share is never counted, whoever paid, and an Others payer still counts the members'.
 - **Reimbursements** (`planReimbursements`): the clearing property and the payment-count
   bound over 200 generated balance sets, exact-match pairing, a chain of debts collapsing
   into one payment, zero-balance people left out, independence from input order.
@@ -270,20 +287,29 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   identity down.
 - **Transactions** (`src/features/transactions/`):
   - the split editor: selection, weight stepper, live preview, mode switching, the
-    allocation indicator;
+    allocation indicator; **Others** as the last row in both modes (never "Me", not
+    concerned by default, sent as `userId: null`, zero removes it, counted in "left to
+    allocate", alone in a split);
   - the add/edit form: defaults (Other as the category), the request shape for each
     kind, full-replace edit, transfer validation, the category badge that opens the
-    picker sheet and updates without a separate save step;
+    picker sheet and updates without a separate save step; **Others** as a split
+    participant in the request, never listed by "Who paid" / "To" on a new transaction
+    or one a member paid, and kept as the payer or the transfer's recipient when a stored
+    transaction is edited — listed last there, so picking a member can be undone (a
+    stored null payer is not read as the viewer, an unpicked recipient is not read as
+    Others);
   - the category picker: selection, every category reachable, none with a "clear"
     behaviour;
   - `transaction-request.ts` (rebuilding a split for the form), the row's "my share"
-    calculation and category emoji, the date field's local-date conversion (no time-zone
+    calculation (the spec's 60 € example reads +20 for the payer, an Others payer reads
+    "Others" and "—") and category emoji, the date field's local-date conversion (no time-zone
     shift) and its iOS / Android wiring.
 - **Statistics** (`src/features/statistics/`): the donut geometry (the ring always
   closes, a sliver stays visible, a full ring is drawn as two halves) and the sheet —
   totals and legend, one arc per category, the type toggle, narrowing and summing the
   per-member selection, the "select at least one" empty state, selecting and deselecting a
-  slice, each empty state saying *which* view is empty.
+  slice, each empty state saying *which* view is empty; a transaction partly or wholly for
+  Others counting members' shares only, and Others never in the participant checklist.
 - **Reimbursements** (`src/features/reimbursements/`): a chain of debts shown as one
   payment; each payment worded from the viewer's point of view, their own first;
   recording one by tapping it; the explained (not silent) refusal on an archived group or
