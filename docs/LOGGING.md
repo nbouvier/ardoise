@@ -113,6 +113,8 @@ and after: never their name, e-mail address, or an amount they lose.
   (the claim question, "+ Invite" or a claim's figures could not load — the flow goes on
   without them), `groups.placeholder.claim.failed`, `groups.placeholder.rename.failed`,
   `groups.placeholder.remove.failed` (warn, with `errorFields`). Never the placeholder's name.
+- Legal pages (`docs/specs/legal-pages.md`): `legal.page.open.failed` (warn, `page`:
+  `privacy` / `terms` / `legal`, with `errorFields`) — the in-app browser could not open.
 - Account deletion (`docs/specs/account-deletion.md`): `account.deletion_preview.failed`
   and `account.delete.failed` (warn, with `errorFields`) — the page stays, with a retry.
 

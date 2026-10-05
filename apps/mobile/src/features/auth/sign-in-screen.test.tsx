@@ -18,7 +18,14 @@ jest.mock('./use-auth', () => ({
   }),
 }));
 
+const mockOpenBrowser = jest.fn<(url: string) => Promise<unknown>>();
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: (url: string) => mockOpenBrowser(url),
+  WebBrowserPresentationStyle: { AUTOMATIC: 'automatic' },
+}));
+
 beforeEach(() => {
+  mockOpenBrowser.mockReset().mockResolvedValue({ type: 'dismiss' });
   mockSignIn.mockReset();
   mockAuth.googleAvailable = true;
 });
@@ -58,5 +65,17 @@ describe('SignInScreen', () => {
 
     expect(screen.getByText(/web sign-in is coming soon/i)).toBeTruthy();
     expect(screen.getByRole('button', { disabled: true })).toBeTruthy();
+  });
+
+  it('says that continuing accepts the terms, linking them and the privacy policy', async () => {
+    await render(<SignInScreen />);
+
+    expect(screen.getByText(/By continuing, you agree to the/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole('link', { name: 'Terms of use' }));
+    await fireEvent.press(screen.getByRole('link', { name: 'Privacy policy' }));
+
+    expect(mockOpenBrowser).toHaveBeenNthCalledWith(1, expect.stringMatching(/\/terms$/));
+    expect(mockOpenBrowser).toHaveBeenNthCalledWith(2, expect.stringMatching(/\/privacy$/));
+    expect(mockSignIn).not.toHaveBeenCalled();
   });
 });

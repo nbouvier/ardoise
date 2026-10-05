@@ -215,6 +215,29 @@ eas update --branch staging --environment preview --message "Fix the split round
 - **iOS**: needs the Apple Developer Program (US$99/year) even for TestFlight; deliberately
   out of scope for now.
 
+### Play Console: policy pages and Data safety
+
+From the legal pages (`docs/specs/legal-pages.md`); keep both in step when either changes.
+
+- **Privacy policy URL**: `<PUBLIC_BASE_URL>/privacy`. **Account deletion URL**:
+  `<PUBLIC_BASE_URL>/delete-account`.
+- **Target audience**: 15 and over (the terms' minimum age), so not the Families program.
+- **Ads**: none. **App access**: everything is behind Google sign-in; give the reviewers a
+  test Google account.
+- **Data safety**:
+  - collected:
+    - **name, e-mail address, user ids** (account management, app functionality);
+    - **photos** (the Google profile picture's address);
+    - **other user-generated content** — groups, transactions, names typed in (app
+      functionality);
+    - **crash logs and diagnostics** (Sentry: analytics of crashes only);
+  - **shared**: none in Google's sense. Service providers acting for the app (hosting,
+    Sentry, Expo) are not "sharing";
+  - **encrypted in transit**: yes;
+  - **deletion**: users can request it, in the app and from the deletion URL;
+  - no location, contacts, financial information (amounts entered by users are content,
+    not payment data), device or other ids beyond Sentry's report.
+
 ## Error reporting (Sentry)
 
 Release builds report crashes and unexpected errors to **Sentry** (sentry.io, EU data

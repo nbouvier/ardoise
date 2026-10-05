@@ -353,7 +353,11 @@ the animated splash overlay), **error** ("Can't connect" + a secondary "Try agai
 
 Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "Ardoise", a tagline,
 and a single primary "Continue with Google". Inline `danger` error text on failure (not
-on user cancellation). On web the button is disabled with a "coming soon" caption.
+on user cancellation). On web the button is disabled with a "coming soon" caption. Last,
+centred secondary `small` text: "By continuing, you agree to the **Terms of use** and
+acknowledge the **Privacy policy**." — each name an inline link in the ink colour,
+underlined, opening the server's page in the in-app browser (`legal-links.ts`,
+`docs/specs/legal-pages.md`).
 
 ### Account (`src/features/auth/account-screen.tsx`)
 
@@ -366,6 +370,10 @@ pressing it opens a `DropdownMenu` with **Switch account** and, in the danger co
 Under it, a **Your data** section: an `overline` and one `MenuRow` — trash icon, **Delete
 account** in the danger colour. It is deliberately not in the Profile row's menu, where it
 would sit one slip away from Sign out. It opens the Delete account page in a `SheetModal`.
+
+Then a **Legal** section: an `overline` and three `MenuRow`s in the ink colour — `shield`
+**Privacy policy**, `document` **Terms of use**, `info` **Legal notice** — each opening the
+server's page in the in-app browser, in the device's language (French or English).
 
 ### Delete account (`src/features/auth/delete-account-screen.tsx`)
 

@@ -16,6 +16,7 @@ import { errorFields, logger } from '@/lib/logger';
 
 import { DeleteAccountScreen } from './delete-account-screen';
 import { GoogleSignInCancelled } from './google-module';
+import { LEGAL_PAGES, openLegalPage } from './legal-links';
 import { useAuth } from './use-auth';
 
 export function AccountScreen() {
@@ -90,6 +91,20 @@ export function AccountScreen() {
             onPress={() => setDeleting(true)}
           />
         </View>
+
+        <View style={styles.section}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Legal
+          </ThemedText>
+          {LEGAL_ROWS.map(({ page, icon }) => (
+            <MenuRow
+              key={page}
+              icon={icon}
+              label={LEGAL_PAGES[page].label}
+              onPress={() => void openLegalPage(page)}
+            />
+          ))}
+        </View>
       </SafeAreaView>
 
       <SheetModal visible={deleting} onClose={() => setDeleting(false)}>
@@ -115,6 +130,12 @@ export function AccountScreen() {
     </ThemedView>
   );
 }
+
+const LEGAL_ROWS = [
+  { page: 'privacy', icon: 'shield' },
+  { page: 'terms', icon: 'document' },
+  { page: 'legal', icon: 'info' },
+] as const;
 
 const ACTIONS = [
   { key: 'switch', icon: 'refresh', label: 'Switch account', destructive: false },

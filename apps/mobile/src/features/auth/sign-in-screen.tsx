@@ -11,6 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
 import { GoogleSignInCancelled } from './google-module';
+import { LEGAL_PAGES, openLegalPage, type LegalPage } from './legal-links';
 import { useAuth } from './use-auth';
 
 export function SignInScreen() {
@@ -66,13 +67,37 @@ export function SignInScreen() {
               {error}
             </ThemedText>
           ) : null}
+
+          {/* Continuing is how the terms are accepted (`docs/specs/legal-pages.md`). */}
+          <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+            By continuing, you agree to the <LegalLink page="terms" /> and acknowledge the{' '}
+            <LegalLink page="privacy" />.
+          </ThemedText>
         </View>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
+/** A legal page's name, inline in a sentence, opening it. */
+function LegalLink({ page }: { page: LegalPage }) {
+  const { label } = LEGAL_PAGES[page];
+  return (
+    <ThemedText
+      type="small"
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      onPress={() => void openLegalPage(page)}
+      style={styles.link}>
+      {label}
+    </ThemedText>
+  );
+}
+
 const styles = StyleSheet.create({
+  link: {
+    textDecorationLine: 'underline',
+  },
   container: {
     flex: 1,
   },

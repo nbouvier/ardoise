@@ -318,7 +318,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   Delete account page states what goes and stays, totals what the user is owed and what they
   owe, each unfolding into its groups (or says none is lost), deletes nothing until the final prompt is confirmed, keeps the page
   with an error on failure, and retries a preview that failed to load. `lib/api/account`
-  covers both requests' shapes.
+  covers both requests' shapes. Legal pages (`docs/specs/legal-pages.md`): the sign-in
+  screen says continuing accepts the terms and its two links open the terms and the
+  privacy policy without signing in; the Account page's Legal section opens each of the
+  three pages, with no `?lang` (`expo-web-browser` mocked).
 - **Placeholder members** (`docs/specs/placeholder-members.md`): New group adds names,
   takes one back off, refuses a duplicate whatever the case, says so when the server finds
   one taken, and offers a sub-group its parent's placeholders; "+ Invite" sends friends and
