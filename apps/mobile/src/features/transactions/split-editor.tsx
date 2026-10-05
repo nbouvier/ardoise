@@ -1,6 +1,7 @@
 import type {
   AmountSplitParticipant,
   FriendSummary,
+  PartyId,
   SharesSplitParticipant,
   SplitInput,
 } from '@ardoise/shared';
@@ -11,6 +12,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/avatar';
 import { Card } from '@/components/card';
 import { MeTag } from '@/components/me-tag';
+import { OthersAvatar } from '@/components/others-avatar';
 import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -42,6 +44,11 @@ const MAX_WEIGHT = 1000;
  * non-zero amount, adds the member; bringing either back down to zero
  * removes them. There is no separate checkbox — the row's own background
  * tint (`primarySoft` when concerned) is the only selection cue.
+ *
+ * **Others** — everyone outside the group — is the last row, after every
+ * member, in every group (`docs/specs/transactions.md`). It is a row like any
+ * other, but never pinned, never marked "Me", and not concerned by default:
+ * once given a weight or an amount it is `userId: null` in the split.
  */
 export function SplitEditor({ members, amountCents, value, onChange, viewerId }: SplitEditorProps) {
   // The viewer's own row is pinned first — the same ordering `MemberSelect`
@@ -50,7 +57,11 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
     a.id === viewerId ? -1 : b.id === viewerId ? 1 : 0,
   );
 
-  const preview: Map<string | null, number> | null =
+  // `null` is Others, always last.
+  const rowIds: PartyId[] = [...orderedMembers.map((member) => member.id), null];
+  const memberById = new Map(members.map((member) => [member.id, member]));
+
+  const preview: Map<PartyId, number> | null =
     value.mode === 'shares' && value.participants.length > 0
       ? new Map(splitByShares(amountCents, value.participants).map((s) => [s.userId, s.shareCents]))
       : null;
@@ -75,7 +86,7 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
   }
 
   /** A weight of zero removes the member from the split entirely — the schema never persists one. */
-  function setWeight(userId: string, weight: number) {
+  function setWeight(userId: PartyId, weight: number) {
     if (value.mode !== 'shares') {
       return;
     }
@@ -96,7 +107,7 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
   }
 
   /** Same rule as `setWeight`: an amount of zero removes the member. */
-  function setAmount(userId: string, amount: number) {
+  function setAmount(userId: PartyId, amount: number) {
     if (value.mode !== 'amount') {
       return;
     }
@@ -138,18 +149,18 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
 
       <Card style={styles.rows}>
         {value.mode === 'shares'
-          ? orderedMembers.map((member) => {
-              const participant = value.participants.find((p) => p.userId === member.id);
+          ? rowIds.map((id) => {
+              const participant = value.participants.find((p) => p.userId === id);
               const weight = participant?.weight ?? 0;
-              const previewCents = participant ? (preview?.get(member.id) ?? 0) : 0;
+              const previewCents = participant ? (preview?.get(id) ?? 0) : 0;
               return (
-                <MemberRow
-                  key={member.id}
-                  member={member}
-                  isViewer={member.id === viewerId}
+                <PartyRow
+                  key={id ?? OTHERS_KEY}
+                  member={id === null ? null : (memberById.get(id) ?? null)}
+                  isViewer={id !== null && id === viewerId}
                   selected={participant !== undefined}>
                   <View style={styles.shareControl}>
-                    <Stepper value={weight} onChange={(w) => setWeight(member.id, w)} />
+                    <Stepper value={weight} onChange={(w) => setWeight(id, w)} />
                     <ThemedText
                       type="small"
                       themeColor="textSecondary"
@@ -157,25 +168,26 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
                       {`= ${centsToText(previewCents)}`}
                     </ThemedText>
                   </View>
-                </MemberRow>
+                </PartyRow>
               );
             })
-          : orderedMembers.map((member) => {
-              const participant = value.participants.find((p) => p.userId === member.id);
+          : rowIds.map((id) => {
+              const participant = value.participants.find((p) => p.userId === id);
+              const member = id === null ? null : (memberById.get(id) ?? null);
               return (
-                <MemberRow
-                  key={member.id}
+                <PartyRow
+                  key={id ?? OTHERS_KEY}
                   member={member}
-                  isViewer={member.id === viewerId}
+                  isViewer={id !== null && id === viewerId}
                   selected={participant !== undefined}>
                   <AmountInput
-                    key={`${member.id}-amount`}
+                    key={`${id ?? OTHERS_KEY}-amount`}
                     defaultValueCents={participant?.amount ?? 0}
-                    onChangeCents={(cents) => setAmount(member.id, cents ?? 0)}
+                    onChangeCents={(cents) => setAmount(id, cents ?? 0)}
                     style={styles.amountControl}
-                    accessibilityLabel={`${member.name}’s amount`}
+                    accessibilityLabel={member ? `${member.name}’s amount` : 'Others’ amount'}
                   />
-                </MemberRow>
+                </PartyRow>
               );
             })}
       </Card>
@@ -196,13 +208,20 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
   );
 }
 
-function MemberRow({
+const OTHERS_KEY = 'others';
+
+/**
+ * One row of the picker: a member, or Others when `member` is `null` — a
+ * neutral placeholder where the avatar would be, and a secondary line saying
+ * who it stands for.
+ */
+function PartyRow({
   member,
   isViewer,
   selected,
   children,
 }: {
-  member: FriendSummary;
+  member: FriendSummary | null;
   isViewer: boolean;
   selected: boolean;
   children: ReactNode;
@@ -212,11 +231,25 @@ function MemberRow({
   return (
     <View style={[styles.row, selected && { backgroundColor: theme.primarySoft }]}>
       <View style={styles.memberInfo}>
-        <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
-        <ThemedText style={styles.name} numberOfLines={1}>
-          {member.name}
-        </ThemedText>
-        {isViewer ? <MeTag /> : null}
+        {member ? (
+          <>
+            <Avatar name={member.name} picture={member.picture} size={32} seed={member.id} />
+            <ThemedText style={styles.name} numberOfLines={1}>
+              {member.name}
+            </ThemedText>
+            {isViewer ? <MeTag /> : null}
+          </>
+        ) : (
+          <>
+            <OthersAvatar size={32} />
+            <View style={styles.name}>
+              <ThemedText numberOfLines={1}>Others</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                People outside the group
+              </ThemedText>
+            </View>
+          </>
+        )}
       </View>
       {children}
     </View>

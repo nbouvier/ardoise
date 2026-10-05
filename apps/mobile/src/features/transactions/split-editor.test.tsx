@@ -1,5 +1,5 @@
 import type { FriendSummary, SplitInput } from '@ardoise/shared';
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { useState } from 'react';
 
@@ -14,10 +14,13 @@ function Harness({
   initial,
   amountCents = 1000,
   viewerId = null,
+  onValue,
 }: {
   initial: SplitInput;
   amountCents?: number;
   viewerId?: string | null;
+  /** Called with every value the editor emits, to assert on the split it builds. */
+  onValue?: (value: SplitInput) => void;
 }) {
   const [value, setValue] = useState<SplitInput>(initial);
   return (
@@ -25,7 +28,10 @@ function Harness({
       members={members}
       amountCents={amountCents}
       value={value}
-      onChange={setValue}
+      onChange={(next) => {
+        setValue(next);
+        onValue?.(next);
+      }}
       viewerId={viewerId}
     />
   );
@@ -44,9 +50,10 @@ describe('SplitEditor', () => {
     await render(<Harness initial={equalShares} />);
 
     // Alan is not concerned yet, but his row (and stepper) still shows,
-    // starting at zero — fields stay visible rather than disappearing.
+    // starting at zero — fields stay visible rather than disappearing. So
+    // does Others', the row after every member.
     const values = screen.getAllByText('0');
-    expect(values).toHaveLength(1);
+    expect(values).toHaveLength(2);
   });
 
   it('marks the viewer’s row "Me"', async () => {
@@ -88,13 +95,14 @@ describe('SplitEditor', () => {
   it('selects a member by raising their weight from zero', async () => {
     await render(<Harness initial={equalShares} amountCents={1000} />);
 
-    // Alan is the third row, not concerned yet — his preview reads zero.
-    expect(screen.getByText('= 0.00')).toBeTruthy();
+    // Alan is the third row, not concerned yet — his preview reads zero, and
+    // so does Others' below him.
+    expect(screen.getAllByText('= 0.00')).toHaveLength(2);
 
     await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[2]!);
 
     // Now a three-way equal split: 3.34 / 3.33 / 3.33 (remainder to Ada).
-    expect(screen.queryByText('= 0.00')).toBeNull();
+    expect(screen.getAllByText('= 0.00')).toHaveLength(1);
   });
 
   it('deselects a member by dropping their weight to zero, then blocks further decrease', async () => {
@@ -164,5 +172,150 @@ describe('SplitEditor', () => {
     await fireEvent.changeText(screen.getByLabelText('Ada Lovelace’s amount'), '0');
 
     expect(screen.getByText('4.00 left to allocate')).toBeTruthy();
+  });
+
+  describe('Others', () => {
+    it('is the last row, after every member, with its secondary line', async () => {
+      await render(<Harness initial={equalShares} viewerId={ada.id} />);
+
+      expect(screen.getByText('Others')).toBeTruthy();
+      expect(screen.getByText('People outside the group')).toBeTruthy();
+
+      // Four rows (three members, then Others), each with its own stepper.
+      const increase = screen.getAllByRole('button', { name: 'Increase weight' });
+      expect(increase).toHaveLength(4);
+    });
+
+    it('is the last row in fixed mode too, and never marked "Me"', async () => {
+      const allAmounts: SplitInput = {
+        mode: 'amount',
+        participants: [{ userId: ada.id, amount: 1000 }],
+      };
+      await render(<Harness initial={allAmounts} viewerId={ada.id} />);
+
+      const amountFields = screen.getAllByLabelText(/ amount$/);
+      expect(amountFields).toHaveLength(4);
+      expect(amountFields[3]).toHaveProp('accessibilityLabel', 'Others’ amount');
+      expect(screen.getAllByText('Me')).toHaveLength(1);
+    });
+
+    it('stays last even when the viewer is pinned first', async () => {
+      const allAmounts: SplitInput = { mode: 'amount', participants: [] };
+      await render(<Harness initial={allAmounts} viewerId={alan.id} />);
+
+      const labels = screen
+        .getAllByLabelText(/ amount$/)
+        .map((field) => field.props.accessibilityLabel);
+      expect(labels).toEqual([
+        'Alan Turing’s amount',
+        'Ada Lovelace’s amount',
+        'Grace Hopper’s amount',
+        'Others’ amount',
+      ]);
+    });
+
+    it('is not concerned until it is given a weight', async () => {
+      await render(<Harness initial={equalShares} amountCents={1000} />);
+
+      // Alan and Others are both at zero.
+      expect(screen.getAllByText('= 0.00')).toHaveLength(2);
+    });
+
+    it('is added as userId null by raising its weight, and removed at zero', async () => {
+      const onValue = jest.fn<(value: SplitInput) => void>();
+      await render(<Harness initial={equalShares} amountCents={1000} onValue={onValue} />);
+
+      const othersIncrease = () => screen.getAllByRole('button', { name: 'Increase weight' })[3]!;
+      await fireEvent.press(othersIncrease());
+      await fireEvent.press(othersIncrease());
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'shares',
+        participants: [
+          { userId: ada.id, weight: 1 },
+          { userId: grace.id, weight: 1 },
+          { userId: null, weight: 2 },
+        ],
+      });
+      // 1 : 1 : 2 of 10.00.
+      expect(screen.getByText('= 5.00')).toBeTruthy();
+
+      const othersDecrease = () => screen.getAllByRole('button', { name: 'Decrease weight' })[3]!;
+      await fireEvent.press(othersDecrease());
+      await fireEvent.press(othersDecrease());
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'shares',
+        participants: [
+          { userId: ada.id, weight: 1 },
+          { userId: grace.id, weight: 1 },
+        ],
+      });
+    });
+
+    it('takes a fixed amount as userId null, and counts it in what is left to allocate', async () => {
+      const onValue = jest.fn<(value: SplitInput) => void>();
+      const partialAmounts: SplitInput = {
+        mode: 'amount',
+        participants: [{ userId: ada.id, amount: 400 }],
+      };
+      await render(<Harness initial={partialAmounts} amountCents={1000} onValue={onValue} />);
+
+      expect(screen.getByText('6.00 left to allocate')).toBeTruthy();
+
+      await fireEvent.changeText(screen.getByLabelText('Others’ amount'), '6');
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'amount',
+        participants: [
+          { userId: ada.id, amount: 400 },
+          { userId: null, amount: 600 },
+        ],
+      });
+      expect(screen.getByText('Fully allocated')).toBeTruthy();
+
+      await fireEvent.changeText(screen.getByLabelText('Others’ amount'), '0');
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'amount',
+        participants: [{ userId: ada.id, amount: 400 }],
+      });
+    });
+
+    it('carries an Others share over when switching from shares to fixed amounts', async () => {
+      const onValue = jest.fn<(value: SplitInput) => void>();
+      const withOthers: SplitInput = {
+        mode: 'shares',
+        participants: [
+          { userId: ada.id, weight: 1 },
+          { userId: null, weight: 1 },
+        ],
+      };
+      await render(<Harness initial={withOthers} amountCents={1000} onValue={onValue} />);
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Fixed' }));
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'amount',
+        participants: [
+          { userId: ada.id, amount: 500 },
+          { userId: null, amount: 500 },
+        ],
+      });
+    });
+
+    it('lets Others be the only participant', async () => {
+      const onValue = jest.fn<(value: SplitInput) => void>();
+      const nobody: SplitInput = { mode: 'shares', participants: [] };
+      await render(<Harness initial={nobody} amountCents={1000} onValue={onValue} />);
+
+      await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[3]!);
+
+      expect(onValue).toHaveBeenLastCalledWith({
+        mode: 'shares',
+        participants: [{ userId: null, weight: 1 }],
+      });
+      expect(screen.getByText('= 10.00')).toBeTruthy();
+    });
   });
 });

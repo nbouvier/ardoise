@@ -83,8 +83,10 @@ describe('TransactionFormScreen — recording', () => {
     );
 
     // Both members start concerned, each with their own (zero, until an
-    // amount is entered) live preview — neither row is missing.
-    expect(screen.getAllByText('= 0.00')).toHaveLength(2);
+    // amount is entered) live preview — neither row is missing. Others has a
+    // row too, but is not concerned by default.
+    expect(screen.getAllByText('= 0.00')).toHaveLength(3);
+    expect(screen.getByText('Others')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' })).toHaveProp(
       'accessibilityState',
       expect.objectContaining({ disabled: true }),
@@ -126,6 +128,112 @@ describe('TransactionFormScreen — recording', () => {
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(existing);
+  });
+
+  it('sends Others as userId null once it is given a weight', async () => {
+    await render(
+      <TransactionFormScreen
+        group={group}
+        viewerId={ada.id}
+        onSaved={jest.fn()}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Dinner');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '60');
+    // Ada, Grace, then Others — the last stepper.
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[2]!);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[2]!);
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      expect.objectContaining({
+        payerId: ada.id,
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: ada.id, weight: 1 },
+            { userId: grace.id, weight: 1 },
+            { userId: null, weight: 2 },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('sends Others’ fixed amount as userId null', async () => {
+    await render(
+      <TransactionFormScreen
+        group={group}
+        viewerId={ada.id}
+        onSaved={jest.fn()}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Dinner');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '60');
+    await fireEvent.press(screen.getByRole('button', { name: 'Fixed' }));
+    await fireEvent.changeText(screen.getByLabelText('Ada Lovelace’s amount'), '10');
+    await fireEvent.changeText(screen.getByLabelText('Grace Hopper’s amount'), '20');
+    // The remaining 30 € is Others'.
+    expect(screen.getByText('30.00 left to allocate')).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText('Others’ amount'), '30');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      expect.objectContaining({
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: ada.id, amount: 1000 },
+            { userId: grace.id, amount: 2000 },
+            { userId: null, amount: 3000 },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('can be saved with Others as the only participant', async () => {
+    const onSaved = jest.fn();
+    await render(
+      <TransactionFormScreen
+        group={group}
+        viewerId={ada.id}
+        onSaved={onSaved}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Advance to the neighbour');
+    await fireEvent.changeText(screen.getByLabelText('Amount'), '40');
+    // Drop both members (weight 1 → 0), then give Others a weight.
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Decrease weight' })[0]!);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Decrease weight' })[1]!);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: true }),
+    );
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Increase weight' })[2]!);
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      expect.objectContaining({
+        split: { mode: 'shares', participants: [{ userId: null, weight: 1 }] },
+      }),
+    );
+    expect(onSaved).toHaveBeenCalled();
   });
 
   it('defaults to Other and can be switched to another preset', async () => {
