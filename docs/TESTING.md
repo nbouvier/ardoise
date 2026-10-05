@@ -309,6 +309,17 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   owe, each unfolding into its groups (or says none is lost), deletes nothing until the final prompt is confirmed, keeps the page
   with an error on failure, and retries a preview that failed to load. `lib/api/account`
   covers both requests' shapes.
+- **Placeholder members** (`docs/specs/placeholder-members.md`): New group adds names,
+  takes one back off, refuses a duplicate whatever the case, says so when the server finds
+  one taken, and offers a sub-group its parent's placeholders; "+ Invite" sends friends and
+  names together and refuses a name the tree has; the Manage tab tags a placeholder and
+  offers This is me (only while the viewer can still claim), Rename (a prompt holding the
+  current name) and Remove (warning that its part becomes Others), each confirming before
+  it acts; the owner may leave when only placeholders remain, told they go with the group.
+  After joining through a link, the person is asked whether they are one of the tree's
+  placeholders, claims one after a confirmation naming what it brings, can say they are
+  not on the list, is offered the rest when theirs was claimed meanwhile, and is not asked
+  when already a member or unable to claim. `lib/api/groups` covers the new requests.
 - **Invitations** (`src/features/invites/`): the pending-invite store and the
   confirmation flow for both kinds of invitation.
 - **Friends** (`src/features/friends/`): the list; the one "New friend" page (invite link

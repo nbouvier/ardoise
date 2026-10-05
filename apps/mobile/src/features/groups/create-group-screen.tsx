@@ -15,11 +15,13 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { InvitationCodeEntry } from '@/features/invites/invitation-code-entry';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/lib/api/errors';
 import { createGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
 import { FriendPickerCard } from './friend-picker';
 import { groupsChanged } from './groups-changed';
+import { OtherParticipants } from './other-participants';
 
 export interface CreateGroupScreenProps {
   onCreated: (group: GroupDetail) => void;
@@ -40,6 +42,11 @@ export interface CreateGroupScreenProps {
    * other person joins it themselves from the parent's sub-groups list.
    */
   pairRooted?: boolean;
+  /**
+   * The parent's placeholder members, which a new sub-group can take too
+   * (`docs/specs/placeholder-members.md`). A root group has none to offer.
+   */
+  parentPlaceholders?: readonly { id: string; name: string }[];
 }
 
 export function CreateGroupScreen({
@@ -48,19 +55,22 @@ export function CreateGroupScreen({
   parentId,
   parentTrail = [],
   pairRooted = false,
+  parentPlaceholders = [],
 }: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
   const [name, setName] = useState('');
+  // Friends and the parent's placeholders alike: both are ids to add.
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [placeholderNames, setPlaceholderNames] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function toggle(friendId: string) {
+  function toggle(id: string) {
     setSelected((current) => {
       const next = new Set(current);
-      if (!next.delete(friendId)) {
-        next.add(friendId);
+      if (!next.delete(id)) {
+        next.add(id);
       }
       return next;
     });
@@ -73,6 +83,7 @@ export function CreateGroupScreen({
       const group = await createGroup(authorizedFetch, {
         name: name.trim(),
         memberIds: [...selected],
+        ...(placeholderNames.length > 0 ? { placeholderNames } : {}),
         parentId,
       });
       groupsChanged.notify();
@@ -80,9 +91,11 @@ export function CreateGroupScreen({
     } catch (cause: unknown) {
       logger.warn('groups.create.failed', errorFields(cause));
       setError(
-        parentId
-          ? 'We couldn’t create the sub-group. Check your connection and try again.'
-          : 'We couldn’t create the group. Check your connection and try again.',
+        cause instanceof ApiError && cause.code === 'placeholder_name_taken'
+          ? 'Someone in this group already has one of those names. Change it and try again.'
+          : parentId
+            ? 'We couldn’t create the sub-group. Check your connection and try again.'
+            : 'We couldn’t create the group. Check your connection and try again.',
       );
     } finally {
       setBusy(false);
@@ -131,6 +144,14 @@ export function CreateGroupScreen({
                   Add friends now, or share a link later.
                 </ThemedText>
                 <FriendPickerCard selected={selected} onToggle={toggle} />
+                <OtherParticipants
+                  names={placeholderNames}
+                  onNamesChange={setPlaceholderNames}
+                  available={parentPlaceholders}
+                  selectedIds={selected}
+                  onToggle={toggle}
+                  disabled={busy}
+                />
               </>
             )}
 

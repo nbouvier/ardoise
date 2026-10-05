@@ -11,14 +11,17 @@ import {
 
 import {
   addGroupMembers,
+  claimPlaceholder,
   createGroup,
   deleteGroup,
   fetchFavoriteGroups,
   fetchGroup,
   fetchGroupInvite,
   fetchGroups,
+  fetchPlaceholders,
   joinGroup,
   removeGroupMember,
+  renamePlaceholder,
   updateGroup,
 } from './groups';
 
@@ -153,16 +156,55 @@ describe('deleteGroup', () => {
   });
 });
 
-describe('members', () => {
-  it('adds friends', async () => {
+describe('placeholders', () => {
+  const placeholderId = '99999999-9999-4999-8999-999999999999';
+
+  it('lists the tree’s placeholders', async () => {
+    const body = {
+      placeholders: [{ id: placeholderId, name: 'Alex', transactionCount: 3, balanceCents: -250 }],
+      viewerCanClaim: true,
+    };
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: body }));
+
+    await expect(fetchPlaceholders(fetcher, groupDetail.id)).resolves.toEqual(body);
+    expect(fetcher).toHaveBeenCalledWith(`/groups/${groupDetail.id}/placeholders`);
+  });
+
+  it('renames one', async () => {
     const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: groupDetail } }));
 
     await expect(
-      addGroupMembers(fetcher, groupDetail.id, [grace.id]),
+      renamePlaceholder(fetcher, groupDetail.id, placeholderId, 'Alexandra'),
+    ).resolves.toEqual(groupDetail);
+    expect(fetcher).toHaveBeenCalledWith(
+      `/groups/${groupDetail.id}/placeholders/${placeholderId}`,
+      { method: 'PATCH', body: { name: 'Alexandra' } },
+    );
+  });
+
+  it('claims one', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: groupDetail } }));
+
+    await expect(claimPlaceholder(fetcher, groupDetail.id, placeholderId)).resolves.toEqual(
+      groupDetail,
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      `/groups/${groupDetail.id}/placeholders/${placeholderId}/claim`,
+      { method: 'POST' },
+    );
+  });
+});
+
+describe('members', () => {
+  it('adds friends and new placeholders', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: { group: groupDetail } }));
+
+    await expect(
+      addGroupMembers(fetcher, groupDetail.id, { memberIds: [grace.id], placeholderNames: ['Alex'] }),
     ).resolves.toEqual(groupDetail);
     expect(fetcher).toHaveBeenCalledWith(`/groups/${groupDetail.id}/members`, {
       method: 'POST',
-      body: { memberIds: [grace.id] },
+      body: { memberIds: [grace.id], placeholderNames: ['Alex'] },
     });
   });
 

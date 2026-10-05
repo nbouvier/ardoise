@@ -1,17 +1,22 @@
-import type { AcceptInviteResult, InvitePreview } from '@ardoise/shared';
+import type { AcceptInviteResult, ClaimablePlaceholder, InvitePreview } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useDialog } from '@/components/use-dialog';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
+import { groupsChanged } from '@/features/groups/groups-changed';
+import { centsToText } from '@/features/transactions/amount-input';
+import { transactionsChanged } from '@/features/transactions/transactions-changed';
 import { useTheme } from '@/hooks/use-theme';
 import { getApiBaseUrl } from '@/lib/api/config';
 import { ApiError } from '@/lib/api/errors';
+import { claimPlaceholder, fetchPlaceholders } from '@/lib/api/groups';
 import { acceptInvite, previewInvite } from '@/lib/api/invites';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -25,7 +30,8 @@ type Problem = 'dead' | 'self' | 'offline';
 type ScreenState =
   | { status: 'loading' }
   | { status: 'preview'; preview: InvitePreview }
-  | { status: 'accepted'; result: AcceptInviteResult }
+  | { status: 'claim'; result: AcceptInviteResult & { kind: 'group' }; placeholders: ClaimablePlaceholder[] }
+  | { status: 'accepted'; result: AcceptInviteResult; claimedName?: string }
   | { status: 'problem'; problem: Problem };
 
 const PROBLEM_COPY: Record<Problem, { title: string; body: string }> = {
@@ -73,8 +79,11 @@ function previewCopy(preview: InvitePreview): { title: string; body: string } {
   };
 }
 
-function acceptedCopy(result: AcceptInviteResult): string {
+function acceptedCopy(result: AcceptInviteResult, claimedName?: string): string {
   if (result.kind === 'group') {
+    if (claimedName) {
+      return `You joined “${result.group.name}” as ${claimedName}`;
+    }
     return result.alreadyMember
       ? `You’re already in “${result.group.name}”`
       : `You joined “${result.group.name}”`;
@@ -92,9 +101,24 @@ export interface AcceptInviteScreenProps {
   onAccepted?: (result: AcceptInviteResult) => void;
 }
 
+/** What claiming a placeholder takes over, said before it happens. */
+function claimMessage(placeholder: ClaimablePlaceholder, groupName: string): string {
+  const { name, transactionCount, balanceCents } = placeholder;
+  const count = transactionCount === 1 ? '1 transaction' : `${transactionCount} transactions`;
+  const standing =
+    balanceCents > 0
+      ? ` In “${groupName}”, ${name} is owed ${centsToText(balanceCents)}.`
+      : balanceCents < 0
+        ? ` In “${groupName}”, ${name} owes ${centsToText(-balanceCents)}.`
+        : '';
+  return `${name}’s ${count} become yours.${standing} This can’t be undone.`;
+}
+
 /**
  * The confirmation an invitation leads to, whatever it is for. One screen
  * because the flow is identical: see who is inviting, decide, land somewhere.
+ * Joining a group that has placeholder members first asks whether the person
+ * is one of them (`docs/specs/placeholder-members.md`).
  */
 export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteScreenProps) {
   const { authorizedFetch } = useAuth();
@@ -103,6 +127,8 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   const [state, setState] = useState<ScreenState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [accepting, setAccepting] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const { dialog, confirm, inform } = useDialog();
 
   useEffect(() => {
     let active = true;
@@ -135,14 +161,75 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
     setAccepting(true);
     try {
       const result = await acceptInvite(authorizedFetch, code);
-      setState({ status: 'accepted', result });
       onAccepted?.(result);
+      if (result.kind === 'group' && !result.alreadyMember) {
+        const placeholders = await claimablePlaceholders(result.group.id);
+        if (placeholders.length > 0) {
+          setState({ status: 'claim', result, placeholders });
+          return;
+        }
+      }
+      setState({ status: 'accepted', result });
     } catch (error) {
       logger.warn('invites.accept.failed', errorFields(error));
       setState({ status: 'problem', problem: problemFor(error) });
     } finally {
       setAccepting(false);
     }
+  }
+
+  /**
+   * The placeholders the new member could be, or none — not finding out
+   * only skips the question: "This is me" stays on the group's Manage tab.
+   */
+  async function claimablePlaceholders(groupId: string): Promise<ClaimablePlaceholder[]> {
+    try {
+      const { placeholders, viewerCanClaim } = await fetchPlaceholders(authorizedFetch, groupId);
+      return viewerCanClaim ? placeholders : [];
+    } catch (error) {
+      logger.warn('groups.placeholders.load.failed', errorFields(error));
+      return [];
+    }
+  }
+
+  function askToClaim(
+    result: AcceptInviteResult & { kind: 'group' },
+    placeholders: ClaimablePlaceholder[],
+    placeholder: ClaimablePlaceholder,
+  ) {
+    confirm({
+      title: `You are ${placeholder.name}?`,
+      message: claimMessage(placeholder, result.group.name),
+      confirmLabel: 'That’s me',
+      onConfirm: () => {
+        setClaiming(true);
+        claimPlaceholder(authorizedFetch, result.group.id, placeholder.id)
+          .then(() => {
+            groupsChanged.notify();
+            transactionsChanged.notify();
+            setState({ status: 'accepted', result, claimedName: placeholder.name });
+          })
+          .catch((error: unknown) => {
+            logger.warn('groups.placeholder.claim.failed', errorFields(error));
+            if (error instanceof ApiError && error.code === 'placeholder_not_found') {
+              // Someone else got there first: offer what is left.
+              const rest = placeholders.filter((other) => other.id !== placeholder.id);
+              setState(
+                rest.length > 0
+                  ? { status: 'claim', result, placeholders: rest }
+                  : { status: 'accepted', result },
+              );
+              inform(
+                `${placeholder.name} isn’t in the group any more`,
+                'Someone may have claimed or removed them.',
+              );
+            } else {
+              inform('That didn’t work', 'Check your connection and try again.');
+            }
+          })
+          .finally(() => setClaiming(false));
+      },
+    });
   }
 
   function openGroup(groupId: string) {
@@ -176,8 +263,59 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
     );
   }
 
+  if (state.status === 'claim') {
+    const { result, placeholders } = state;
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText type="subtitle" style={styles.centered}>
+          Is one of these you?
+        </ThemedText>
+        <ThemedText themeColor="textSecondary" style={styles.centered}>
+          {`They were added to “${result.group.name}” by name before joining. If one is you, what was recorded for them becomes yours.`}
+        </ThemedText>
+        <ScrollView style={styles.claimList} contentContainerStyle={styles.claimListContent}>
+          {placeholders.map((placeholder) => (
+            <Pressable
+              key={placeholder.id}
+              accessibilityRole="button"
+              accessibilityLabel={`I’m ${placeholder.name}`}
+              disabled={claiming}
+              onPress={() => askToClaim(result, placeholders, placeholder)}
+              style={({ pressed }) => [
+                styles.claimRow,
+                {
+                  backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
+                },
+              ]}>
+              <Avatar name={placeholder.name} picture={null} size={36} seed={placeholder.id} />
+              <View style={styles.claimText}>
+                <ThemedText type="smallBold" numberOfLines={1}>
+                  {placeholder.name}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {placeholder.transactionCount === 1
+                    ? '1 transaction'
+                    : `${placeholder.transactionCount} transactions`}
+                </ThemedText>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <View style={styles.actions}>
+          <Button
+            label="I’m not on the list"
+            variant="ghost"
+            disabled={claiming}
+            onPress={() => setState({ status: 'accepted', result })}
+          />
+        </View>
+        {dialog}
+      </ThemedView>
+    );
+  }
+
   if (state.status === 'accepted') {
-    const { result } = state;
+    const { result, claimedName } = state;
     return (
       <ThemedView style={styles.container}>
         {result.kind === 'friend' ? (
@@ -189,7 +327,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
           />
         ) : null}
         <ThemedText type="subtitle" style={styles.centered}>
-          {acceptedCopy(result)}
+          {acceptedCopy(result, claimedName)}
         </ThemedText>
         <View style={styles.actions}>
           {result.kind === 'group' ? (
@@ -201,6 +339,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
             onPress={onClose}
           />
         </View>
+        {dialog}
       </ThemedView>
     );
   }
@@ -250,5 +389,23 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     gap: Spacing.two,
     marginTop: Spacing.four,
+  },
+  claimList: {
+    alignSelf: 'stretch',
+    flexGrow: 0,
+  },
+  claimListContent: {
+    gap: Spacing.two,
+  },
+  claimRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.medium,
+  },
+  claimText: {
+    flex: 1,
   },
 });

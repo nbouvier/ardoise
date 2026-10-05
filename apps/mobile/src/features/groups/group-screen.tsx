@@ -57,6 +57,7 @@ import { transactionsChanged } from '@/features/transactions/transactions-change
 import { useBalances } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/lib/api/errors';
 import {
   addGroupMembers,
   deleteGroup,
@@ -71,6 +72,7 @@ import { CreateGroupScreen } from './create-group-screen';
 import { GroupActionsMenu } from './group-actions-menu';
 import { InvitePanel } from './invite-panel';
 import { groupsChanged } from './groups-changed';
+import { usePlaceholderActions } from './placeholder-actions';
 import { useGroup } from './use-group';
 import { useDialog } from '@/components/use-dialog';
 import { useGroupRowActions } from './use-group-row-actions';
@@ -149,6 +151,11 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   // refreshes it from wherever the form was opened, and the tab is not
   // mounted while another one is showing.
   const balancesResult = useBalances(groupId);
+  const placeholderActions = usePlaceholderActions({
+    group,
+    readOnly: group?.readOnly ?? true,
+    onChanged: (updated) => (updated ? set(updated) : refresh()),
+  });
 
   const closeTransaction = useCallback(() => {
     setTransactionOpen(false);
@@ -193,7 +200,11 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
       return true;
     } catch (error: unknown) {
       logger.warn(`groups.${what}.failed`, errorFields(error));
-      inform('That didn’t work', 'Check your connection and try again.');
+      if (error instanceof ApiError && error.code === 'placeholder_name_taken') {
+        inform('That name is taken', 'Someone in this group already has one of those names.');
+      } else {
+        inform('That didn’t work', 'Check your connection and try again.');
+      }
       return false;
     } finally {
       setBusy(false);
@@ -270,7 +281,12 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   // belong to every ancestor.
   const pairRooted = group.pairRooted;
   const isOwner = group.viewerRole === 'owner';
-  const alone = group.memberCount === 1;
+  // Alone among the members with an account: placeholders never keep a group
+  // going, so leaving then deletes it with them (`docs/specs/placeholder-members.md`).
+  const alone = group.members.filter((member) => !member.placeholder).length === 1;
+  const placeholderNames = group.members
+    .filter((member) => member.placeholder)
+    .map((member) => member.name);
   const hasSubgroups = group.subgroupCount > 0;
 
   function openGroup(id: string) {
@@ -317,8 +333,10 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
     // Alone, leaving deletes the group — say so rather than surprise them.
     // Any sub-groups come with the same loss, since leaving cascades down.
     const scope = hasSubgroups ? ' and every sub-group nested inside it' : '';
+    const withThem =
+      placeholderNames.length > 0 ? `, with ${placeholderNames.join(', ')},` : '';
     const warning = alone
-      ? `Leave “${group!.name}”? You’re the only member, so the group${scope} is deleted.`
+      ? `Leave “${group!.name}”? You’re the only member on Ardoise, so the group${scope}${withThem} is deleted.`
       : `Leave “${group!.name}”?${hasSubgroups ? ' This also removes you from its sub-groups.' : ''}`;
 
     confirm({
@@ -526,9 +544,9 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           <InvitePanel
             group={group}
             busy={busy}
-            onAdd={(memberIds) => {
+            onAdd={(people) => {
               setInviting(false);
-              void run('members.add', () => addGroupMembers(authorizedFetch, groupId, memberIds));
+              void run('members.add', () => addGroupMembers(authorizedFetch, groupId, people));
             }}
             onClose={() => setInviting(false)}
           />
@@ -544,6 +562,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             busy={busy}
             viewerId={viewerId}
             onInvite={() => setInviting(true)}
+            onPlaceholderPress={placeholderActions.available ? placeholderActions.open : undefined}
             onRename={renameGroup}
             onArchiveToggle={confirmArchive}
             onLeave={confirmLeave}
@@ -615,6 +634,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           parentId={groupId}
           parentTrail={[...group.ancestors, { id: group.id, name: group.name }]}
           pairRooted={pairRooted}
+          parentPlaceholders={group.members.filter((member) => member.placeholder)}
           onCreated={(created) => {
             groupsChanged.notify();
             setSheet(null);
@@ -626,6 +646,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
 
       {dialog}
       {subgroupActions.dialog}
+      {placeholderActions.element}
     </DismissiblePage>
   );
 }
@@ -892,6 +913,7 @@ function ManageTab({
   busy,
   viewerId,
   onInvite,
+  onPlaceholderPress,
   onRename,
   onArchiveToggle,
   onLeave,
@@ -910,6 +932,8 @@ function ManageTab({
   busy: boolean;
   viewerId: string | null;
   onInvite: () => void;
+  /** Opens a placeholder member's actions; absent when there are none to offer. */
+  onPlaceholderPress?: (member: GroupMember) => void;
   onRename: (name: string) => Promise<boolean>;
   onArchiveToggle: () => void;
   onLeave: () => void;
@@ -958,7 +982,16 @@ function ManageTab({
         <Card style={styles.manageSection}>
           <View style={styles.members}>
             {orderedMembers.map((member) => (
-              <MemberRow key={member.id} member={member} isViewer={member.id === viewerId} />
+              <MemberRow
+                key={member.id}
+                member={member}
+                isViewer={member.id === viewerId}
+                onPress={
+                  member.placeholder && onPlaceholderPress
+                    ? () => onPlaceholderPress(member)
+                    : undefined
+                }
+              />
             ))}
           </View>
         </Card>
@@ -1204,11 +1237,24 @@ function GroupNameField({
   );
 }
 
-function MemberRow({ member, isViewer }: { member: GroupMember; isViewer: boolean }) {
+/**
+ * One member of the Manage tab's list. A placeholder member is tagged "Not on
+ * Ardoise" in the neutral surface, and its row opens its own actions when
+ * there are any (`docs/specs/placeholder-members.md`).
+ */
+function MemberRow({
+  member,
+  isViewer,
+  onPress,
+}: {
+  member: GroupMember;
+  isViewer: boolean;
+  onPress?: () => void;
+}) {
   const theme = useTheme();
 
-  return (
-    <View style={styles.memberRow}>
+  const content = (
+    <>
       <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
       <ThemedText style={styles.memberName}>{member.name}</ThemedText>
       <View style={styles.memberTags}>
@@ -1219,9 +1265,33 @@ function MemberRow({ member, isViewer }: { member: GroupMember; isViewer: boolea
             </ThemedText>
           </View>
         ) : null}
+        {member.placeholder ? (
+          <View style={[styles.memberTag, { backgroundColor: theme.backgroundElement }]}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Not on Ardoise
+            </ThemedText>
+          </View>
+        ) : null}
         {isViewer ? <MeTag /> : null}
       </View>
-    </View>
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={styles.memberRow}>{content}</View>;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${member.name}, not on Ardoise`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.memberRow,
+        styles.memberRowPressable,
+        pressed && { backgroundColor: theme.primarySoft },
+      ]}>
+      {content}
+    </Pressable>
   );
 }
 
@@ -1394,6 +1464,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: Spacing.one,
+  },
+  // A pressable row's wash reaches past the text, the space taken back so its
+  // content stays aligned with the rows around it.
+  memberRowPressable: {
+    paddingHorizontal: Spacing.two,
+    marginHorizontal: -Spacing.two,
+    borderRadius: Radius.medium,
   },
   memberName: {
     flex: 1,

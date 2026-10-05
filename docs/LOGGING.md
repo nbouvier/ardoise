@@ -104,6 +104,10 @@ and after: never their name, e-mail address, or an amount they lose.
 - Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
   `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`,
   `auth.account.deleted`. Never log tokens.
+- Placeholder members (`docs/specs/placeholder-members.md`): `groups.placeholders.load.failed`
+  (the claim question, "+ Invite" or a claim's figures could not load — the flow goes on
+  without them), `groups.placeholder.claim.failed`, `groups.placeholder.rename.failed`,
+  `groups.placeholder.remove.failed` (warn, with `errorFields`). Never the placeholder's name.
 - Account deletion (`docs/specs/account-deletion.md`): `account.deletion_preview.failed`
   and `account.delete.failed` (warn, with `errorFields`) — the page stays, with a retry.
 

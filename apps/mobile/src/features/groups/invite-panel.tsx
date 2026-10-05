@@ -1,32 +1,70 @@
-import type { GroupDetail } from '@ardoise/shared';
-import { useState } from 'react';
+import type { ClaimablePlaceholder, GroupDetail } from '@ardoise/shared';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/features/auth/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { fetchPlaceholders } from '@/lib/api/groups';
+import { errorFields, logger } from '@/lib/logger';
 
 import { FriendPickerCard } from './friend-picker';
 import { GroupInviteScreen } from './group-invite-screen';
+import { OtherParticipants } from './other-participants';
 
 export interface InvitePanelProps {
   group: GroupDetail;
   busy: boolean;
-  onAdd: (memberIds: string[]) => void;
+  /** Friends and the tree's placeholders by id, new placeholders by name. */
+  onAdd: (people: { memberIds: string[]; placeholderNames: string[] }) => void;
   onClose: () => void;
 }
 
 /**
- * What "+ Invite" swaps the Manage tab's content for: both ways to bring
+ * What "+ Invite" swaps the Manage tab's content for: every way to bring
  * someone in, on one page. Pick from your friends up top (the list scrolls when
- * it runs out of room, and "Add to group" follows it up when it doesn't), and
- * the group's invitation link, for anyone else, sits at the bottom.
+ * it runs out of room), add people by name below it — placeholder members,
+ * including the tree's ones not in this group yet
+ * (`docs/specs/placeholder-members.md`) — and "Add to group" follows them up.
+ * The group's invitation link, for anyone else, sits at the bottom.
  */
 export function InvitePanel({ group, busy, onAdd, onClose }: InvitePanelProps) {
   const theme = useTheme();
+  const { authorizedFetch } = useAuth();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [placeholderNames, setPlaceholderNames] = useState<string[]>([]);
+  const [treePlaceholders, setTreePlaceholders] = useState<readonly ClaimablePlaceholder[]>([]);
   const members = new Set(group.members.map((member) => member.id));
+
+  // The tree's placeholders, so a sub-group can take its parent's. Without
+  // them the page still works: only new names can be added then.
+  useEffect(() => {
+    let live = true;
+    fetchPlaceholders(authorizedFetch, group.id)
+      .then(({ placeholders }) => {
+        if (live) {
+          setTreePlaceholders(placeholders);
+        }
+      })
+      .catch((error: unknown) => logger.warn('groups.placeholders.load.failed', errorFields(error)));
+    return () => {
+      live = false;
+    };
+  }, [authorizedFetch, group.id]);
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const nothingToAdd = selected.size === 0 && placeholderNames.length === 0;
 
   return (
     <View style={styles.panel}>
@@ -34,24 +72,21 @@ export function InvitePanel({ group, busy, onAdd, onClose }: InvitePanelProps) {
         <ThemedText type="overline" themeColor="textSecondary">
           Add friends
         </ThemedText>
-        <FriendPickerCard
-          selected={selected}
-          onToggle={(id) =>
-            setSelected((current) => {
-              const next = new Set(current);
-              if (!next.delete(id)) {
-                next.add(id);
-              }
-              return next;
-            })
-          }
-          lockedIds={members}
+        <FriendPickerCard selected={selected} onToggle={toggle} lockedIds={members} />
+        <OtherParticipants
+          names={placeholderNames}
+          onNamesChange={setPlaceholderNames}
+          available={treePlaceholders.filter((placeholder) => !members.has(placeholder.id))}
+          selectedIds={selected}
+          onToggle={toggle}
+          takenNames={treePlaceholders.map((placeholder) => placeholder.name)}
+          disabled={busy}
         />
         <Button
           label="Add to group"
           busy={busy}
-          disabled={selected.size === 0}
-          onPress={() => onAdd([...selected])}
+          disabled={nothingToAdd}
+          onPress={() => onAdd({ memberIds: [...selected], placeholderNames })}
         />
       </View>
 
