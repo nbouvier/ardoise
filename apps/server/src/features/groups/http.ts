@@ -17,6 +17,11 @@ const groupAccessFailures: Record<GroupAccessReason, { status: number; error: st
   cannot_remove_owner: { status: 409, error: 'cannot_remove_owner' },
   not_friends: { status: 400, error: 'not_friends' },
   max_depth_reached: { status: 409, error: 'max_depth_reached' },
+  // The caller is a member here, so a placeholder's existence is no secret:
+  // gone means claimed or removed by someone else.
+  placeholder_not_found: { status: 404, error: 'placeholder_not_found' },
+  placeholder_name_taken: { status: 409, error: 'placeholder_name_taken' },
+  already_claimed: { status: 409, error: 'already_claimed' },
 };
 
 export interface GroupAccessFailure {

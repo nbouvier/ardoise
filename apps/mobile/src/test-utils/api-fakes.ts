@@ -81,6 +81,7 @@ export const groupDetail = {
   subgroups: [],
   readOnly: false,
   pairRooted: false,
+  viewerCanClaim: false,
 };
 
 export const transaction = {

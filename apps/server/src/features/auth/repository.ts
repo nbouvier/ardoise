@@ -45,7 +45,12 @@ export function createAuthRepository(db: Database): AuthRepository {
     },
 
     async findUserById(id) {
-      const [row] = await db.select().from(users).where(eq(users.id, id));
+      // Accounts only: a placeholder member is stored alongside them but is
+      // nobody to authenticate (`docs/specs/placeholder-members.md`).
+      const [row] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, id), eq(users.kind, 'account')));
       return row;
     },
 

@@ -183,6 +183,10 @@ or box**; a screen that styles its own is a bug in this document.
   onConfirm })` asks, `inform(title, message)` tells with a single "OK" (`confirmOnly`,
   no Cancel), and the screen renders the hook's `dialog` once. `useGroupRowActions`
   exposes its own `dialog` for the screens that use it.
+- **`PromptDialog`** (`components/prompt-dialog.tsx`) — the same card with a text field
+  between the title and the buttons, for asking one short value (renaming a placeholder
+  member): ghost Cancel, primary confirm, disabled while the field is blank. Mounted per
+  thing asked about (keyed by it), so each opening starts from that thing's value.
 - **`FavoriteStar`** — the favorite toggle (`docs/specs/favorites.md`): an unfilled
   `textSecondary` star, filled `accent` when favorited — the fill alone carries the state,
   no label. Always a sibling of whatever `Pressable` opens the row or screen it sits on,
@@ -532,15 +536,25 @@ not a separate line — with the brand **"+ Invite"** text action at its end (th
 as "+ Create" and "+ Add"), and the member list itself (avatar + name, a brand-violet "Owner"
 tag on the owner — always the first row, whatever order the server listed them in, plus an
 accent **"Me"** tag on the viewer's own row, independent of it — both can land on the same
-row) in its own surface card. Below that, the management actions. "+ Invite" **swaps the Manage tab's
+row) in its own surface card. A **placeholder member** carries a neutral **"Not on
+Ardoise"** tag (`backgroundElement`, secondary text) and its row is pressable — a
+`primarySoft` wash when pressed — opening a `DropdownMenu`: **This is me** (`account` icon,
+only while `viewerCanClaim`), **Rename** (`pencil`, through `PromptDialog`) and **Remove**
+(`trash`, danger). None of them in a read-only group. This is me and Remove each confirm
+through `ConfirmDialog`, saying what they do: "You are Alex?" — "Alex’s 3 transactions
+become yours. In this group, Alex owes 2.50. This can’t be undone." / "That’s me"; Remove
+from the root says their part becomes “Others” and is lost, from a sub-group that they stay
+in the groups above (`src/features/groups/placeholder-actions.tsx`). Below that, the
+management actions. "+ Invite" **swaps the Manage tab's
 own content for the invite page** (`InvitePanel`) — no modal, no navigation; the banner
 and tabs stay, and picking any tab leaves it. Both ways in are on it, no menu between,
 told apart by a hairline. "Add friends" (overline section title) heads the friend picker,
 in the same surface card as the member list, headed by an overline count ("0 selected",
 "2 selected") where the member list says "Members (n)". The card **always fills the room
 the link leaves** even with few friends, its list scrolling when it runs out; friends
-already in the group are listed too, ticked and disabled. "Add to group" closes the
-section, under the card. "Invitation link" (overline, its share / copy / generate icons at
+already in the group are listed too, ticked and disabled. `OtherParticipants` follows the
+card, then "Add to group" closes the section, enabled once a friend, a placeholder or a
+name is picked. "Invitation link" (overline, its share / copy / generate icons at
 the end of that line) over a surface card holding just the link, and its small expiry
 line, sits below the hairline, and a **"Done"** button closes the page back to the member
 list (as does adding friends), spaced clear of the link. (A modal was tried and rejected.)
@@ -785,8 +799,9 @@ A sheet with the classic banner (`ScreenHeader` with `wash`): "New group", and a
 
 - **Create a group**, on top: an `overline`, the name field (autofocused, 60 chars), a
   hint, then the friends in a `Card` (`FriendPickerCard` — "N selected", the list scrolling
-  inside the room left) and the "Create group" button. Creating with nobody selected is
-  allowed — a link can come later.
+  inside the room left), then **Add other participants** (`OtherParticipants`, below) and
+  the "Create group" button. Creating with nobody selected is allowed — a link can come
+  later.
 - an **`OrDivider`**;
 - **Join a group**, at the bottom: the invitation-code entry (below). Submitting a code
   folds the page away and hands off to `InvitePrompt`, which is what actually confirms
@@ -796,8 +811,19 @@ The same screen creates a **sub-group** when opened with a `parentId`: the title
 reads "New group", with the parent's **breadcrumb** (its ancestors, then the parent itself)
 on a quiet line above it (`ScreenHeader`'s `above`), the button reads "Create sub-group",
 the parent is implicit, and there is no Join part (nothing to join from inside a group). When the parent is `pairRooted` the
-friend picker is **not shown at all**, replaced by a short note — the only other allowed
-person is added automatically.
+friend picker is **not shown at all**, nor Add other participants, replaced by a short note
+— the only other allowed person is added automatically. Otherwise the parent's placeholder
+members show first in Add other participants, as checkbox `Pill`s.
+
+**`OtherParticipants`** (`src/features/groups/other-participants.tsx`,
+`docs/specs/placeholder-members.md`) — an `overline` "Add other participants", a `small`
+secondary line ("For people not on Ardoise yet. When they join, they can say it’s them."),
+the tree's placeholders not in the group yet as checkbox `Pill`s (a sub-group's, or "+
+Invite"'s), then a name field ("Name", 60 chars) with a brand `plus` `IconButton` at its
+end — the keyboard's submit adds too, keeping the field focused for the next name. Each
+added name is a selected `Pill` reading "Alex ✕", tapped to take it back off. A name
+already in the list or in the tree, whatever the case, is refused under the field in the
+danger colour before anything is sent. Used by New group and by the "+ Invite" page.
 
 ### Friends (`src/features/friends/friends-screen.tsx`)
 
@@ -857,6 +883,15 @@ a deep link or was typed, and it is mounted above the tabs. Centred avatar, what
 leads to, and Accept / Join group / Not now. Terminal states: friends now, already
 friends, joined (with "Open group"), already a member, link no longer valid, your own
 link, and a retryable connection error.
+
+Joining a group whose tree has placeholder members, when the person may still claim one,
+first asks **"Is one of these you?"** (`src/features/invites/accept-invite-screen.tsx`): a
+centred line on what it means, one `backgroundElement` row per placeholder (avatar, name in
+`smallBold`, "3 transactions" in secondary `small`), and a ghost **"I’m not on the list"**.
+A row asks once more through `ConfirmDialog` ("You are Alex?", with what it brings) before
+claiming; joined, the title reads "You joined “Trip” as Alex". If the one picked was
+claimed meanwhile, a notice says so and the rest stay offered. Joined already, or no
+longer able to claim: no question.
 
 ## Navigation
 

@@ -71,9 +71,10 @@ again.
   other members' balances change by exactly that amount. Statistics keep counting the
   other members' shares, as they do for any Others transaction.
 - **Memberships**: the user leaves every group and sub-group they are in. Where they were
-  the owner, ownership passes to the remaining member who joined that group earliest. A
-  group left with no member at all is deleted (its sub-groups are necessarily empty too,
-  `docs/specs/groups.md`).
+  the owner, ownership passes to the remaining member with an account who joined that
+  group earliest. A group left with no member who has an account is deleted, with its
+  placeholder members (`docs/specs/placeholder-members.md`) — its sub-groups are
+  necessarily in the same state (`docs/specs/groups.md`).
 - **Invitation links** the user created stop working: their friend link, and any group
   link they were the one to generate. Any remaining member of such a group can generate a
   new one.
@@ -129,7 +130,8 @@ again.
 - **A transaction in an archived group**: anonymised like any other. Archiving stops
   members from editing; it does not keep a deleted account's data.
 - **The user owns a sub-group but not its parent**, or the reverse: each group is handled
-  on its own — ownership passes to that group's own longest-standing member.
+  on its own — ownership passes to that group's own longest-standing member with an
+  account, never to a placeholder.
 - **Two members joined the same group at the same instant**: ownership goes to one of
   them, the same one every time (stable order).
 - **The user deletes their account from one device while another device is signed in**:
@@ -171,7 +173,8 @@ again.
 - [ ] After deletion, every remaining member's balance in such a group is exactly what it
       would be had the user's part always been Others, and the balances still sum to zero.
 - [ ] A group the user owned with other members left now has the earliest-joined of them
-      as its owner, who can delete it; a group where the user was alone no longer exists.
+      as its owner, who can delete it; a group where the user was the only member with an
+      account no longer exists, placeholders included.
 - [ ] A transfer whose two ends were the user and an already-deleted account no longer
       exists; an expense paid by and shared only with Others still does.
 - [ ] Deletion is all-or-nothing: if it fails partway, the account and every piece of data

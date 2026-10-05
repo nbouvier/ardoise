@@ -1,4 +1,4 @@
-import type { AcceptInviteResult, InvitePreview } from '@ardoise/shared';
+import type { AcceptInviteResult, InvitePreview, PlaceholdersResponse } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -48,6 +48,14 @@ jest.mock('@/lib/api/invites', () => ({
   acceptInvite: () => mockAcceptInvite(),
 }));
 
+const mockFetchPlaceholders = jest.fn<() => Promise<PlaceholdersResponse>>();
+const mockClaimPlaceholder = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+
+jest.mock('@/lib/api/groups', () => ({
+  fetchPlaceholders: () => mockFetchPlaceholders(),
+  claimPlaceholder: (...args: unknown[]) => mockClaimPlaceholder(...args),
+}));
+
 const onClose = jest.fn();
 const onAccepted = jest.fn();
 
@@ -59,6 +67,8 @@ beforeEach(() => {
   mockPush.mockReset();
   onClose.mockReset();
   onAccepted.mockReset();
+  mockFetchPlaceholders.mockReset().mockResolvedValue({ placeholders: [], viewerCanClaim: true });
+  mockClaimPlaceholder.mockReset().mockResolvedValue({});
 });
 
 function renderScreen() {
@@ -185,6 +195,93 @@ describe('AcceptInviteScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: /join group/i }));
 
       expect(await screen.findByText(/already in/)).toBeTruthy();
+    });
+
+    describe('with placeholder members', () => {
+      const alex = {
+        id: '77777777-7777-4777-8777-777777777777',
+        name: 'Alex',
+        transactionCount: 3,
+        balanceCents: 1200,
+      };
+      const sam = {
+        id: '88888888-8888-4888-8888-888888888888',
+        name: 'Sam',
+        transactionCount: 1,
+        balanceCents: 0,
+      };
+
+      beforeEach(() => {
+        mockFetchPlaceholders.mockResolvedValue({ placeholders: [alex, sam], viewerCanClaim: true });
+      });
+
+      async function join() {
+        await renderScreen();
+        await screen.findByText(/invited you to/);
+        await fireEvent.press(screen.getByRole('button', { name: /join group/i }));
+      }
+
+      it('asks whether the new member is one of them, after joining', async () => {
+        await join();
+
+        expect(await screen.findByText('Is one of these you?')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'I’m Alex' })).toBeTruthy();
+        expect(screen.getByText('3 transactions')).toBeTruthy();
+        expect(screen.getByText('1 transaction')).toBeTruthy();
+        // Already in: the question comes after joining, never instead of it.
+        expect(onAccepted).toHaveBeenCalled();
+      });
+
+      it('claims the one picked once confirmed, saying what it brings', async () => {
+        await join();
+        await fireEvent.press(await screen.findByRole('button', { name: 'I’m Alex' }));
+
+        expect(
+          screen.getByText(
+            'Alex’s 3 transactions become yours. In “Corsica 2026”, Alex is owed 12.00. This can’t be undone.',
+          ),
+        ).toBeTruthy();
+        expect(mockClaimPlaceholder).not.toHaveBeenCalled();
+        await fireEvent.press(screen.getByRole('button', { name: 'That’s me' }));
+
+        expect(mockClaimPlaceholder).toHaveBeenCalledWith(expect.anything(), group.id, alex.id);
+        expect(await screen.findByText('You joined “Corsica 2026” as Alex')).toBeTruthy();
+      });
+
+      it('leaves a plain member who is not on the list', async () => {
+        await join();
+
+        await fireEvent.press(await screen.findByRole('button', { name: 'I’m not on the list' }));
+
+        expect(await screen.findByText('You joined “Corsica 2026”')).toBeTruthy();
+        expect(mockClaimPlaceholder).not.toHaveBeenCalled();
+      });
+
+      it('offers the others when the one picked was claimed meanwhile', async () => {
+        mockClaimPlaceholder.mockRejectedValue(new ApiError(404, 'placeholder_not_found'));
+        await join();
+        await fireEvent.press(await screen.findByRole('button', { name: 'I’m Alex' }));
+        await fireEvent.press(screen.getByRole('button', { name: 'That’s me' }));
+
+        expect(await screen.findByText('Alex isn’t in the group any more')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'I’m Alex' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'I’m Sam' })).toBeTruthy();
+      });
+
+      it('does not ask someone who was already a member, or who already claimed one', async () => {
+        mockAcceptInvite.mockResolvedValue({ kind: 'group', group, alreadyMember: true });
+        await join();
+        expect(await screen.findByText(/already in/)).toBeTruthy();
+        expect(mockFetchPlaceholders).not.toHaveBeenCalled();
+      });
+
+      it('does not ask when the viewer can no longer claim', async () => {
+        mockFetchPlaceholders.mockResolvedValue({ placeholders: [alex], viewerCanClaim: false });
+        await join();
+
+        expect(await screen.findByText('You joined “Corsica 2026”')).toBeTruthy();
+        expect(screen.queryByText('Is one of these you?')).toBeNull();
+      });
     });
 
     it('treats a group that is gone as a dead link', async () => {

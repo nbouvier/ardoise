@@ -70,6 +70,13 @@ release, outside the server process, and logs JSON on stdout like the server doe
 | `transactions.created`        | info  | `userId`, `groupId`, `transactionId`, `kind`, `splitMode`, `participantCount` | A transaction was recorded. |
 | `transactions.updated`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was edited. |
 | `transactions.deleted`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was deleted. |
+| `groups.placeholder.claimed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsRewritten`, `transfersDeleted`, `membershipsGained` | A member said "This is me": the placeholder's transactions became theirs (`docs/specs/placeholder-members.md`). |
+| `groups.placeholder.removed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsAnonymised`, `transfersDeleted` | A placeholder was taken out of its tree; its part became Others. |
+| `groups.placeholder.renamed`  | info  | `userId`, `groupId`, `placeholderId`                        | A placeholder was renamed. |
+
+`groups.created` and `groups.members.added` also carry `placeholdersCreated`. **Never** log
+a placeholder's name: it is personal data about someone who is not on Ardoise, typed by a
+member. Its id is enough.
 
 **Never** log a transaction's title, comment or amount — user content and financial data,
 not diagnostic context. The transaction id is enough to look it up.
@@ -97,6 +104,10 @@ and after: never their name, e-mail address, or an amount they lose.
 - Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
   `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`,
   `auth.account.deleted`. Never log tokens.
+- Placeholder members (`docs/specs/placeholder-members.md`): `groups.placeholders.load.failed`
+  (the claim question, "+ Invite" or a claim's figures could not load — the flow goes on
+  without them), `groups.placeholder.claim.failed`, `groups.placeholder.rename.failed`,
+  `groups.placeholder.remove.failed` (warn, with `errorFields`). Never the placeholder's name.
 - Account deletion (`docs/specs/account-deletion.md`): `account.deletion_preview.failed`
   and `account.delete.failed` (warn, with `errorFields`) — the page stays, with a retry.
 

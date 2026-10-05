@@ -2,9 +2,11 @@ import {
   groupResponseSchema,
   groupsListResponseSchema,
   inviteResponseSchema,
+  placeholdersResponseSchema,
   type GroupDetail,
   type GroupSummary,
   type Invite,
+  type PlaceholdersResponse,
 } from '@ardoise/shared';
 
 import { expectNoContent, parsedJson, type AuthorizedFetch } from './client';
@@ -36,9 +38,14 @@ export async function fetchGroup(
   return (await parsedJson(response, groupResponseSchema)).group;
 }
 
+/**
+ * `memberIds` are friends — or, for a sub-group, placeholders of its tree;
+ * `placeholderNames` creates new placeholder members
+ * (`docs/specs/placeholder-members.md`).
+ */
 export async function createGroup(
   fetcher: AuthorizedFetch,
-  input: { name: string; memberIds?: string[]; parentId?: string },
+  input: { name: string; memberIds?: string[]; placeholderNames?: string[]; parentId?: string },
 ): Promise<GroupDetail> {
   const response = await fetcher('/groups', { method: 'POST', body: input });
   return (await parsedJson(response, groupResponseSchema)).group;
@@ -77,15 +84,55 @@ export async function deleteGroup(
   await expectNoContent(await fetcher(groupPath(groupId), { method: 'DELETE' }));
 }
 
+/** Friends or placeholders of the tree (`memberIds`), and new placeholders, at once. */
 export async function addGroupMembers(
   fetcher: AuthorizedFetch,
   groupId: string,
-  memberIds: string[],
+  people: { memberIds?: string[]; placeholderNames?: string[] },
 ): Promise<GroupDetail> {
   const response = await fetcher(`${groupPath(groupId)}/members`, {
     method: 'POST',
-    body: { memberIds },
+    body: people,
   });
+  return (await parsedJson(response, groupResponseSchema)).group;
+}
+
+/**
+ * Every placeholder of the group's tree, with what claiming it would take
+ * over, and whether the caller may still claim one
+ * (`docs/specs/placeholder-members.md`).
+ */
+export async function fetchPlaceholders(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+): Promise<PlaceholdersResponse> {
+  const response = await fetcher(`${groupPath(groupId)}/placeholders`);
+  return parsedJson(response, placeholdersResponseSchema);
+}
+
+export async function renamePlaceholder(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+  placeholderId: string,
+  name: string,
+): Promise<GroupDetail> {
+  const response = await fetcher(
+    `${groupPath(groupId)}/placeholders/${encodeURIComponent(placeholderId)}`,
+    { method: 'PATCH', body: { name } },
+  );
+  return (await parsedJson(response, groupResponseSchema)).group;
+}
+
+/** "This is me": the placeholder's transactions and memberships become the caller's. */
+export async function claimPlaceholder(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+  placeholderId: string,
+): Promise<GroupDetail> {
+  const response = await fetcher(
+    `${groupPath(groupId)}/placeholders/${encodeURIComponent(placeholderId)}/claim`,
+    { method: 'POST' },
+  );
   return (await parsedJson(response, groupResponseSchema)).group;
 }
 

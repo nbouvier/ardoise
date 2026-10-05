@@ -3,6 +3,7 @@ import type {
   FriendSummary,
   GroupDetail,
   Invite,
+  PlaceholdersResponse,
   SubgroupSummary,
   Transaction,
   TransactionsListResponse,
@@ -52,6 +53,7 @@ const trip: GroupDetail = {
   ancestors: [],
   readOnly: false,
   pairRooted: false,
+  viewerCanClaim: false,
 };
 
 /** The implicit group two friends share: named after the other person. */
@@ -102,6 +104,11 @@ const mockJoinGroup = jest.fn<() => Promise<GroupDetail>>();
 const mockFetchGroupInvite = jest.fn<() => Promise<Invite>>();
 const mockSetGroupFavorite = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
 const mockUpdateGroup = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
+const mockAddGroupMembers = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
+const mockRemoveGroupMember = jest.fn<(...args: unknown[]) => Promise<void>>();
+const mockFetchPlaceholders = jest.fn<() => Promise<PlaceholdersResponse>>();
+const mockClaimPlaceholder = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
+const mockRenamePlaceholder = jest.fn<(...args: unknown[]) => Promise<GroupDetail>>();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 
@@ -119,12 +126,15 @@ jest.mock('@/lib/api/groups', () => ({
   createGroup: jest.fn(),
   updateGroup: (...args: unknown[]) => mockUpdateGroup(...args),
   deleteGroup: jest.fn(),
-  addGroupMembers: jest.fn(),
-  removeGroupMember: jest.fn(),
+  addGroupMembers: (...args: unknown[]) => mockAddGroupMembers(...args),
+  removeGroupMember: (...args: unknown[]) => mockRemoveGroupMember(...args),
   joinGroup: () => mockJoinGroup(),
   setGroupFavorite: (...args: unknown[]) => mockSetGroupFavorite(...args),
   fetchGroupInvite: () => mockFetchGroupInvite(),
   rotateGroupInvite: jest.fn(),
+  fetchPlaceholders: () => mockFetchPlaceholders(),
+  claimPlaceholder: (...args: unknown[]) => mockClaimPlaceholder(...args),
+  renamePlaceholder: (...args: unknown[]) => mockRenamePlaceholder(...args),
 }));
 
 jest.mock('@/lib/api/transactions', () => ({
@@ -160,6 +170,11 @@ beforeEach(() => {
   });
   mockSetGroupFavorite.mockReset().mockResolvedValue({ ...trip, favorite: true });
   mockUpdateGroup.mockReset().mockResolvedValue(trip);
+  mockAddGroupMembers.mockReset().mockResolvedValue(trip);
+  mockRemoveGroupMember.mockReset().mockResolvedValue(undefined);
+  mockFetchPlaceholders.mockReset().mockResolvedValue({ placeholders: [], viewerCanClaim: false });
+  mockClaimPlaceholder.mockReset().mockResolvedValue(trip);
+  mockRenamePlaceholder.mockReset().mockResolvedValue(trip);
   mockPush.mockReset();
   mockBack.mockReset();
 });
@@ -699,6 +714,142 @@ describe('GroupScreen', () => {
     } finally {
       mockFriendList.length = 0;
     }
+  });
+
+  describe('placeholder members', () => {
+    const alex = {
+      id: '77777777-7777-4777-8777-777777777777',
+      name: 'Alex',
+      picture: null,
+      placeholder: true as const,
+      role: 'member' as const,
+    };
+    const withAlex: GroupDetail = {
+      ...trip,
+      memberCount: 3,
+      members: [...trip.members, alex],
+      viewerCanClaim: true,
+    };
+
+    async function openAlex() {
+      mockFetchGroup.mockResolvedValue(withAlex);
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Alex, not on Ardoise' }));
+    }
+
+    it('adds people by name from "+ Invite", along with the friends picked', async () => {
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
+
+      await fireEvent.changeText(screen.getByLabelText('Participant name'), 'Sam');
+      await fireEvent.press(screen.getByRole('button', { name: 'Add participant' }));
+      await fireEvent.press(screen.getByRole('button', { name: /add to group/i }));
+
+      expect(mockAddGroupMembers).toHaveBeenCalledWith(expect.anything(), trip.id, {
+        memberIds: [],
+        placeholderNames: ['Sam'],
+      });
+    });
+
+    it('refuses a name already in the list before sending anything', async () => {
+      mockFetchPlaceholders.mockResolvedValue({
+        placeholders: [{ id: alex.id, name: 'Alex', transactionCount: 0, balanceCents: 0 }],
+        viewerCanClaim: false,
+      });
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Invite' }));
+      await waitFor(() => expect(mockFetchPlaceholders).toHaveBeenCalled());
+
+      await fireEvent.changeText(screen.getByLabelText('Participant name'), 'alex');
+      await fireEvent.press(screen.getByRole('button', { name: 'Add participant' }));
+
+      expect(await screen.findByText('There’s already someone called alex here.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /add to group/i })).toBeDisabled();
+    });
+
+    it('tags a placeholder and offers This is me, Rename and Remove', async () => {
+      await openAlex();
+
+      expect(screen.getByText('Not on Ardoise')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'This is me' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy();
+    });
+
+    it('no longer offers This is me once the viewer has claimed someone', async () => {
+      mockFetchGroup.mockResolvedValue({ ...withAlex, viewerCanClaim: false });
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Alex, not on Ardoise' }));
+
+      expect(screen.queryByRole('button', { name: 'This is me' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
+    });
+
+    it('says what a claim takes over before making it', async () => {
+      mockFetchPlaceholders.mockResolvedValue({
+        placeholders: [{ id: alex.id, name: 'Alex', transactionCount: 3, balanceCents: -250 }],
+        viewerCanClaim: true,
+      });
+      await openAlex();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'This is me' }));
+
+      expect(await screen.findByText('You are Alex?')).toBeTruthy();
+      expect(
+        screen.getByText(
+          'Alex’s 3 transactions become yours. In this group, Alex owes 2.50. This can’t be undone.',
+        ),
+      ).toBeTruthy();
+      expect(mockClaimPlaceholder).not.toHaveBeenCalled();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'That’s me' }));
+      expect(mockClaimPlaceholder).toHaveBeenCalledWith(expect.anything(), trip.id, alex.id);
+    });
+
+    it('says the part becomes Others before removing from the root group', async () => {
+      await openAlex();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Remove' }));
+
+      expect(await screen.findByText(/Their part in every transaction becomes “Others”/)).toBeTruthy();
+      expect(mockRemoveGroupMember).not.toHaveBeenCalled();
+      await fireEvent.press(screen.getByRole('button', { name: 'Remove' }));
+      expect(mockRemoveGroupMember).toHaveBeenCalledWith(expect.anything(), trip.id, alex.id);
+    });
+
+    it('renames through a prompt holding the current name', async () => {
+      await openAlex();
+
+      await fireEvent.press(screen.getByRole('button', { name: 'Rename' }));
+      const field = await screen.findByLabelText('Name');
+      expect(field).toHaveDisplayValue('Alex');
+      await fireEvent.changeText(field, 'Alexandra ');
+      await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockRenamePlaceholder).toHaveBeenCalledWith(
+        expect.anything(),
+        trip.id,
+        alex.id,
+        'Alexandra',
+      );
+    });
+
+    it('lets the owner leave when only placeholders remain, saying they go with the group', async () => {
+      mockFetchGroup.mockResolvedValue({
+        ...trip,
+        memberCount: 2,
+        members: [{ ...ada, role: 'owner' }, alex],
+      });
+      await render(<GroupScreen groupId={trip.id} initialTab="manage" />);
+
+      await fireEvent.press(await screen.findByRole('button', { name: /leave group/i }));
+
+      expect(
+        await screen.findByText(
+          'Leave “Corsica 2026”? You’re the only member on Ardoise, so the group, with Alex, is deleted.',
+        ),
+      ).toBeTruthy();
+    });
   });
 
   it('keeps deletion to the owner', async () => {

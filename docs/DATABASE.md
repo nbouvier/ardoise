@@ -56,17 +56,35 @@ npm run migrate --workspace @ardoise/server            # apply pending migration
 
 ### `users`
 
-A person who has signed in with Google.
+A person a group can name: someone who has signed in with Google (`kind = 'account'`), or
+a **placeholder member** known by name only (`kind = 'placeholder'`,
+`docs/specs/placeholder-members.md`).
 
-| Column       | Type          | Notes                                    |
-| ------------ | ------------- | ---------------------------------------- |
-| `id`         | uuid PK       | `gen_random_uuid()`                      |
-| `google_sub` | text, unique  | Stable Google subject id; sign-in lookup |
-| `email`      | text          | From the verified Google token           |
-| `name`       | text          | From the verified Google token           |
-| `picture`    | text, null    | Avatar URL, may be absent                |
-| `created_at` | timestamptz   | `now()`                                  |
-| `updated_at` | timestamptz   | `now()`; refreshed on profile change     |
+| Column                 | Type               | Notes                                                       |
+| ---------------------- | ------------------ | ----------------------------------------------------------- |
+| `id`                   | uuid PK            | `gen_random_uuid()`                                         |
+| `kind`                 | text               | `account` (default) or `placeholder`                        |
+| `google_sub`           | text, unique, null | Stable Google subject id; sign-in lookup. Accounts only     |
+| `email`                | text, null         | From the verified Google token. Accounts only               |
+| `name`                 | text               | From the verified Google token, or typed by a member        |
+| `picture`              | text, null         | Avatar URL, may be absent                                   |
+| `placeholder_group_id` | uuid FK, null      | → `groups.id`, `ON DELETE CASCADE`: a placeholder's tree root |
+| `created_at`           | timestamptz        | `now()`                                                     |
+| `updated_at`           | timestamptz        | `now()`; refreshed on profile change or rename              |
+
+Constraints: `users_kind_valid`; `users_account_shape` — an account, and only an account,
+has a Google subject and an e-mail, so a placeholder can never be matched by a sign-in;
+`users_placeholder_shape` — a placeholder, and only a placeholder, belongs to a group.
+`users_placeholder_name_unique` is a partial unique index on (`placeholder_group_id`,
+`lower(name)`) over placeholders: two placeholders of one tree never share a name.
+
+**A placeholder is stored with the accounts on purpose**: memberships, payers and shares
+name it exactly as they name an account, so balances, statistics and settle-up treat it
+as a member with no extra case, and claiming it is a matter of naming the account instead
+(`features/transactions/replace-party.ts`) before deleting it. Every rule about who is
+*left* in a group — the owner leaving, ownership passing on, a group emptied of people —
+counts accounts only. `findUserById` in the auth repository, the one lookup a token is
+resolved through, only returns accounts.
 
 ### `sessions`
 
@@ -177,6 +195,7 @@ grants access to a group**: every route resolves it before anything else.
 | `role`         | text             | `owner` or `member` (default `member`) |
 | `joined_at`    | timestamptz      | `now()`                            |
 | `favorited_at` | timestamptz null | Non-null → the viewer favorited this group (`docs/specs/favorites.md`) |
+| `claimed_placeholder_at` | timestamptz null | On a tree root's row: the member has claimed one of its placeholders |
 
 Constraints: `group_members_unique` on (`group_id`, `user_id`) — which also makes a
 repeated or concurrent join a no-op rather than a duplicate — and
@@ -236,7 +255,7 @@ An expense, income or transfer recorded in a group.
 | `occurred_on`   | date             | A calendar date, not a timestamp — no time zone drift      |
 | `comment`       | text, null       | Optional                                                   |
 | `category`      | text             | One of a fixed preset list; default `'other'`, never `NULL` |
-| `payer_id`      | uuid FK, null    | → `users.id`, `ON DELETE RESTRICT`; `NULL` is Others       |
+| `payer_id`      | uuid FK, null    | → `users.id`, checked at commit; `NULL` is Others          |
 | `split_mode`    | text             | `shares` or `amount`                                       |
 | `created_by`    | uuid FK, null    | → `users.id`, `ON DELETE SET NULL`; who recorded it        |
 | `created_at`    | timestamptz      | `now()`                                                     |
@@ -264,7 +283,7 @@ One member's share of a transaction — or Others'.
 | ---------------- | ----------- | -------------------------------------------------------------------- |
 | `id`             | uuid PK     | `gen_random_uuid()`                                                   |
 | `transaction_id` | uuid FK     | → `transactions.id`, `ON DELETE CASCADE`                              |
-| `user_id`        | uuid FK, null | → `users.id`, `ON DELETE RESTRICT`; `NULL` is Others                |
+| `user_id`        | uuid FK, null | → `users.id`, checked at commit; `NULL` is Others                   |
 | `share_cents`    | integer     | ≥ 0; `shares` mode's computed output, or `amount` mode's input        |
 | `weight`         | integer, null | Set only in `shares` mode: the input the split was computed from     |
 
@@ -287,9 +306,15 @@ past transactions, so history is not rewritten. `Σ share_cents = amount_cents` 
 transaction is the core invariant — not expressible as a single-row `CHECK`, so it is
 enforced by the service inside the same database transaction that writes both tables.
 
-**`payer_id` and `user_id` refuse a user's deletion (`ON DELETE RESTRICT`)**, unlike every
-other FK to `users.id`: cascading would delete every transaction the user paid for or
-shared, including ones the other members still count on. Account deletion
+**`payer_id` and `user_id` refuse a user's deletion**, unlike every other FK to
+`users.id`: cascading would delete every transaction the user paid for or shared,
+including ones the other members still count on. Both are `ON DELETE NO ACTION
+DEFERRABLE INITIALLY DEFERRED`, checked when the database transaction commits rather than
+row by row: deleting a group deletes its placeholders (`users.placeholder_group_id`) and
+its transactions in one statement, in no guaranteed order, and an immediate check would
+refuse the placeholder before its transactions were gone. drizzle cannot declare a
+deferrable key, so migration `0011` sets it by hand; a future migration that recreates
+either key must keep it. Account deletion
 (`docs/specs/account-deletion.md`) turns the user's payments and shares into Others first,
 so a deletion path that forgot to would fail instead of silently rewriting other people's
 history. `created_by` is only who recorded the transaction, so it is forgotten
@@ -334,6 +359,10 @@ accounts").
   row.
 - Deleting a **group** now also removes its transactions and their participants, the same
   way it already removes memberships and the invitation.
+- Deleting a **root group** removes its placeholder members (`users.placeholder_group_id`),
+  together with the transactions that name them — which is why the two person keys of
+  the ledger are checked at commit. Deleting a sub-group only removes the placeholders'
+  memberships there; they belong to the root.
 
 ## Current state
 
@@ -366,3 +395,9 @@ accounts").
   `ON DELETE RESTRICT`; `transactions.created_by` becomes nullable with
   `ON DELETE SET NULL`. Only constraints change, no data: nothing deletes users before
   this release.
+- Migration `0011_*` — placeholder members: `users.kind` (existing rows backfill to
+  `account` through the default), `google_sub` and `email` become nullable under
+  `users_account_shape`, `users.placeholder_group_id` and its partial unique name index,
+  `group_members.claimed_placeholder_at`; `transactions.payer_id` and
+  `transaction_participants.user_id` are recreated `DEFERRABLE INITIALLY DEFERRED` (edited
+  in by hand, see above).

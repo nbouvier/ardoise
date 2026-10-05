@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
+import { ApiError } from '@/lib/api/errors';
 
 import { CreateGroupScreen } from './create-group-screen';
 
@@ -155,6 +156,73 @@ describe('CreateGroupScreen', () => {
     expect(await screen.findByText(/couldn’t create the group/)).toBeTruthy();
     expect(screen.getByLabelText('Group name').props.value).toBe('Corsica 2026');
     expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  describe('other participants', () => {
+    async function addName(name: string) {
+      await fireEvent.changeText(screen.getByLabelText('Participant name'), name);
+      await fireEvent.press(screen.getByRole('button', { name: 'Add participant' }));
+    }
+
+    it('adds people by name, takes one back off, and sends the rest', async () => {
+      await renderScreen();
+      await fireEvent.changeText(screen.getByLabelText('Group name'), 'Corsica 2026');
+
+      await addName(' Alex ');
+      await addName('Sam');
+      await fireEvent.press(screen.getByRole('button', { name: 'Remove Sam' }));
+      await fireEvent.press(screen.getByRole('button', { name: /create group/i }));
+
+      expect(mockCreateGroup).toHaveBeenCalledWith({
+        name: 'Corsica 2026',
+        memberIds: [],
+        placeholderNames: ['Alex'],
+      });
+    });
+
+    it('refuses the same name twice, whatever the case', async () => {
+      await renderScreen();
+
+      await addName('Alex');
+      await addName('ALEX');
+
+      expect(screen.getByText('There’s already someone called ALEX here.')).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(1);
+    });
+
+    it('says so when the server finds a name already taken', async () => {
+      mockCreateGroup.mockRejectedValue(new ApiError(409, 'placeholder_name_taken'));
+      await renderScreen();
+      await fireEvent.changeText(screen.getByLabelText('Group name'), 'Corsica 2026');
+      await addName('Alex');
+
+      await fireEvent.press(screen.getByRole('button', { name: /create group/i }));
+
+      expect(await screen.findByText(/already has one of those names/)).toBeTruthy();
+    });
+
+    it('offers a sub-group its parent’s placeholders to pick', async () => {
+      const parentId = '44444444-4444-4444-8444-444444444444';
+      const alexId = '77777777-7777-4777-8777-777777777777';
+      await render(
+        <CreateGroupScreen
+          onCreated={onCreated}
+          onClose={onClose}
+          parentId={parentId}
+          parentPlaceholders={[{ id: alexId, name: 'Alex' }]}
+        />,
+      );
+      await fireEvent.changeText(screen.getByLabelText('Group name'), 'Ajaccio weekend');
+
+      await fireEvent.press(screen.getByRole('checkbox', { name: 'Alex' }));
+      await fireEvent.press(screen.getByRole('button', { name: /create sub-group/i }));
+
+      expect(mockCreateGroup).toHaveBeenCalledWith({
+        name: 'Ajaccio weekend',
+        memberIds: [alexId],
+        parentId,
+      });
+    });
   });
 
   describe('as a sub-group', () => {

@@ -10,7 +10,9 @@ import type { AccessTokenService } from './tokens.js';
 function toProfile(user: UserRow): UserProfile {
   return {
     id: user.id,
-    email: user.email,
+    // Always set for an account (`users_account_shape`); only a placeholder,
+    // which never signs in, has none.
+    email: user.email ?? '',
     name: user.name,
     picture: user.picture,
   };

@@ -6,12 +6,21 @@ import {
   friendships,
   groupMembers,
   groups,
+  transactionParticipants,
+  transactions,
   users,
   type GroupMemberRow,
   type GroupRow,
   type UserRow,
 } from '../../db/schema.js';
 import type { FriendshipPair } from '../friends/friendships.js';
+import {
+  replaceParty,
+  type DatabaseTransaction,
+  type ReplacedParty,
+} from '../transactions/replace-party.js';
+
+import { GroupAccessError } from './membership.js';
 
 export interface GroupWithCount {
   group: GroupRow;
@@ -41,10 +50,19 @@ export interface RemoveMemberResult {
   deletedGroupIds: string[];
 }
 
+/** What claiming a placeholder changed — counts only, for the log. */
+export interface ClaimedPlaceholder extends ReplacedParty {
+  /** Groups of the tree the claimer was not in yet and now is, as the placeholder was. */
+  membershipsGained: number;
+}
+
 export interface CreateGroupInput {
   name: string;
   ownerId: string;
+  /** Friends, or placeholders of the tree the group is created in. */
   memberIds: readonly string[];
+  /** New placeholder members (`docs/specs/placeholder-members.md`). */
+  placeholderNames?: readonly string[];
   /** Creates a sub-group under this group instead of a root group. */
   parentId?: string | null;
   /** `parent.depth + 1`, or `0` for a root group. Computed by the caller. */
@@ -69,7 +87,53 @@ export interface GroupsRepository {
    */
   listFavoriteGroupsForUser(userId: string): Promise<ListedGroupSummary[]>;
   listMembers(groupId: string): Promise<MemberWithUser[]>;
+  /** Everyone in the group, placeholders included — the member count shown. */
   countMembers(groupId: string): Promise<number>;
+  /**
+   * The members with an account only: who is left to act in the group, which
+   * is what "the owner cannot leave others behind" asks
+   * (`docs/specs/placeholder-members.md`).
+   */
+  countAccountMembers(groupId: string): Promise<number>;
+  /** The root of the tree `groupId` belongs to — `groupId` itself for a root group. */
+  findRootId(groupId: string): Promise<string>;
+  /** A placeholder of the tree rooted at `rootId`, if there is such a one. */
+  findPlaceholder(rootId: string, placeholderId: string): Promise<UserRow | undefined>;
+  /** Every placeholder of the tree rooted at `rootId`, alphabetical. */
+  listPlaceholders(rootId: string): Promise<UserRow[]>;
+  /** Of `candidateIds`, the placeholders of the tree rooted at `rootId`. */
+  filterPlaceholderIds(rootId: string, candidateIds: readonly string[]): Promise<string[]>;
+  /** How many transactions name each of `placeholderIds`, as payer or participant. */
+  countTransactionsNaming(placeholderIds: readonly string[]): Promise<Map<string, number>>;
+  /**
+   * Create placeholders in the tree rooted at `rootId` and make them members
+   * of `groupId` and of every group above it. Refused as
+   * `placeholder_name_taken` when a name is already one of the tree's.
+   */
+  addPlaceholders(rootId: string, groupId: string, names: readonly string[]): Promise<void>;
+  /** Refused as `placeholder_name_taken` like {@link addPlaceholders}. */
+  renamePlaceholder(placeholderId: string, name: string, at: Date): Promise<void>;
+  /**
+   * Take the placeholder out of its whole tree: its part in every transaction
+   * becomes Others, then it is deleted with its memberships. Refused as
+   * `placeholder_not_found` when it is already gone.
+   */
+  removePlaceholder(rootId: string, placeholderId: string): Promise<ReplacedParty>;
+  /**
+   * Merge the placeholder into `userId`'s account, all at once
+   * (`docs/specs/placeholder-members.md`): every transaction naming it names
+   * the account instead, the account joins every group it was in, it is
+   * deleted, and the claim is recorded on the account's membership of the
+   * root. Refused as `already_claimed` when that membership already carries
+   * a claim, `placeholder_not_found` when the placeholder is gone — both
+   * decided under lock, so concurrent claims cannot both win.
+   */
+  claimPlaceholder(
+    rootId: string,
+    placeholderId: string,
+    userId: string,
+    at: Date,
+  ): Promise<ClaimedPlaceholder>;
   createGroup(input: CreateGroupInput): Promise<GroupRow>;
   updateGroup(
     groupId: string,
@@ -166,6 +230,51 @@ export interface GroupsRepository {
 
 /** Postgres returns `count(*)` as a string; normalise at the boundary. */
 const toCount = (value: unknown): number => Number(value ?? 0);
+
+/**
+ * A membership held by an account — the condition every "who is left in this
+ * group" rule asks, since a placeholder never acts
+ * (`docs/specs/placeholder-members.md`).
+ */
+const isAccountMembership = sql`exists (
+  select 1 from ${users}
+  where ${users.id} = ${groupMembers.userId} and ${users.kind} = 'account'
+)`;
+
+/** Turn the placeholder-name uniqueness violation into its refusal. */
+async function refusingTakenNames<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    const driver = error instanceof Error && error.cause !== undefined ? error.cause : error;
+    const { code, constraint } = (driver ?? {}) as { code?: string; constraint?: string };
+    if (code === '23505' && constraint === 'users_placeholder_name_unique') {
+      throw new GroupAccessError('placeholder_name_taken');
+    }
+    throw error;
+  }
+}
+
+/** New placeholder rows, and their memberships at each of `groupIds`. */
+async function insertPlaceholders(
+  tx: DatabaseTransaction,
+  rootId: string,
+  groupIds: readonly string[],
+  names: readonly string[],
+): Promise<void> {
+  if (names.length === 0) {
+    return;
+  }
+  const created = await tx
+    .insert(users)
+    .values(names.map((name) => ({ kind: 'placeholder', name, placeholderGroupId: rootId })))
+    .returning({ id: users.id });
+  await tx.insert(groupMembers).values(
+    groupIds.flatMap((groupId) =>
+      created.map(({ id }) => ({ groupId, userId: id, role: 'member' as const })),
+    ),
+  );
+}
 
 /**
  * Every ancestor id of a group, nearest parent first, as a plain list — used
@@ -346,6 +455,188 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       return toCount(row?.count);
     },
 
+    async countAccountMembers(groupId) {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(groupMembers)
+        .where(and(eq(groupMembers.groupId, groupId), isAccountMembership));
+      return toCount(row?.count);
+    },
+
+    async findRootId(groupId) {
+      return (await fetchAncestorIds(db, groupId)).at(-1) ?? groupId;
+    },
+
+    async findPlaceholder(rootId, placeholderId) {
+      const [row] = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.id, placeholderId),
+            eq(users.kind, 'placeholder'),
+            eq(users.placeholderGroupId, rootId),
+          ),
+        );
+      return row;
+    },
+
+    async listPlaceholders(rootId) {
+      return db
+        .select()
+        .from(users)
+        .where(and(eq(users.kind, 'placeholder'), eq(users.placeholderGroupId, rootId)))
+        .orderBy(asc(users.name));
+    },
+
+    async filterPlaceholderIds(rootId, candidateIds) {
+      if (candidateIds.length === 0) {
+        return [];
+      }
+      const rows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            eq(users.kind, 'placeholder'),
+            eq(users.placeholderGroupId, rootId),
+            inArray(users.id, [...candidateIds]),
+          ),
+        );
+      return rows.map((row) => row.id);
+    },
+
+    async countTransactionsNaming(placeholderIds) {
+      if (placeholderIds.length === 0) {
+        return new Map();
+      }
+      const ids = sql.join(
+        placeholderIds.map((id) => sql`${id}`),
+        sql`, `,
+      );
+      // A person can be both the payer and a participant of one transaction:
+      // counted once.
+      const { rows } = await db.execute<{ person: string; count: string }>(sql`
+        SELECT person, count(DISTINCT transaction_id) AS count FROM (
+          SELECT payer_id AS person, id AS transaction_id
+          FROM ${transactions} WHERE payer_id IN (${ids})
+          UNION ALL
+          SELECT user_id AS person, transaction_id
+          FROM ${transactionParticipants} WHERE user_id IN (${ids})
+        ) naming
+        GROUP BY person
+      `);
+      return new Map(rows.map((row) => [row.person, toCount(row.count)]));
+    },
+
+    async addPlaceholders(rootId, groupId, names) {
+      const groupIds = [groupId, ...(await fetchAncestorIds(db, groupId))];
+      await refusingTakenNames(() =>
+        db.transaction((tx) => insertPlaceholders(tx, rootId, groupIds, names)),
+      );
+    },
+
+    async renamePlaceholder(placeholderId, name, at) {
+      await refusingTakenNames(() =>
+        db
+          .update(users)
+          .set({ name, updatedAt: at })
+          .where(and(eq(users.id, placeholderId), eq(users.kind, 'placeholder'))),
+      );
+    },
+
+    async removePlaceholder(rootId, placeholderId) {
+      return db.transaction(async (tx) => {
+        // Locked first, like an account deletion: a transaction naming it
+        // that is being written right now finishes before this goes on.
+        const [placeholder] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            and(
+              eq(users.id, placeholderId),
+              eq(users.kind, 'placeholder'),
+              eq(users.placeholderGroupId, rootId),
+            ),
+          )
+          .for('update');
+        if (!placeholder) {
+          throw new GroupAccessError('placeholder_not_found');
+        }
+        const replaced = await replaceParty(tx, placeholderId, null);
+        // Its memberships cascade.
+        await tx.delete(users).where(eq(users.id, placeholderId));
+        return replaced;
+      });
+    },
+
+    async claimPlaceholder(rootId, placeholderId, userId, at) {
+      return db.transaction(async (tx) => {
+        // The claimer's own row first: two claims by one member queue here,
+        // and the second sees the first one's claim.
+        const [membership] = await tx
+          .select({ id: groupMembers.id, claimedAt: groupMembers.claimedPlaceholderAt })
+          .from(groupMembers)
+          .where(and(eq(groupMembers.groupId, rootId), eq(groupMembers.userId, userId)))
+          .for('update');
+        if (!membership) {
+          throw new GroupAccessError('not_found');
+        }
+        if (membership.claimedAt) {
+          throw new GroupAccessError('already_claimed');
+        }
+
+        // Then the placeholder: two members claiming it queue here, and the
+        // second finds it gone.
+        const [placeholder] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            and(
+              eq(users.id, placeholderId),
+              eq(users.kind, 'placeholder'),
+              eq(users.placeholderGroupId, rootId),
+            ),
+          )
+          .for('update');
+        if (!placeholder) {
+          throw new GroupAccessError('placeholder_not_found');
+        }
+
+        const replaced = await replaceParty(tx, placeholderId, userId);
+
+        // Every group the placeholder was in, the account is in now. Its
+        // memberships already hold every level above each of them, so no
+        // propagation is needed.
+        const placeholderGroups = await tx
+          .select({ groupId: groupMembers.groupId })
+          .from(groupMembers)
+          .where(eq(groupMembers.userId, placeholderId));
+        const gained =
+          placeholderGroups.length === 0
+            ? []
+            : await tx
+                .insert(groupMembers)
+                .values(
+                  placeholderGroups.map(({ groupId }) => ({
+                    groupId,
+                    userId,
+                    role: 'member' as const,
+                  })),
+                )
+                .onConflictDoNothing()
+                .returning({ id: groupMembers.id });
+
+        await tx.delete(users).where(eq(users.id, placeholderId));
+        await tx
+          .update(groupMembers)
+          .set({ claimedPlaceholderAt: at })
+          .where(eq(groupMembers.id, membership.id));
+
+        return { ...replaced, membershipsGained: gained.length };
+      });
+    },
+
     async createGroup(input) {
       const parentId = input.parentId ?? null;
       const depth = input.depth ?? 0;
@@ -354,7 +645,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       // this call — there is nothing here for a transaction to protect.
       const ancestorIds = parentId ? [parentId, ...(await fetchAncestorIds(db, parentId))] : [];
 
-      return db.transaction(async (tx) => {
+      return refusingTakenNames(() => db.transaction(async (tx) => {
         const [group] = await tx
           .insert(groups)
           .values({ kind: 'standard', name: input.name, parentId, depth })
@@ -386,8 +677,17 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           ])
           .onConflictDoNothing();
 
+        // New placeholders belong to the tree's root — the new group itself
+        // when it is one — and join it at every level, like everyone above.
+        await insertPlaceholders(
+          tx,
+          ancestorIds.at(-1) ?? group!.id,
+          [group!.id, ...ancestorIds],
+          input.placeholderNames ?? [],
+        );
+
         return group!;
-      });
+      }));
     },
 
     async updateGroup(groupId, values, at) {
@@ -451,12 +751,14 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         return { removedFromGroupIds: [], deletedGroupIds: [] };
       }
 
-      // Any of the touched groups left with nobody in it is gone too — the
-      // same "a group nobody belongs to is unreachable" rule as a single
+      // Any of the touched groups left with no account in it is gone too —
+      // the same "a group nobody belongs to is unreachable" rule as a single
       // group's last member leaving, applied at every level this reached.
-      // Deleting it cascades its *own* remaining sub-tree through
-      // `groups.parent_id`, so nothing further is needed for a deeper branch
-      // that became empty this same way.
+      // Placeholders do not keep a group alive: they never act, and a root
+      // group takes its own with it (`users.placeholder_group_id`). Deleting
+      // it cascades its *own* remaining sub-tree through `groups.parent_id`,
+      // so nothing further is needed for a deeper branch that became empty
+      // this same way.
       const deleted = await db
         .delete(groups)
         .where(
@@ -466,7 +768,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
               db
                 .select({ id: groupMembers.id })
                 .from(groupMembers)
-                .where(eq(groupMembers.groupId, groups.id)),
+                .where(and(eq(groupMembers.groupId, groups.id), isAccountMembership)),
             ),
           ),
         )
@@ -485,10 +787,12 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       }
 
       // Joined twice against `group_members`: once to require `userId` owns
-      // the group, once to require someone *else* still belongs to it —
-      // `selectDistinct` collapses the fan-out from that second join when
-      // more than one other member exists.
+      // the group, once to require someone *else* with an account still
+      // belongs to it — a placeholder never keeps anyone in
+      // (`docs/specs/placeholder-members.md`). `selectDistinct` collapses the
+      // fan-out from that second join when more than one other member exists.
       const otherMember = aliasedTable(groupMembers, 'other_member');
+      const otherAccount = aliasedTable(users, 'other_account');
 
       return db
         .selectDistinct({ id: groups.id, name: groups.name })
@@ -504,6 +808,10 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .innerJoin(
           otherMember,
           and(eq(otherMember.groupId, groups.id), ne(otherMember.userId, userId)),
+        )
+        .innerJoin(
+          otherAccount,
+          and(eq(otherAccount.id, otherMember.userId), eq(otherAccount.kind, 'account')),
         )
         .where(inArray(groups.id, descendantIds));
     },

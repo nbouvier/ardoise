@@ -194,7 +194,8 @@ feature establishes, which that spec builds on.
 - **A transfer with zero or more than one concerned member**, or **a transfer where the
   concerned member is the payer**: refused — a transfer to yourself is not meaningful.
 - **A payer or a concerned member who is not a member of the group**: refused. Both must
-  be resolved against the group's current membership at the time of the call. Others is
+  be resolved against the group's current membership at the time of the call. A
+  placeholder member counts as a member here (`docs/specs/placeholder-members.md`). Others is
   never subject to this check — it is always available.
 - **Others appearing twice in a split**: refused, like any duplicate participant.
 - **Others as payer and as the transfer's recipient at once**: refused, like any transfer
