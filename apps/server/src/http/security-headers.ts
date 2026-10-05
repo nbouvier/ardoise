@@ -6,9 +6,9 @@ import fp from 'fastify-plugin';
  *
  * This is a JSON API: nothing it sends is meant to be rendered, framed or
  * scripted, so the default policy forbids all of it (`default-src 'none'`,
- * `frame-ancestors 'none'`). The one HTML page, the invitation landing, sets its
- * own narrower policy (`contentSecurityPolicyFor` in
- * `features/invites/landing.ts`).
+ * `frame-ancestors 'none'`). The few HTML pages (the invitation landing, the
+ * account-deletion page) set their own narrower policy
+ * (`contentSecurityPolicyFor` in `http/html.ts`).
  *
  * Helmet's other defaults stay: `X-Content-Type-Options: nosniff`,
  * `Referrer-Policy: no-referrer` (the invitation code lives in the landing page

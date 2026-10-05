@@ -161,6 +161,13 @@ const envSchema = z.object({
   APP_STORE_URL: z.url().optional(),
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
   PLAY_STORE_URL: z.url().optional(),
+  /**
+   * Where account-deletion requests made without the app go, shown on the public
+   * `/delete-account` page (`docs/specs/account-deletion.md`). Unset, the page only
+   * describes the in-app path. Set it before the app is published: Google Play
+   * requires a way to ask for deletion without the app.
+   */
+  ACCOUNT_DELETION_CONTACT: z.email().optional(),
 });
 
 /**

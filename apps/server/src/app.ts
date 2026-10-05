@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { env, type TrustProxy } from './config/env.js';
 import { dbPlugin, type DbPluginOptions } from './db/plugin.js';
+import { accountPlugin, type AccountPluginOptions } from './features/account/plugin.js';
 import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
 import { friendsPlugin } from './features/friends/plugin.js';
 import { groupsPlugin, type GroupsPluginOptions } from './features/groups/plugin.js';
@@ -30,6 +31,8 @@ export interface BuildAppOptions {
   groups?: GroupsPluginOptions;
   /** Transactions plugin overrides. Tests pass a fake clock here. */
   transactions?: TransactionsPluginOptions;
+  /** Account plugin overrides. Tests pass a deletion contact here. */
+  account?: AccountPluginOptions;
 }
 
 /**
@@ -87,6 +90,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(friendsPlugin);
   app.register(groupsPlugin, { ...options.groups });
   app.register(transactionsPlugin, { ...options.transactions });
+  app.register(accountPlugin, { ...options.account });
 
   registerHealthRoutes(app);
 

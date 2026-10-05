@@ -1,5 +1,6 @@
 import type { AuthSession, UserProfile } from '@ardoise/shared';
 
+import { deleteOwnAccount } from '@/lib/api/account';
 import { ApiError } from '@/lib/api/errors';
 import {
   apiRequest,
@@ -107,6 +108,25 @@ export class AuthClient {
         logger.warn('auth.session.revoke.failed', errorFields(error));
       });
     }
+  };
+
+  /**
+   * Delete the account (`docs/specs/account-deletion.md`), then end the
+   * session here as sign-out does — the server has already ended every
+   * session of it. A `401` means the account is already gone (a retry after
+   * a deletion that did go through): done all the same.
+   */
+  readonly deleteAccount = async (): Promise<void> => {
+    try {
+      await deleteOwnAccount(this.authorizedFetch);
+    } catch (error) {
+      if (!(error instanceof ApiError && error.isUnauthorized)) {
+        throw error;
+      }
+    }
+    logger.info('auth.account.deleted');
+    await this.deps.google.signOut();
+    await this.clearSession();
   };
 
   private refresh(): Promise<AuthSession | null> {

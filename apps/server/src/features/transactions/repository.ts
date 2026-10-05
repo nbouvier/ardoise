@@ -10,6 +10,37 @@ import {
   type TransactionRow,
 } from '../../db/schema.js';
 
+import { TransactionError } from './errors.js';
+
+/**
+ * The foreign keys a transaction names a person through. Violating one means
+ * the account was deleted while this was being written: deletion locks the
+ * user first, so the write waits for it and then finds them gone
+ * (`docs/specs/account-deletion.md`).
+ */
+const PERSON_FOREIGN_KEYS = new Set([
+  'transactions_payer_id_users_id_fk',
+  'transaction_participants_user_id_users_id_fk',
+]);
+
+/**
+ * Turn "that person no longer exists" into the refusal it amounts to — they
+ * are no longer a member — instead of a server error. Drizzle wraps the
+ * driver's error: the constraint is on its cause.
+ */
+async function refusingDeletedPeople<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    const driver = error instanceof Error && error.cause !== undefined ? error.cause : error;
+    const { code, constraint } = (driver ?? {}) as { code?: string; constraint?: string };
+    if (code === '23503' && constraint !== undefined && PERSON_FOREIGN_KEYS.has(constraint)) {
+      throw new TransactionError('not_group_member');
+    }
+    throw error;
+  }
+}
+
 /** The core fields of a transaction, independent of its participants. */
 export interface TransactionFields {
   groupId: string;
@@ -177,7 +208,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
     },
 
     async create(fields, createdBy, participants) {
-      return db.transaction(async (tx) => {
+      return refusingDeletedPeople(() => db.transaction(async (tx) => {
         const [transaction] = await tx
           .insert(transactions)
           .values({ ...fields, createdBy })
@@ -189,11 +220,11 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
           .returning();
 
         return { transaction: transaction!, participants: rows };
-      });
+      }));
     },
 
     async update(transactionId, fields, participants, at) {
-      return db.transaction(async (tx) => {
+      return refusingDeletedPeople(() => db.transaction(async (tx) => {
         const [transaction] = await tx
           .update(transactions)
           .set({ ...fields, updatedAt: at })
@@ -210,7 +241,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
           .returning();
 
         return { transaction: transaction!, participants: rows };
-      });
+      }));
     },
 
     async remove(transactionId) {

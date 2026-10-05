@@ -7,7 +7,7 @@ import { createTestApp, createTestContext } from '../../test/app.js';
 import { signInAs } from '../../test/auth.js';
 import { fakeGoogleVerifier } from '../../test/google.js';
 
-import { escapeHtml } from './landing.js';
+import { escapeHtml } from '../../http/html.js';
 
 const google = fakeGoogleVerifier({
   ada: { sub: 'google-ada', email: 'ada@example.com', name: 'Ada Lovelace' },

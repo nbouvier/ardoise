@@ -359,6 +359,29 @@ the email beneath in secondary `small`, and a down chevron. The row is the one c
 pressing it opens a `DropdownMenu` with **Switch account** and, in the danger colour,
 **Sign out**. Further sections (preferences, …) join under it as the page grows.
 
+Under it, a **Your data** section: an `overline` and one `MenuRow` — trash icon, **Delete
+account** in the danger colour. It is deliberately not in the Profile row's menu, where it
+would sit one slip away from Sign out. It opens the Delete account page in a `SheetModal`.
+
+### Delete account (`src/features/auth/delete-account-screen.tsx`)
+
+A `DismissiblePage` like "New friend": `ScreenHeader` "Delete account" with `wash` and the
+collapse chevron. While the preview loads, a centred spinner; if it fails, the usual
+centred message and a **Try again** secondary button. Loaded, one scroll of three
+`overline` sections in secondary text, each a short bullet list — **What is deleted**
+(profile and sign-in; the friends, counted, with the group shared with each; groups where
+the user is alone), **What stays** (transactions in other groups, the user's part as
+“Others”; ownership passing on), **What you lose** (one sentence, then up to two
+unfoldable rows, each a `backgroundElement` card with a chevron that turns over when open:
+**You are owed 12.00** in the credit colour and **You owe 4.50** in the debit colour,
+totals over every group; opened, one `small` line per group with its name and its part of
+the total. A side with nothing is left out; with nothing on either, "You’re settled up in
+every group."). The scroll hides its scrollbar. Then the permanence line and the `danger` **Delete my account** button,
+which asks once more through the app's `ConfirmDialog` ("Delete your account?" — "This
+cannot be undone.", red **Delete**). While deleting, the button shows its spinner; a
+failure puts an inline message in the danger colour above it and gives the button back.
+On success the app is signed out, and the page goes with the rest.
+
 ### Home (`src/features/home/home-screen.tsx`, tab `app/(tabs)/index.tsx`)
 
 The first screen of the app (`docs/specs/home.md`), a scroll of three stacked blocks —

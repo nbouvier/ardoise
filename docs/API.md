@@ -12,7 +12,9 @@ route is added, changed or removed.
   Protected routes require `Authorization: Bearer <accessToken>`. The access token is a
   short-lived (~15 min) HS256 JWT; the client refreshes it with the rotating refresh
   token. Auth failures return `401` with `{ "error": "<code>" }`; validation failures
-  return `400 { "error": "invalid_request" }`.
+  return `400 { "error": "invalid_request" }`. An access token of a deleted account is
+  refused (`401 unknown_user`) even within its lifetime: every protected route checks the
+  account still exists.
 - Requests are rate limited per client address (`docs/DEPLOYMENT.md`). A client over its
   budget gets `429 { "error": "rate_limited" }` with a `Retry-After` header (seconds);
   every response carries `X-RateLimit-Limit` / `X-RateLimit-Remaining` /
@@ -89,6 +91,47 @@ Current user. Requires `Authorization: Bearer <accessToken>`.
 Response `200`: `{ "user": { "id": "<uuid>", "email": "...", "name": "...", "picture": null } }`
 
 `401` when the access token is missing, invalid or expired.
+
+## Account
+
+See `docs/specs/account-deletion.md`.
+
+### `GET /me/deletion-preview`
+
+What the Delete account page shows before anything is deleted.
+
+Response `200`:
+
+```json
+{
+  "friendCount": 2,
+  "balances": [
+    { "groupId": "<uuid>", "kind": "standard", "name": "Flat", "balanceCents": 600 },
+    { "groupId": "<uuid>", "kind": "pair", "name": "Grace Hopper", "balanceCents": -50 }
+  ]
+}
+```
+
+`friendCount`: friendships that end, each taking the group shared with that friend.
+`balances`: every group the caller belongs to (pair groups and sub-groups included) where
+their own balance is not zero, highest first — what they are owed comes first, since that
+is what they lose. A pair group is named after the friend.
+
+### `DELETE /me`
+
+Delete the caller's account, all at once or not at all → `204`. Friendships end and take
+their pair groups (and those groups' sub-groups) with them; everywhere else the caller's
+payments and shares become Others', their memberships go, ownership passes to the
+earliest-joined remaining member and a group left empty is deleted; their sessions and
+invitation links end. Acts on the authenticated caller only — there is no id in the
+request. A second call answers `401`, the account being gone.
+
+### `GET /delete-account`
+
+The public HTML page describing account deletion — the in-app path, what is erased and
+what stays, the backup retention, and the contact address for a request without the app
+(`ACCOUNT_DELETION_CONTACT`, `docs/DEPLOYMENT.md`; left out when unset). The link given to
+Google Play. Unauthenticated.
 
 ## Invitations
 
@@ -466,14 +509,15 @@ transaction — there is no per-transaction ownership.
   "participants": [
     { "user": "<FriendSummary>", "shareCents": 2125, "weight": 1 }
   ],
-  "createdBy": "<uuid>",
+  "createdBy": "<uuid or null>",
   "createdAt": "2026-09-11T12:00:00.000Z",
   "updatedAt": "2026-09-11T12:00:00.000Z"
 }
 ```
 
 `weight` is `null` whenever `splitMode` is `amount` (including every transfer, stored as
-a single-participant amount split).
+a single-participant amount split). `createdBy` is `null` once the account that recorded
+the transaction is deleted.
 
 **Others** — people outside the group (`docs/specs/transactions.md`) — is `null` wherever
 a person would be: `"payer": null`, or a participant `{ "user": null, … }`, at most one per

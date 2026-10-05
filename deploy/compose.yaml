@@ -80,6 +80,7 @@ services:
       LOG_LEVEL:
       PLAY_STORE_URL:
       APP_STORE_URL:
+      ACCOUNT_DELETION_CONTACT:
       SENTRY_DSN:
     depends_on:
       db:

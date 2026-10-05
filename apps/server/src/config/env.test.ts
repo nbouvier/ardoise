@@ -120,6 +120,22 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('account deletion contact', () => {
+    it('is optional, and taken as given', () => {
+      expect(loadEnv(production).ACCOUNT_DELETION_CONTACT).toBeUndefined();
+      expect(
+        loadEnv({ ...production, ACCOUNT_DELETION_CONTACT: 'privacy@example.com' })
+          .ACCOUNT_DELETION_CONTACT,
+      ).toBe('privacy@example.com');
+    });
+
+    it('refuses something that is not an e-mail address, which the public page would show', () => {
+      expect(() =>
+        loadEnv({ ...production, ACCOUNT_DELETION_CONTACT: 'write to us' }),
+      ).toThrow(/ACCOUNT_DELETION_CONTACT/);
+    });
+  });
+
   it('rejects a TRUST_PROXY that is not understood, in any environment', () => {
     expect(() => loadEnv({ ...base, NODE_ENV: 'development', TRUST_PROXY: 'yes' })).toThrow(
       /TRUST_PROXY: must be true, false/,

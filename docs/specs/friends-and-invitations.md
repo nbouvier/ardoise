@@ -113,8 +113,8 @@ either Friends list, the group behind their row already exists.
 - **Link opened while signed out**: the invitation survives the sign-in and the confirmation
   screen appears immediately after.
 - **Link opened while the app is already running**: handled the same way as a cold start.
-- **The inviter deleted their account** (not possible yet, but the data model must not
-  break): their invites and friendships disappear with them.
+- **The inviter deleted their account**: their invites and friendships disappear with
+  them, and the link reads as unknown (`docs/specs/account-deletion.md`).
 - **Network failure** while loading the invitation preview or accepting: an explicit,
   retryable error; nothing is half-created.
 - **Sharing cancelled** by the user in the OS share sheet: no error, no state change.

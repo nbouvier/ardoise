@@ -21,6 +21,8 @@ export interface AuthContextValue {
   googleAvailable: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Delete the account for good, then sign out (`docs/specs/account-deletion.md`). */
+  deleteAccount: () => Promise<void>;
   /** Retry restoring the session after a launch connection failure. */
   retry: () => Promise<void>;
   /** Fetch a protected endpoint, refreshing on 401. For feature code. */
@@ -65,6 +67,7 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
       googleAvailable: authClient.googleAvailable,
       signIn: authClient.signIn,
       signOut: authClient.signOut,
+      deleteAccount: authClient.deleteAccount,
       retry: authClient.bootstrap,
       authorizedFetch: authClient.authorizedFetch,
     }),

@@ -218,3 +218,58 @@ describe('AuthClient.authorizedFetch', () => {
     expect(client.getState()).toEqual({ status: 'signedOut' });
   });
 });
+
+describe('AuthClient.deleteAccount', () => {
+  async function signedInClient(fetchMock: jest.Mock<typeof fetch>) {
+    globalThis.fetch = fetchMock;
+    const store = memoryStore();
+    const google = fakeGoogle();
+    const client = new AuthClient({ baseUrl: BASE_URL, google, store });
+    await client.signIn();
+    return { client, store, google };
+  }
+
+  it('deletes the account, then ends the session here as sign-out does', async () => {
+    const fetchMock = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(makeSession()))
+      .mockResolvedValueOnce(jsonResponse(null, 204));
+    const { client, store, google } = await signedInClient(fetchMock);
+
+    await client.deleteAccount();
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'https://api.test/me',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(client.getState()).toEqual({ status: 'signedOut' });
+    expect(store.value).toBeNull();
+    expect(google.signOut).toHaveBeenCalled();
+  });
+
+  it('treats an account already gone (a retry after it went through) as done', async () => {
+    const fetchMock = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(makeSession()))
+      .mockResolvedValue(jsonResponse({ error: 'unknown_user' }, 401));
+    const { client, store } = await signedInClient(fetchMock);
+
+    await expect(client.deleteAccount()).resolves.toBeUndefined();
+
+    expect(client.getState()).toEqual({ status: 'signedOut' });
+    expect(store.value).toBeNull();
+  });
+
+  it('stays signed in when the deletion fails, so it can be tried again', async () => {
+    const fetchMock = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(makeSession()))
+      .mockResolvedValueOnce(jsonResponse({ error: 'internal_error' }, 500));
+    const { client, store } = await signedInClient(fetchMock);
+
+    await expect(client.deleteAccount()).rejects.toBeInstanceOf(ApiError);
+
+    expect(client.getState()).toEqual({ status: 'signedIn', user });
+    expect(store.value).not.toBeNull();
+  });
+});

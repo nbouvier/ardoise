@@ -47,12 +47,19 @@ export const authPlugin = fp<AuthPluginOptions>(
       if (!token) {
         return unauthorized(reply, 'missing_access_token');
       }
+      let userId: string;
       try {
-        const { userId } = await accessTokens.verify(token);
-        request.userId = userId;
+        ({ userId } = await accessTokens.verify(token));
       } catch {
         return unauthorized(reply, 'invalid_access_token');
       }
+      // An access token outlives nothing it was issued for: once the account
+      // is deleted, the ones still within their lifetime are refused too
+      // (`docs/specs/account-deletion.md`).
+      if (!(await repository.findUserById(userId))) {
+        return unauthorized(reply, 'unknown_user');
+      }
+      request.userId = userId;
     });
 
     app.post('/auth/google', async (request: FastifyRequest, reply) => {

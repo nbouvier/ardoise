@@ -71,6 +71,13 @@
       "when": 1791193353166,
       "tag": "0009_others_party",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791199946241,
+      "tag": "0010_account_deletion",
+      "breakpoints": true
     }
   ]
 }

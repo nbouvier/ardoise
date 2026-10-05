@@ -18,8 +18,11 @@ export async function createTestDatabase(): Promise<DatabaseHandle> {
  *
  * `users` and `groups` are the two roots: everything else hangs off one of them
  * by a foreign key, and `cascade` follows those. A standard group belongs to no
- * user directly, which is why it has to be named here too.
+ * user directly, which is why it has to be named here too; `deleted_accounts`
+ * hangs off nothing at all.
  */
 export async function resetDatabase(handle: DatabaseHandle): Promise<void> {
-  await handle.db.execute(sql`truncate table "users", "groups" restart identity cascade`);
+  await handle.db.execute(
+    sql`truncate table "users", "groups", "deleted_accounts" restart identity cascade`,
+  );
 }

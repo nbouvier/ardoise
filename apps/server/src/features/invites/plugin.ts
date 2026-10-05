@@ -4,15 +4,11 @@ import fp from 'fastify-plugin';
 import { z } from 'zod';
 
 import { env } from '../../config/env.js';
+import { contentSecurityPolicyFor } from '../../http/html.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { InviteError, type InviteErrorReason } from './codes.js';
-import {
-  contentSecurityPolicyFor,
-  renderExpiredPage,
-  renderInvitePage,
-  type LandingLinks,
-} from './landing.js';
+import { renderExpiredPage, renderInvitePage, type LandingLinks } from './landing.js';
 import { createInvitesRepository } from './repository.js';
 import { createInvitesService, type InvitesService } from './service.js';
 
