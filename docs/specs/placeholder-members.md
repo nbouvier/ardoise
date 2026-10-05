@@ -223,7 +223,8 @@ See `docs/API.md` and `docs/DATABASE.md`.
 - A placeholder can never authenticate: it has no identity a sign-in could match.
 - Placeholder names are **personal data about people who have not agreed to Ardoise**,
   typed by members. They are kept only as long as the group, disappear on claim or
-  removal, are never logged, and must be covered by the privacy policy.
+  removal, are never logged, and are covered by the privacy policy, which tells such a
+  person how to have their name removed (`docs/specs/legal-pages.md`).
 
 ## Open questions
 
