@@ -46,6 +46,12 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   Belonging to a group always implies belonging to every one of its ancestors; a member
   can see (and join) the sub-groups of any group they belong to, hidden behind a toggle
   when they have not joined them. See `docs/specs/groups.md`.
+- **Placeholder members** — a group can include people by name only, for anyone not on
+  Ardoise yet or never: they take part in transactions like any member, but never own,
+  never count as someone left in the group, and are marked "Not on Ardoise". Whoever joins
+  later through the link is asked whether they are one of them, or says so any time with
+  "This is me": the placeholder's transactions become theirs. Removing a placeholder turns
+  its part into Others. See `docs/specs/placeholder-members.md`.
 - **Group transactions** — any member records an expense, an income, or a transfer in a
   group: a title, an amount, a date, an optional comment, an optional **category** (a
   fixed preset list, each with an emoji shown next to the transaction in the list), who

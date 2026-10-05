@@ -54,7 +54,9 @@ know where I stand on the trip as a whole**.
 ### Creating a group
 
 - A signed-in user can create a group by giving it a **name** and, optionally, picking
-  **friends** from their friend list to add straight away.
+  **friends** from their friend list to add straight away, and adding **placeholder
+  members** — people known by name only, who may join later or never
+  (`docs/specs/placeholder-members.md`).
 - The creator is the group's **owner**. Everyone else is a **member**.
 - A group appears immediately in the list of every person who belongs to it.
 - A group may optionally be created **under an existing group**, becoming its sub-group —
@@ -94,7 +96,9 @@ know where I stand on the trip as a whole**.
   under it.
 - Only the **owner** can **delete** it.
 - A member can **leave** a group. The owner cannot leave while others remain — they
-  archive, delete, or remove themselves once alone (which deletes the group). The same
+  archive, delete, or remove themselves once alone (which deletes the group). Only members
+  with an account count here: a group left with nothing but placeholder members is
+  deleted with them (`docs/specs/placeholder-members.md`). The same
   applies if the owner is themselves the sole remaining owner of a populated sub-group of
   it — see "Sub-groups" below.
 - Expenses are recorded, split and balanced inside the group; see
