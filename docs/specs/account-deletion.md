@@ -226,7 +226,7 @@ again.
 - The Delete account page states the consequences as a short list, then the groups with a
   non-zero balance (group name, amount in the usual balance colours), then the button. It
   has a loading state while the preview loads, and an error state with retry.
-- The final prompt is a native confirmation dialog, destructive button "Delete".
+- The final prompt is the app's own confirmation dialog, destructive button "Delete".
 - While deletion runs, the button shows progress and cannot be pressed again.
 - A failure leaves the user on the page with an error message and the button available
   again.

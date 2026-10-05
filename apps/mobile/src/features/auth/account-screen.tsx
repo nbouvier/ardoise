@@ -7,12 +7,14 @@ import { DropdownMenu } from '@/components/dropdown-menu';
 import { Icon } from '@/components/icon';
 import { MenuRow } from '@/components/icon-menu-button';
 import { ScreenHeader } from '@/components/screen-header';
+import { SheetModal } from '@/components/sheet-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
+import { DeleteAccountScreen } from './delete-account-screen';
 import { GoogleSignInCancelled } from './google-module';
 import { useAuth } from './use-auth';
 
@@ -20,6 +22,7 @@ export function AccountScreen() {
   const { state, signIn, signOut } = useAuth();
   const theme = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (state.status !== 'signedIn') {
     return null;
@@ -73,7 +76,25 @@ export function AccountScreen() {
             <Icon name="collapse" size={18} color={theme.textSecondary} />
           </Pressable>
         </View>
+
+        {/* Apart from the Profile row's menu, at the foot of the page: a wrong tap
+          next to "Sign out" must not be where an account gets deleted. */}
+        <View style={[styles.section, styles.danger]}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Your data
+          </ThemedText>
+          <MenuRow
+            icon="trash"
+            label="Delete account"
+            destructive
+            onPress={() => setDeleting(true)}
+          />
+        </View>
       </SafeAreaView>
+
+      <SheetModal visible={deleting} onClose={() => setDeleting(false)}>
+        <DeleteAccountScreen onClose={() => setDeleting(false)} />
+      </SheetModal>
 
       <DropdownMenu visible={menuOpen} onClose={() => setMenuOpen(false)}>
         {ACTIONS.map(({ key, icon, label, destructive }, index) => (
@@ -114,6 +135,10 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.two,
+  },
+  danger: {
+    marginTop: 'auto',
+    paddingBottom: Spacing.four,
   },
   row: {
     flexDirection: 'row',

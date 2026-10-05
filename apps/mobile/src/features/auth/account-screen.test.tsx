@@ -27,6 +27,12 @@ jest.mock('./use-auth', () => ({
   }),
 }));
 
+// The page itself has its own tests; here only that the Account page opens it.
+jest.mock('./delete-account-screen', () => {
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return { DeleteAccountScreen: () => <Text>Delete account page</Text> };
+});
+
 beforeEach(() => {
   mockSignOut.mockReset();
   mockSignOut.mockResolvedValue(undefined);
@@ -87,5 +93,22 @@ describe('AccountScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Switch account' }));
 
     expect(mockSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Delete account apart from the profile menu, opening its own page', async () => {
+    await render(<AccountScreen />);
+
+    expect(screen.queryByText('Delete account page')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Delete account' }));
+
+    expect(screen.getByText('Delete account page')).toBeTruthy();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('keeps Delete account out of the profile menu', async () => {
+    await render(<AccountScreen />);
+    await openProfileMenu();
+
+    expect(screen.getAllByRole('button', { name: 'Delete account' })).toHaveLength(1);
   });
 });

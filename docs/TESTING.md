@@ -277,7 +277,13 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   value applies without moving the row, a new id is appended, a dropped one disappears,
   an empty previous order keeps the fresh data as-is.
 - **Auth** (`src/features/auth/`): the state machine (`auth-client.test.ts`) and the
-  screens.
+  screens. Account deletion (`docs/specs/account-deletion.md`): `deleteAccount` signs out
+  after a `204`, treats a `401` (already gone) as done, and stays signed in on a failure;
+  the Account page opens Delete account from its own row, outside the profile menu; the
+  Delete account page states what goes and stays, lists the groups whose balance is lost
+  (or says none is), deletes nothing until the final prompt is confirmed, keeps the page
+  with an error on failure, and retries a preview that failed to load. `lib/api/account`
+  covers both requests' shapes.
 - **Invitations** (`src/features/invites/`): the pending-invite store and the
   confirmation flow for both kinds of invitation.
 - **Friends** (`src/features/friends/`): the list; the one "New friend" page (invite link

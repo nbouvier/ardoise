@@ -95,8 +95,10 @@ and after: never their name, e-mail address, or an amount they lose.
 - Two sinks: the console (silent under `NODE_ENV=test`), and error reporting — see
   "Error reporting (Sentry)" below for what each level turns into there.
 - Auth events: `auth.session.restore.rejected` / `.failed`, `auth.session.started`,
-  `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`.
-  Never log tokens.
+  `auth.session.refresh.failed`, `auth.session.revoke.failed`, `auth.token_store.*`,
+  `auth.account.deleted`. Never log tokens.
+- Account deletion (`docs/specs/account-deletion.md`): `account.deletion_preview.failed`
+  and `account.delete.failed` (warn, with `errorFields`) — the page stays, with a retry.
 
 ## Error reporting (Sentry)
 
