@@ -26,6 +26,7 @@ describe('app.config', () => {
 
   beforeEach(() => {
     delete process.env.APP_ID;
+    delete process.env.APP_VARIANT;
     delete process.env.EAS_BUILD_PROFILE;
     delete process.env.SENTRY_DSN;
     delete process.env.SENTRY_ORG;
@@ -90,6 +91,40 @@ describe('app.config', () => {
 
     it('allows the placeholder outside EAS (local development builds)', () => {
       expect(() => resolve()).not.toThrow();
+    });
+  });
+
+  describe('variants', () => {
+    const real: ExpoConfig = { ...base, android: { package: 'app.example.ardoise' } };
+
+    it('is the production app when no variant is set', () => {
+      const config = resolve(real);
+
+      expect(config.name).toBe('Ardoise');
+      expect(config.android?.package).toBe('app.example.ardoise');
+    });
+
+    it('gives the staging app its own id and name, so it installs next to production', () => {
+      process.env.APP_VARIANT = 'staging';
+
+      const config = resolve(real);
+
+      expect(config.name).toBe('Ardoise (staging)');
+      expect(config.android?.package).toBe('app.example.ardoise.staging');
+      expect(config.ios?.bundleIdentifier).toBe('app.example.ardoise.staging');
+    });
+
+    it('applies the variant to an APP_ID override too', () => {
+      process.env.APP_ID = 'app.example.split';
+      process.env.APP_VARIANT = 'staging';
+
+      expect(resolve().android?.package).toBe('app.example.split.staging');
+    });
+
+    it('refuses an unknown variant rather than building the production app', () => {
+      process.env.APP_VARIANT = 'stagging';
+
+      expect(() => resolve(real)).toThrow(/APP_VARIANT/);
     });
   });
 

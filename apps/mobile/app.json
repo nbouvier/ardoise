@@ -15,7 +15,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "app.ardoise"
+      "package": "app.nbouvier.ardoise"
     },
     "web": {
       "output": "static",

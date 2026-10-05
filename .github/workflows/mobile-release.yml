@@ -85,6 +85,9 @@ jobs:
           # An update targets a channel, and production-apk shares production's.
           channel="${PROFILE%-apk}"
           environment=$([ "$channel" = staging ] && echo preview || echo production)
+          # The staging app's own id and name, as its build has them (eas.json sets
+          # APP_VARIANT for builds only).
+          if [ "$channel" = staging ]; then export APP_VARIANT=staging; fi
           eas update --branch "$channel" --environment "$environment" \
             --message "$(git log -1 --pretty=%s)" --non-interactive
 

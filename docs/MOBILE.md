@@ -123,7 +123,7 @@ iOS profile until an Apple developer account exists.
 | Profile | Artifact | Talks to | EAS environment | Update channel | Use |
 | --- | --- | --- | --- | --- | --- |
 | `development` | APK, dev client | whatever the dev server says | `development` | — | An EAS-built dev client (rarely needed: local builds are faster). |
-| `staging` | APK | the staging API | `preview` | `staging` | Install on a phone to try what staging runs. |
+| `staging` | APK, **Ardoise (staging)** | the staging API | `preview` | `staging` | Install on a phone to try what staging runs, next to the production app. |
 | `production` | AAB (app bundle) | the production API | `production` | `production` | Upload to the Play Store. |
 | `production-apk` | APK | the production API | `production` | `production` | Direct download from a website. |
 
@@ -131,6 +131,12 @@ The API URL is **not** in `eas.json` (it differs per environment and is baked in
 bundle at build time): each profile takes it from the variables of its **EAS
 environment** — `preview` for staging, `production` for the other two. The same goes for
 the Google client IDs. Nothing in these is secret.
+
+The `staging` profile builds a **separate app**: `APP_VARIANT=staging` (in `eas.json`) gives
+it the id `app.nbouvier.ardoise.staging` and the name "Ardoise (staging)", so it installs
+next to the production app instead of replacing it, and nobody mistakes one for the other.
+It is never uploaded to a store. The Mobile release workflow sets the same variable when it
+publishes a staging update; a staging update published by hand needs it too.
 
 Version numbers: `version` in `app.json` is the user-visible one, bumped by hand;
 `versionCode` (what the Play Store orders by) is kept by EAS (`appVersionSource: remote`)
@@ -167,36 +173,63 @@ Locally (installed once with `npm i -g eas-cli`, then `eas login`):
 ```bash
 cd apps/mobile
 eas build --platform android --profile staging
-eas update --branch staging --environment preview --message "Fix the split rounding"
+APP_VARIANT=staging eas update --branch staging --environment preview --message "Fix the split rounding"
 ```
 
 ### One-time setup (needs accounts: not automated)
 
-1. **Expo account** → `cd apps/mobile && eas init`. It creates the project on expo.dev and
-   writes `extra.eas.projectId` into `app.json` — **commit that**. `app.config.ts` derives
-   the update URL (`https://u.expo.dev/<projectId>`) from it.
-2. **EAS environment variables** (once per environment: `preview`, `production`):
+In this order: each step needs the previous ones. Nothing here publishes anything; a store
+release is a separate, manual process (see "Distribution notes").
+
+1. **Expo account** on expo.dev, then on the developer's machine `npm i -g eas-cli` and
+   `eas login`.
+2. **The EAS project**: `cd apps/mobile && eas init`. It creates the project on expo.dev and
+   writes `extra.eas.projectId` (and `owner`) into `app.json` — **commit that**.
+   `app.config.ts` derives the update URL (`https://u.expo.dev/<projectId>`) from it. One
+   project serves both apps.
+3. **EAS environment variables**, in each of the `preview` (staging) and `production`
+   environments, all with visibility *plaintext* except the Sentry token:
    ```bash
    eas env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://api.example.com --visibility plaintext
-   eas env:create --environment production --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID --value <id> --visibility plaintext
    ```
-   (`EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; the iOS client id only
-   when iOS exists. The application id comes from `app.json`.) A local `apps/mobile/.env`
-   is **not** uploaded to EAS.
-3. **A robot token** for the workflow: expo.dev → Account → Access tokens → create one and
-   store it as the repository secret `EXPO_TOKEN`.
-4. **Signing keystore**: the first Android build offers to generate it and keeps it on EAS.
-   It is the app's identity for ever — **a lost keystore means users cannot update**. Back
-   it up once: `eas credentials` → Android → Keystore → download, and store it (with its
-   passwords) somewhere private and offline.
-5. **Sentry**: the variables and secrets of "Error reporting (Sentry)" below. Without
-   `SENTRY_AUTH_TOKEN` in the EAS environment a release build fails at its source-map
-   upload, and the workflow refuses to publish an update.
-6. **Google sign-in**: the build's signing certificate SHA-1 (shown by `eas credentials`)
-   must be registered on the OAuth **Android** client of Google Cloud, together with the
-   final package name. Without it, sign-in fails on any EAS-built app while still working
-   on a local debug build. If the app is later published through Play App Signing, Google
-   re-signs it with a different key: add that SHA-1 (Play Console → App integrity) too.
+   - `EXPO_PUBLIC_API_BASE_URL`: that environment's API (`PUBLIC_BASE_URL` of the server);
+   - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`: the **web** client id, the one the server lists
+     in `GOOGLE_CLIENT_IDS` (an ID token's audience is the web client, whatever the app);
+   - `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN` (*secret*): see
+     "Error reporting (Sentry)". Without the token a release build fails.
+
+   The iOS client id only when iOS exists. A local `apps/mobile/.env` is **not** uploaded to
+   EAS.
+4. **A robot token** for the workflow: expo.dev → Account settings → Access tokens → create
+   one, stored as the repository secret `EXPO_TOKEN` (GitHub → Settings → Secrets and
+   variables → Actions). Check the Sentry secret and variables the workflow reads are there
+   too (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT_MOBILE`).
+5. **The signing keystores**, one per app: run the first `staging` build and the first
+   `production` build **from the machine** (`eas build --platform android --profile
+   staging`, then `--profile production-apk`), and accept when EAS offers to generate the
+   keystore (the workflow runs non-interactively and cannot answer). EAS keeps them. Each is
+   the app's identity for ever — **a lost keystore means users cannot update** — so back
+   both up: `eas credentials` → Android → the app id → Keystore → download, and store them
+   (with their passwords) somewhere private and offline.
+6. **Google sign-in**: in Google Cloud → Credentials, one OAuth **Android** client per
+   (package name, signing SHA-1) pair. The SHA-1 of an EAS keystore is shown by `eas
+   credentials`; the debug one by `cd android && ./gradlew signingReport`.
+   - `app.nbouvier.ardoise` + the debug keystore's SHA-1 (local development builds);
+   - `app.nbouvier.ardoise` + the production keystore's SHA-1;
+   - `app.nbouvier.ardoise.staging` + the staging keystore's SHA-1;
+   - later, `app.nbouvier.ardoise` + the Play App Signing key's SHA-1 (Play Console → App
+     integrity): Google re-signs what the Play Store distributes.
+
+   A missing pair makes sign-in fail on that build only, the others still working. The app
+   never uses these client ids: they only need to exist. The server's `GOOGLE_CLIENT_IDS`
+   does not change.
+7. **The OAuth consent screen** (Google Cloud → Google Auth Platform): app name Ardoise, the
+   home page, privacy policy (`/privacy`) and terms (`/terms`) links, and **publishing
+   status "In production"**: while it is "Testing", only the listed test users can sign in.
+   The app asks only for the basic scopes (e-mail, profile), which need no Google review.
+8. **Try it**: Actions → Mobile release → `build` / `staging`, install the APK from the
+   build's page on expo.dev, sign in. Then an `update` / `staging` with a visible change, to
+   see it arrive after an app restart.
 
 ### Distribution notes
 
@@ -293,13 +326,17 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
 | `APP_ID`                          | Overrides the application id of `app.json` (not `EXPO_PUBLIC_`: read at build time only). Optional, unset for Ardoise itself — for a fork publishing its own build. See "Application id". |
+| `APP_VARIANT`                     | `staging` builds "Ardoise (staging)" under its own id (build time only). Set by the `staging` EAS profile and the staging updates; leave unset locally. |
 | `SENTRY_DSN`                      | Turns error reporting on (not `EXPO_PUBLIC_`: it reaches the app through `extra`). Leave unset locally. See "Error reporting (Sentry)", which also lists the build-time `SENTRY_*` variables. |
 
 ### Application id
 
-The id is **`app.ardoise`** (`android.package` in `app.json`), applied by `app.config.ts` to
-both the Android `package` and the iOS `bundleIdentifier`. It is **permanent once the app
-is published** — on the Play Store it can never change. `APP_ID` overrides it.
+The id is **`app.nbouvier.ardoise`** (`android.package` in `app.json`; reversed from a domain
+the maintainer owns, so no one else can hold it), applied by `app.config.ts` to both the
+Android `package` and the iOS `bundleIdentifier`. It is **permanent once the app is
+published** — on the Play Store it can never change. `APP_ID` overrides it.
+`APP_VARIANT=staging` appends `.staging` (and " (staging)" to the name); any other value
+fails the config, rather than silently building the production app.
 
 - It must look like `com.example.app` (dot-separated, each part starting with a letter,
   letters/digits/underscores only); anything else fails the config with a message.
@@ -356,9 +393,9 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
 - After changing the Google config or client IDs, regenerate native code:
   `npm run prebuild --workspace @ardoise/mobile`, then rebuild (`npm run
   mobile:android` / `mobile:ios`).
-- **Android**: the OAuth Android client is matched by package name (`app.ardoise`) + the
-  signing certificate SHA-1. For a debug build, add the
-  debug keystore SHA-1 (`cd android && ./gradlew signingReport`) to the Google Cloud
-  Android client, or sign-in fails silently.
+- **Android**: an OAuth Android client is matched by package name + signing certificate
+  SHA-1, so each kind of build needs its own (list in "One-time setup", step 6). For a local
+  debug build: `app.nbouvier.ardoise` + the debug keystore SHA-1 (`cd android && ./gradlew
+  signingReport`), or sign-in fails silently.
 - Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual
   prerequisite — see `docs/specs/authentication.md`.
