@@ -258,7 +258,7 @@ describe('StatisticsScreen', () => {
   it('shows nothing for a transaction only Others takes part in', async () => {
     await renderScreen([transaction({ amountCents: 4000, shares: { others: 4000 } })]);
 
-    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
   });
 
   it('never lists Others among the participants', async () => {
@@ -350,7 +350,7 @@ describe('StatisticsScreen', () => {
   it('shows a placeholder ring alongside the explanation for an empty group', async () => {
     await renderScreen([]);
 
-    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
     expect(screen.getByTestId('donut-chart')).toBeTruthy();
     expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('0.00');
   });
@@ -388,7 +388,7 @@ describe('StatisticsScreen', () => {
     mockFetchTransactions.mockResolvedValue({ transactions: [], excludedSubgroupCount: 0 });
     await fireEvent.press(retry);
 
-    expect(await screen.findByText(/Nothing spent yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
   });
 
   it('waits on the transactions rather than showing an empty chart', async () => {
@@ -398,7 +398,7 @@ describe('StatisticsScreen', () => {
     );
 
     expect(screen.getByTestId('statistics-loading')).toBeTruthy();
-    expect(screen.queryByText(/Nothing spent yet/)).toBeNull();
+    expect(screen.queryByText(/Nothing spent between members yet/)).toBeNull();
   });
 
   describe('sub-groups', () => {

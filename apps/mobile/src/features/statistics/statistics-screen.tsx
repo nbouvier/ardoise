@@ -81,7 +81,8 @@ function emptyMessage(
       : 'Nothing recorded as income in the selected date range.';
   }
   return type === 'spending'
-    ? 'Nothing spent yet. Transfers between members don’t count — they only move money around.'
+    ? // "between members": true too of a group whose spending all went to Others.
+      'Nothing spent between members yet. Transfers don’t count — they only move money around.'
     : 'Nothing recorded as income yet.';
 }
 

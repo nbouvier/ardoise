@@ -156,6 +156,9 @@ its own.
 - **A group whose transactions are all transfers**: the same empty state — nothing was
   spent or received. The wording must not read as an error, since the group plainly has
   transactions.
+- **A group whose spending all concerns Others**: the same empty state too, and its wording
+  ("Nothing spent between members yet.") stays true for it — something was recorded, but
+  none of it was spent on members.
 - **No income at all** (the common case) while the Income type is selected: an empty
   state specific to that combination ("nothing recorded as income"), with the type
   toggle still available to switch back.
