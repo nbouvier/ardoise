@@ -43,7 +43,7 @@ them the longest; a group with nobody else in it is deleted.</li>
 <ul>
 <li>In groups you share with other people, the transactions stay, so the others' accounts
 still add up. Your part in them is shown as “Others”, with nothing linking it to you. What you
-were owed, or owed, in those groups is lost.</li>
+were owed in those groups, and what you owed, is lost.</li>
 <li>Text typed into a transaction's title or comment, or a group's name, is not changed.</li>
 <li>Encrypted backups of the database keep a copy for up to 12 months. They are only used to
 restore the service, and a restore deletes every deleted account again.</li>
