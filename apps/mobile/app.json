@@ -43,6 +43,12 @@
     },
     "updates": {
       "fallbackToCacheTimeout": 0
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bdc9d81c-36f9-4fc0-b507-8c2294cdd7eb"
+      }
+    },
+    "owner": "nelb"
   }
 }
