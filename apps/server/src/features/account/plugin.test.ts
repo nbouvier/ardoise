@@ -46,7 +46,7 @@ describe('account deletion', () => {
       invites: { now: () => clock, inviteTtlSeconds: 3600, publicBaseUrl: 'https://ardoise.test' },
       groups: { now: () => clock },
       transactions: { now: () => clock },
-      account: { deletionContact: 'privacy@example.com' },
+      account: { contact: 'privacy@example.com' },
     }));
   });
 
@@ -549,6 +549,22 @@ describe('account deletion', () => {
       expect(response.body).toContain('What stays');
       expect(response.body).toContain('12 months');
       expect(response.body).toContain('mailto:privacy@example.com');
+    });
+
+    it('is in French for a browser that prefers French, with the legal footer', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/delete-account',
+        headers: { 'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8' },
+      });
+
+      expect(response.headers.vary).toContain('Accept-Language');
+      expect(response.body).toContain('<html lang="fr">');
+      expect(response.body).toContain('Ce qui est supprimé');
+      expect(response.body).toContain('jusqu’à 12 mois');
+      expect(response.body).toContain('mailto:privacy@example.com');
+      expect(response.body).toContain('href="/privacy?lang=fr"');
+      expect(response.body).toContain('href="/delete-account?lang=en"');
     });
   });
 });

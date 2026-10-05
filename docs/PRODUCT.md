@@ -22,7 +22,7 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   (a third-party service, EU data region) so they can be fixed: the error and its stack,
   never request contents, amounts, titles, tokens or e-mail addresses; the user appears
   only as an opaque id. A screen that fails to render shows "Something went wrong" with a
-  way to try again instead of a blank app. The privacy policy must name this processor.
+  way to try again instead of a blank app. The privacy policy names this processor.
   See `docs/LOGGING.md`.
 
 ## Current capabilities
@@ -98,6 +98,11 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
   and what they were owed or owed in those groups disappears too. Groups they created pass
   to the longest-standing member. A public web page describes it for Google Play and for
   people without the app. See `docs/specs/account-deletion.md`.
+- **Legal pages** — a privacy policy, terms of use and a legal notice, public on the
+  server in French (authoritative) and English, linked from the sign-in screen
+  (continuing means accepting the terms) and from the Account page. Minimum age 15. Who
+  publishes and hosts the service comes from the deployment's configuration, never from
+  the repository. See `docs/specs/legal-pages.md`.
 
 The product is not yet released; Android is the first target.
 

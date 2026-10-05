@@ -220,6 +220,15 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     transaction between two other members of the caller's group), the membership
     boundary (a group the caller has left serves nothing, even where they are still a
     participant), and the cap with same-day ties in recording order.
+- **Legal pages** (`src/features/legal/`, `src/http/language.ts`,
+  `docs/specs/legal-pages.md`): the language choice (`?lang` over `Accept-Language`, weights
+  and order, `q=0`, unsupported languages, no header); each page public, locked down by
+  its CSP, cookie-free, `Vary: Accept-Language`, in both languages with the link to the
+  other and the four-page footer; the legal notice escapes the configured publisher and
+  shows the host; the privacy policy and the terms carry each required statement (the text
+  itself is reviewed by reading); no request log line carries the client's address
+  (mutation-checked by putting `remoteAddress` back). The production startup check for
+  each legal variable is in `config/env.test.ts`.
 - **Account deletion** (`src/features/account/`, `docs/specs/account-deletion.md`):
   - generated ledger (`repository.test.ts`): every payer, Others included, against every
     set of concerned parties in both split modes; after deleting one member, every row
@@ -235,7 +244,8 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     what Others implies; ownership passes to the earliest-joined member, per group;
     a group left empty goes with its sub-groups; invitation links stop working; only the
     id is kept and a new sign-in is a new account; all-or-nothing, checked by making the
-    very last write fail with a trigger; the deletion preview; the public page;
+    very last write fail with a trigger; the deletion preview; the public page, in
+    English and, for a browser preferring French, in French with the legal footer;
   - the database itself refuses to delete a user still named on a transaction, and a
     write naming an account deleted meanwhile is refused as `not_group_member` rather than
     failing with a server error;
@@ -308,7 +318,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   Delete account page states what goes and stays, totals what the user is owed and what they
   owe, each unfolding into its groups (or says none is lost), deletes nothing until the final prompt is confirmed, keeps the page
   with an error on failure, and retries a preview that failed to load. `lib/api/account`
-  covers both requests' shapes.
+  covers both requests' shapes. Legal pages (`docs/specs/legal-pages.md`): the sign-in
+  screen says continuing accepts the terms and its two links open the terms and the
+  privacy policy without signing in; the Account page's Legal section opens each of the
+  three pages, with no `?lang` (`expo-web-browser` mocked).
 - **Placeholder members** (`docs/specs/placeholder-members.md`): New group adds names,
   takes one back off, refuses a duplicate whatever the case, says so when the server finds
   one taken, and offers a sub-group its parent's placeholders; "+ Invite" sends friends and

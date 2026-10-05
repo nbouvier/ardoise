@@ -7,6 +7,7 @@ import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
 import { friendsPlugin } from './features/friends/plugin.js';
 import { groupsPlugin, type GroupsPluginOptions } from './features/groups/plugin.js';
 import { invitesPlugin, type InvitesPluginOptions } from './features/invites/plugin.js';
+import { legalPlugin, type LegalPluginOptions } from './features/legal/plugin.js';
 import {
   transactionsPlugin,
   type TransactionsPluginOptions,
@@ -33,6 +34,10 @@ export interface BuildAppOptions {
   transactions?: TransactionsPluginOptions;
   /** Account plugin overrides. Tests pass a deletion contact here. */
   account?: AccountPluginOptions;
+  /** Legal pages overrides. Tests pass the publisher and host here. */
+  legal?: LegalPluginOptions;
+  /** Send log lines here, at this level (tests read them). Default: standard output, `LOG_LEVEL`. */
+  log?: { level: string; stream: { write: (line: string) => void } } | undefined;
 }
 
 /**
@@ -55,9 +60,19 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     trustProxy: toFastifyTrustProxy(options.trustProxy ?? env.TRUST_PROXY),
     logger: {
-      level: env.LOG_LEVEL,
+      level: options.log?.level ?? env.LOG_LEVEL,
       transport:
-        env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
+        env.NODE_ENV === 'development' && !options.log ? { target: 'pino-pretty' } : undefined,
+      ...(options.log ? { stream: options.log.stream } : {}),
+      serializers: {
+        // Fastify's default also logs the client's address and port: the logs
+        // keep no IP address (`docs/specs/legal-pages.md`). Rate limiting still
+        // keys on it, in memory only.
+        req: (request: { method: string; url: string }) => ({
+          method: request.method,
+          url: request.url,
+        }),
+      },
     },
   });
 
@@ -91,6 +106,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(groupsPlugin, { ...options.groups });
   app.register(transactionsPlugin, { ...options.transactions });
   app.register(accountPlugin, { ...options.account });
+  app.register(legalPlugin, { ...options.legal });
 
   registerHealthRoutes(app);
 

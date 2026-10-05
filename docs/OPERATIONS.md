@@ -314,7 +314,7 @@ and is safe to repeat (an id no longer in the database is only kept on the
 ./compose.sh run --rm -T migrate node apps/server/dist/scripts/delete-accounts.js <user id>...
 ```
 
-- **A request by e-mail**, to `ACCOUNT_DELETION_CONTACT` (`docs/DEPLOYMENT.md`), from
+- **A request by e-mail**, to `CONTACT_EMAIL` (`docs/DEPLOYMENT.md`), from
   someone without the app. Act on it only when it comes from the e-mail address of the
   account's Google account. Find the id (`select id from users where email = '…'` with
   `./compose.sh exec -T db psql --username ardoise --dbname ardoise`), run the command,
@@ -323,10 +323,31 @@ and is safe to repeat (an id no longer in the database is only kept on the
 
 Each deletion logs `account.deleted` with the id and counts only (`docs/LOGGING.md`).
 
+## Privacy requests
+
+The privacy policy (`GET /privacy`, `docs/specs/legal-pages.md`) promises an answer within
+**one month** to what arrives at `CONTACT_EMAIL`. There is no tooling yet beyond the
+deletion command; each is handled by hand, from `psql` as above:
+
+- **Only from the account's own address**: act on a request about an account only when it
+  comes from the e-mail address of its Google account.
+- **Deletion**: see "Deleted accounts".
+- **Access / portability**: send back what the database holds about the account — its
+  `users` row, its memberships, friendships and favorites, and the transactions of its
+  groups that name it — as a readable export (JSON or CSV).
+- **Rectification**: name, e-mail and picture come from Google and are refreshed at each
+  sign-in; anything else the user can change in the app.
+- **A person added by name without an account** asking for their name to be erased:
+  rename the placeholder (`users` row with `kind = 'placeholder'`) to a neutral name
+  unique in its group tree (for example `Removed 1`), or ask a member of the group to
+  remove it from the app.
+
 ## Logs and monitoring
 
 - The server logs JSON on stdout (`docs/LOGGING.md`): `./compose.sh logs -f server`.
   Docker keeps 5 × 10 MB per container, nothing more; there is **no log shipping** yet.
+  They carry no client IP address (the privacy policy says so): find abuse through the
+  `429` lines' routes, not their source.
 - `GET /health` answers `{"status":"ok"}`; it is what the container healthcheck uses.
   Point an external uptime monitor at `https://<domain>/health` — without one, the first
   report of an outage is a user. It does not check the database (by design: it must keep

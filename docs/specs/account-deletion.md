@@ -97,7 +97,8 @@ again.
   - how to ask for it without the app: by writing to a contact address, from the address
     of the Google account used to sign in. The request is carried out by an operator
     with the same deletion as in the app.
-- Same plain style as the invitation landing page.
+- Same plain style as the invitation landing page, in French and English and with the
+  legal pages' footer, like them (`docs/specs/legal-pages.md`).
 
 ## Out of scope
 
@@ -112,9 +113,8 @@ again.
   it.
 - Deleting accounts that have been inactive for a long time.
 - Settling balances automatically before deletion.
-- Writing the privacy policy itself: a separate piece of work, due before the first public
-  release. It must carry the retention stated below and name Sentry as a processor
-  (`docs/PRODUCT.md`).
+- The privacy policy itself: `docs/specs/legal-pages.md`, which carries the retention
+  stated below.
 - Asking for the Google sign-in again before deleting: the two confirmations stand in for
   it.
 

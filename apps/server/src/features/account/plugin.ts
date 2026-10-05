@@ -1,7 +1,8 @@
 import fp from 'fastify-plugin';
 
 import { env } from '../../config/env.js';
-import { contentSecurityPolicyFor } from '../../http/html.js';
+import { sendLocalizedPage } from '../../http/html.js';
+import { pickLanguage } from '../../http/language.js';
 import { createTransactionsRepository } from '../transactions/repository.js';
 
 import { renderDeletionPage } from './page.js';
@@ -10,7 +11,7 @@ import { createAccountService } from './service.js';
 
 export interface AccountPluginOptions {
   /** Override the contact address shown on the deletion page (tests). */
-  deletionContact?: string | undefined;
+  contact?: string | undefined;
 }
 
 /**
@@ -23,9 +24,11 @@ export const accountPlugin = fp<AccountPluginOptions>(
       repository: createAccountRepository(app.db),
       ledger: createTransactionsRepository(app.db),
     });
-    const deletionPage = renderDeletionPage({
-      contact: 'deletionContact' in opts ? opts.deletionContact : env.ACCOUNT_DELETION_CONTACT,
-    });
+    const contact = 'contact' in opts ? opts.contact : env.CONTACT_EMAIL;
+    const deletionPages = {
+      fr: renderDeletionPage({ contact, lang: 'fr' }),
+      en: renderDeletionPage({ contact, lang: 'en' }),
+    };
 
     app.get('/me/deletion-preview', { preHandler: app.authenticate }, async (request, reply) => {
       const preview = await account.deletionPreview(request.userId!);
@@ -47,11 +50,12 @@ export const accountPlugin = fp<AccountPluginOptions>(
     });
 
     // Public: Google Play links to it, and it must be readable without the app.
-    app.get('/delete-account', async (_request, reply) => {
-      return reply
-        .type('text/html; charset=utf-8')
-        .header('content-security-policy', contentSecurityPolicyFor(deletionPage))
-        .send(deletionPage);
+    app.get('/delete-account', async (request, reply) => {
+      const { lang } = request.query as { lang?: unknown };
+      return sendLocalizedPage(
+        reply,
+        deletionPages[pickLanguage(lang, request.headers['accept-language'])],
+      );
     });
   },
   { name: 'account', dependencies: ['db', 'auth'] },

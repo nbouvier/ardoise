@@ -130,8 +130,29 @@ request. A second call answers `401`, the account being gone.
 
 The public HTML page describing account deletion — the in-app path, what is erased and
 what stays, the backup retention, and the contact address for a request without the app
-(`ACCOUNT_DELETION_CONTACT`, `docs/DEPLOYMENT.md`; left out when unset). The link given to
-Google Play. Unauthenticated.
+(`CONTACT_EMAIL`, `docs/DEPLOYMENT.md`; left out when unset). The link given to
+Google Play. Unauthenticated. In French or English like the legal pages below (`?lang=`).
+
+## Legal pages
+
+Public HTML pages, unauthenticated (`docs/specs/legal-pages.md`), in French or English:
+`?lang=fr` / `?lang=en`, otherwise the first of the two in `Accept-Language`'s order of
+preference, otherwise English (`Vary: Accept-Language`). Each ends with links to the
+four public pages and its last-update date.
+
+### `GET /privacy`
+
+The privacy policy — the URL given to Google Play.
+
+### `GET /terms`
+
+The terms of use, accepted by continuing at sign-in.
+
+### `GET /legal`
+
+The legal notice: the publisher (`LEGAL_PUBLISHER_NAME`, `CONTACT_EMAIL`) and the
+hosting provider (`LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS`, `LEGAL_HOST_PHONE`), from the
+configuration.
 
 ## Invitations
 

@@ -22,7 +22,10 @@ export type IconName =
   | 'account'
   | 'calendar'
   | 'pencil'
-  | 'filters';
+  | 'filters'
+  | 'shield'
+  | 'document'
+  | 'info';
 
 /** Stroke paths on a 24×24 grid — plain geometry, no icon font. */
 const paths: Record<IconName, string> = {
@@ -67,6 +70,12 @@ const paths: Record<IconName, string> = {
   pencil: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z',
   // Three sliders with their knobs at different heights: narrow what is shown.
   filters: 'M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1M15 5v4M9 10v4M17 15v4',
+  // A crest: what is kept safe — the privacy policy.
+  shield: 'M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z',
+  // A sheet with a folded corner and two lines of text: the terms.
+  document: 'M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h6',
+  // An "i" in a circle: who runs the service — the legal notice.
+  info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v6M12 7.5v.5',
 };
 
 export interface IconProps {

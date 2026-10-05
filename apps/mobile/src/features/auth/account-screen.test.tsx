@@ -33,7 +33,14 @@ jest.mock('./delete-account-screen', () => {
   return { DeleteAccountScreen: () => <Text>Delete account page</Text> };
 });
 
+const mockOpenBrowser = jest.fn<(url: string) => Promise<unknown>>();
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: (url: string) => mockOpenBrowser(url),
+  WebBrowserPresentationStyle: { AUTOMATIC: 'automatic' },
+}));
+
 beforeEach(() => {
+  mockOpenBrowser.mockReset().mockResolvedValue({ type: 'dismiss' });
   mockSignOut.mockReset();
   mockSignOut.mockResolvedValue(undefined);
   mockSignIn.mockReset();
@@ -110,5 +117,19 @@ describe('AccountScreen', () => {
     await openProfileMenu();
 
     expect(screen.getAllByRole('button', { name: 'Delete account' })).toHaveLength(1);
+  });
+
+  it.each([
+    ['Privacy policy', '/privacy'],
+    ['Terms of use', '/terms'],
+    ['Legal notice', '/legal'],
+  ])('opens the %s in the in-app browser from the Legal section', async (label, path) => {
+    await render(<AccountScreen />);
+
+    expect(screen.getByText('Legal')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: label }));
+
+    // No `?lang`: the server answers in the browser's language.
+    expect(mockOpenBrowser).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^https?://[^/]+${path}$`)));
   });
 });

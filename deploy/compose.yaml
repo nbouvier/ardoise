@@ -71,6 +71,12 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:?set GOOGLE_CLIENT_IDS in .env}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET in .env}
+      # The legal pages' publisher, contact and host (docs/specs/legal-pages.md).
+      CONTACT_EMAIL: ${CONTACT_EMAIL:?set CONTACT_EMAIL in .env}
+      LEGAL_PUBLISHER_NAME: ${LEGAL_PUBLISHER_NAME:?set LEGAL_PUBLISHER_NAME in .env}
+      LEGAL_HOST_NAME: ${LEGAL_HOST_NAME:?set LEGAL_HOST_NAME in .env}
+      LEGAL_HOST_ADDRESS: ${LEGAL_HOST_ADDRESS:?set LEGAL_HOST_ADDRESS in .env}
+      LEGAL_HOST_PHONE: ${LEGAL_HOST_PHONE:?set LEGAL_HOST_PHONE in .env}
       # One proxy (Caddy, see proxy/) sits between the clients and the server.
       TRUST_PROXY: '1'
       # Error reports are filed under this environment's name (production / staging).
@@ -80,7 +86,6 @@ services:
       LOG_LEVEL:
       PLAY_STORE_URL:
       APP_STORE_URL:
-      ACCOUNT_DELETION_CONTACT:
       SENTRY_DSN:
     depends_on:
       db:
