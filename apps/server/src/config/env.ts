@@ -162,13 +162,31 @@ const envSchema = z.object({
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
   PLAY_STORE_URL: z.url().optional(),
   /**
-   * Where account-deletion requests made without the app go, shown on the public
-   * `/delete-account` page (`docs/specs/account-deletion.md`). Unset, the page only
-   * describes the in-app path. Set it before the app is published: Google Play
-   * requires a way to ask for deletion without the app.
+   * The publisher's contact address, shown on every public page: legal notice,
+   * privacy requests, account deletion without the app
+   * (`docs/specs/legal-pages.md`). Required when `NODE_ENV=production`.
    */
-  ACCOUNT_DELETION_CONTACT: z.email().optional(),
+  CONTACT_EMAIL: z.email().optional(),
+  /**
+   * Who publishes Ardoise and who hosts it, shown on the legal notice
+   * (`docs/specs/legal-pages.md`). Personal data and infrastructure details: they
+   * live in the deployment's configuration, never in this public repository.
+   * Required when `NODE_ENV=production`.
+   */
+  LEGAL_PUBLISHER_NAME: z.string().trim().min(1).optional(),
+  LEGAL_HOST_NAME: z.string().trim().min(1).optional(),
+  LEGAL_HOST_ADDRESS: z.string().trim().min(1).optional(),
+  LEGAL_HOST_PHONE: z.string().trim().min(1).optional(),
 });
+
+/** What the legal pages cannot go live without. */
+const LEGAL_VARIABLES = [
+  'CONTACT_EMAIL',
+  'LEGAL_PUBLISHER_NAME',
+  'LEGAL_HOST_NAME',
+  'LEGAL_HOST_ADDRESS',
+  'LEGAL_HOST_PHONE',
+] as const;
 
 /**
  * Settings that have a harmless default for development but would make a
@@ -213,6 +231,17 @@ const envChecked = envSchema
         path: ['PUBLIC_BASE_URL'],
         message: 'must not point at a local address when NODE_ENV=production',
       });
+    }
+    // The law requires the legal notice; Google Play requires the privacy
+    // policy and a deletion contact. Never live without them.
+    for (const name of LEGAL_VARIABLES) {
+      if (!value[name]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [name],
+          message: 'is required when NODE_ENV=production',
+        });
+      }
     }
   })
   .transform((value) => ({

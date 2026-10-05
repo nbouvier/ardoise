@@ -7,7 +7,7 @@ Google Play ask for:
 
 - a **privacy policy** (GDPR articles 13–14), which Google Play also requires as a public
   URL;
-- a **legal notice** (*mentions légales*, LCEN article 6 III) identifying who publishes
+- a **legal notice** (*mentions légales*, required by the LCEN, loi n° 2004-575) identifying who publishes
   the service and who hosts it;
 - short **terms of use** (*CGU*), setting the rules of use and what Ardoise does not
   promise (it tracks who owes what; it never holds or moves money).
@@ -51,7 +51,7 @@ so that the app can be published and I stay within the law.
   non-professional basis, with the contact address. The publisher's name also stands
   as the director of publication.
 - The publisher's postal address and phone number are not shown: as the law allows a
-  non-professional publisher (LCEN article 6 III-2), they are held by the hosting
+  non-professional publisher, they are held by the hosting
   provider instead.
 - Hosting provider: its name, address and phone number.
 - Source code: public, under the AGPL-3.0 licence.
@@ -109,8 +109,8 @@ so that the app can be published and I stay within the law.
     sign-in;
   - the right to complain to the CNIL.
 - **People added by name**: someone named in a group without an account can ask, at the
-  contact address, for their name to be removed. Their part then becomes "Others", as in
-  the app.
+  contact address, for their name to be erased. The publisher handles it by hand
+  (`docs/OPERATIONS.md`, "Privacy requests").
 - **Minimum age**: 15.
 - **Security**: encrypted connections, encrypted backups, access limited to the
   publisher.
@@ -263,7 +263,8 @@ incomplete.
 - Server request logs no longer record the client's address or port. Rate limiting still
   uses the address, in memory only.
 - The publisher must, outside the code:
-  - make sure the hosting provider holds their identity (LCEN 6 III-2);
+  - make sure the hosting provider holds their identity (the condition for not
+    publishing their address);
   - turn off IP address storage in both Sentry projects.
 
 ## Open questions

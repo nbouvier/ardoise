@@ -14,6 +14,11 @@ const production = {
   DATABASE_URL: 'postgres://user:pass@db.internal:5432/ardoise',
   PUBLIC_BASE_URL: 'https://api.ardoise.test',
   TRUST_PROXY: '1',
+  CONTACT_EMAIL: 'contact@example.com',
+  LEGAL_PUBLISHER_NAME: 'Jane Doe',
+  LEGAL_HOST_NAME: 'Example Hosting',
+  LEGAL_HOST_ADDRESS: '1 Example Street, 75000 Paris, France',
+  LEGAL_HOST_PHONE: '+33 1 00 00 00 00',
 };
 
 describe('loadEnv', () => {
@@ -120,19 +125,45 @@ describe('loadEnv', () => {
     });
   });
 
-  describe('account deletion contact', () => {
-    it('is optional, and taken as given', () => {
-      expect(loadEnv(production).ACCOUNT_DELETION_CONTACT).toBeUndefined();
-      expect(
-        loadEnv({ ...production, ACCOUNT_DELETION_CONTACT: 'privacy@example.com' })
-          .ACCOUNT_DELETION_CONTACT,
-      ).toBe('privacy@example.com');
+  describe('legal pages', () => {
+    it('are optional outside production', () => {
+      const env = loadEnv({ ...base, NODE_ENV: 'development' });
+
+      expect(env.CONTACT_EMAIL).toBeUndefined();
+      expect(env.LEGAL_PUBLISHER_NAME).toBeUndefined();
     });
 
-    it('refuses something that is not an e-mail address, which the public page would show', () => {
-      expect(() =>
-        loadEnv({ ...production, ACCOUNT_DELETION_CONTACT: 'write to us' }),
-      ).toThrow(/ACCOUNT_DELETION_CONTACT/);
+    it('takes the publisher, the contact and the host as given', () => {
+      const env = loadEnv(production);
+
+      expect(env.CONTACT_EMAIL).toBe('contact@example.com');
+      expect(env.LEGAL_PUBLISHER_NAME).toBe('Jane Doe');
+      expect(env.LEGAL_HOST_PHONE).toBe('+33 1 00 00 00 00');
+    });
+
+    it.each([
+      'CONTACT_EMAIL',
+      'LEGAL_PUBLISHER_NAME',
+      'LEGAL_HOST_NAME',
+      'LEGAL_HOST_ADDRESS',
+      'LEGAL_HOST_PHONE',
+    ])('refuses to start in production without %s, which the legal pages need', (name) => {
+      const source: Record<string, string | undefined> = { ...production };
+      delete source[name];
+
+      expect(() => loadEnv(source)).toThrow(`${name}: is required when NODE_ENV=production`);
+    });
+
+    it('refuses a blank value as missing', () => {
+      expect(() => loadEnv({ ...production, LEGAL_PUBLISHER_NAME: '  ' })).toThrow(
+        /LEGAL_PUBLISHER_NAME/,
+      );
+    });
+
+    it('refuses a contact that is not an e-mail address, which every public page shows', () => {
+      expect(() => loadEnv({ ...production, CONTACT_EMAIL: 'write to us' })).toThrow(
+        /CONTACT_EMAIL/,
+      );
     });
   });
 

@@ -5,7 +5,7 @@ import { createTestDatabase, resetDatabase } from './database.js';
 
 export type TestAppOptions = Pick<
   BuildAppOptions,
-  'auth' | 'invites' | 'groups' | 'transactions' | 'account' | 'rateLimit'
+  'auth' | 'invites' | 'groups' | 'transactions' | 'account' | 'legal' | 'rateLimit' | 'log'
 >;
 
 export interface TestContext {
@@ -33,7 +33,9 @@ export async function createTestContext(
     groups: options.groups,
     transactions: options.transactions,
     account: options.account,
+    legal: options.legal,
     rateLimit: options.rateLimit,
+    log: options.log,
   });
   app.addHook('onClose', () => handle.close());
   await app.ready();

@@ -52,6 +52,7 @@ When `NODE_ENV=production`, on top of the variables that are always required
 | `DATABASE_URL`    | Required.                                                         | Unset means an embedded in-memory PGlite: the server would start fine and lose every write at the next restart. |
 | `PUBLIC_BASE_URL` | Required, and must not be `localhost` / a loopback / `0.0.0.0`.   | Invitation links are built from it and sent to other people's phones. |
 | `TRUST_PROXY`     | Required (`false` when no proxy is in front).                     | See [Behind a load balancer](#behind-a-load-balancer): both silent defaults are wrong in production. |
+| `CONTACT_EMAIL`, `LEGAL_PUBLISHER_NAME`, `LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS`, `LEGAL_HOST_PHONE` | Required, not blank; `CONTACT_EMAIL` an e-mail address. | The legal pages show them (see below); the law and Google Play need them live. |
 
 Outside production they stay optional (`DATABASE_URL` → embedded PGlite,
 `PUBLIC_BASE_URL` → `http://localhost:3000`, `TRUST_PROXY` → `false`).
@@ -62,13 +63,14 @@ the Compose stack passes `DEPLOY_ENV`, so `production` or `staging`). A `SENTRY_
 is not a URL is refused at startup rather than silently reporting nothing. See
 `docs/LOGGING.md`, "Error reporting (Sentry)".
 
-`ACCOUNT_DELETION_CONTACT` is the address account-deletion requests made without the app
-go to, shown on the public `GET /delete-account` page (`docs/specs/account-deletion.md`).
-Optional, and the page only describes the in-app path without it — but Google Play
-requires a way to ask for deletion without the app, so set it before the app is
-published. An address that is not an e-mail address is refused at startup. Requests that
-arrive there are carried out with the operator command (`docs/OPERATIONS.md`, "Deleted
-accounts").
+The legal pages (`docs/specs/legal-pages.md`) take who publishes and hosts the service
+from the configuration, never from the repository: `LEGAL_PUBLISHER_NAME` (the publisher,
+also director of publication), `LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS` and
+`LEGAL_HOST_PHONE` (the hosting provider, as the legal notice must name it), and
+`CONTACT_EMAIL` — the one contact address of every public page, where privacy requests
+and account-deletion requests made without the app arrive. Outside production they are
+optional and the pages show "(not configured)". Deletion requests are carried out with
+the operator command (`docs/OPERATIONS.md`, "Deleted accounts").
 
 ## Database migrations
 
@@ -193,8 +195,9 @@ Set on **every** response, errors and `429`s included, by `@fastify/helmet`
 | `X-Frame-Options`, `Cross-Origin-*-Policy`, `X-DNS-Prefetch-Control`… | helmet defaults | |
 | `X-Powered-By` | removed | |
 
-The two HTML documents — the invitation landing page (`GET /i/:code`) and the
-account-deletion page (`GET /delete-account`) — override the CSP for their own response:
+The HTML documents — the invitation landing page (`GET /i/:code`), the account-deletion
+page (`GET /delete-account`) and the legal pages (`GET /privacy`, `/terms`, `/legal`) —
+override the CSP for their own response:
 `default-src 'none'` plus their inline `<style>` and `<script>` allowed **by SHA-256
 hash**, computed from the response body by `contentSecurityPolicyFor` (`http/html.ts`) —
 per response, because the landing page's script contains the invitation code. There is no `unsafe-inline`. If you add an inline
