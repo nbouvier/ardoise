@@ -400,6 +400,54 @@ describe('TransactionFormScreen — Others as payer or recipient', () => {
     );
   });
 
+  it('offers Others back, last, in “Who paid” for a transaction stored with it', async () => {
+    await renderForm(paidByOthers);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Who paid' }));
+    expect(screen.getAllByRole('radio').map((radio) => radio.props.accessibilityLabel)).toEqual([
+      'Ada Lovelace',
+      'Grace Hopper',
+      'Others',
+    ]);
+    await fireEvent.press(screen.getByRole('radio', { name: 'Grace Hopper' }));
+    // Picking a member by mistake is undoable: Others is still on the list.
+    await fireEvent.press(screen.getByRole('button', { name: 'Who paid' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Others' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({ payerId: null }),
+    );
+  });
+
+  it('does not offer Others when editing a transaction a member paid', async () => {
+    await renderForm(existing);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Who paid' }));
+
+    expect(screen.queryByRole('radio', { name: 'Others' })).toBeNull();
+  });
+
+  it('offers Others back in “To” for a transfer stored with it', async () => {
+    await renderForm(transferToOthers);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'To' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'To' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Others' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({ kind: 'transfer', toUserId: null }),
+    );
+  });
+
   it('keeps Others as the recipient of a stored transfer on save', async () => {
     await renderForm(transferToOthers);
 

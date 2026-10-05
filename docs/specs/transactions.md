@@ -265,8 +265,9 @@ feature establishes, which that spec builds on.
 - [ ] A transaction whose only concerned party is Others is accepted and moves no
       balance.
 - [ ] The API accepts Others as payer and as either end of a transfer; such a transaction
-      moves no balance. The client offers neither choice, but editing a transaction
-      already stored that way keeps Others where it was.
+      moves no balance. The client offers neither choice on a new transaction; editing a
+      transaction already stored that way keeps Others where it was, and offers it back
+      in that field after a member is picked.
 - [ ] A transaction lists Others by that name, wherever it appears (payer or
       participant).
 
@@ -367,8 +368,9 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
   "Others" with a secondary line "People outside the group"; it behaves exactly like a
   member row (weight or fixed amount, zero removes it). It is never pinned, and never
   marked "Me". "Who paid" and a transfer's "To" do not offer it — unless the transaction
-  being edited already has Others there, in which case it is shown as the current value
-  and kept on save.
+  being edited was stored with Others there, in which case it is shown as the current value
+  and kept on save, and stays offered as the last option of that field, so picking a
+  member instead can be undone without cancelling the whole edit.
 - Wherever a transaction names someone — its row in a list, the form — Others reads
   "Others", with a neutral placeholder wherever a member would show an avatar.
 - Tapping a transaction opens the same form pre-filled, in place of the Transactions tab's

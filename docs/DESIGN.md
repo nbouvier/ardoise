@@ -684,12 +684,13 @@ asks for. Its dropdown additionally pins the viewer's own row **first** — pick
 scroll or search for. The friend picker deliberately shows **no balance**: it is a
 selection list, and a money figure there is noise.
 
-**Others is never a choice in `MemberDropdownField`.** It can only be the field's *current
-value*: when a transaction already stored with Others as payer ("Who paid") or as the
-transfer's recipient ("To") is edited, the trigger reads "Others" behind the neutral
-`OthersAvatar` (no `MeTag`), and saving sends `null` back unless a member is picked
-instead — after which Others is no longer offered, so cancelling the form is the way
-back. The field takes an explicit `PartyChoice` (`unset`, or `picked` with a member id or
+**Others is a choice in `MemberDropdownField` only where it was stored.** On a new
+transaction it is never listed. When a transaction already stored with Others as payer
+("Who paid") or as the transfer's recipient ("To") is edited, the trigger reads "Others"
+behind the neutral `OthersAvatar` (no `MeTag`), saving sends `null` back, and that field's
+list (`offerOthers`) ends with an Others row — same `OthersAvatar`, no secondary line — so
+picking a member by mistake is undone in the field itself rather than by cancelling the
+form. "To" never lists Others while the payer is Others. The field takes an explicit `PartyChoice` (`unset`, or `picked` with a member id or
 `null` for Others) rather than a nullable id, so "nothing picked yet" on a new transfer is
 never mistaken for Others.
 

@@ -105,11 +105,16 @@ export function TransactionFormScreen({
     initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
   );
   // `null` is Others: only ever the stored payer of a transaction being
-  // edited, never a choice (`docs/specs/transactions.md`). Written out rather
-  // than chained with `??`, which would turn Others into the viewer.
+  // edited, and a choice only there (`docs/specs/transactions.md`). Written
+  // out rather than chained with `??`, which would turn Others into the viewer.
   const [payerId, setPayerId] = useState<PartyId>(
     initial ? (initial.payer?.id ?? null) : (start?.payerId ?? viewerId),
   );
+  // Others is offered back in "Who paid" / "To" only where this transaction
+  // was stored with it, so picking a member there can be undone.
+  const storedOthersPayer = initial !== undefined && initial.payer === null;
+  const storedOthersRecipient =
+    initial?.kind === 'transfer' && initial.participants[0]?.user === null;
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
       ? splitFrom(initial)
@@ -264,6 +269,7 @@ export function TransactionFormScreen({
             selected={{ status: 'picked', id: payerId }}
             onSelect={setPayerId}
             viewerId={viewerId}
+            offerOthers={storedOthersPayer}
           />
         </View>
 
@@ -297,6 +303,7 @@ export function TransactionFormScreen({
               onSelect={(id) => setRecipient({ status: 'picked', id })}
               viewerId={viewerId}
               excludeId={payerId}
+              offerOthers={storedOthersRecipient}
             />
           </View>
         ) : (

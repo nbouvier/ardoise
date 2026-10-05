@@ -293,9 +293,11 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   - the add/edit form: defaults (Other as the category), the request shape for each
     kind, full-replace edit, transfer validation, the category badge that opens the
     picker sheet and updates without a separate save step; **Others** as a split
-    participant in the request, never listed by "Who paid" / "To", and kept as the
-    payer or the transfer's recipient when a stored transaction is edited (a stored
-    null payer is not read as the viewer, an unpicked recipient is not read as Others);
+    participant in the request, never listed by "Who paid" / "To" on a new transaction
+    or one a member paid, and kept as the payer or the transfer's recipient when a stored
+    transaction is edited — listed last there, so picking a member can be undone (a
+    stored null payer is not read as the viewer, an unpicked recipient is not read as
+    Others);
   - the category picker: selection, every category reachable, none with a "clear"
     behaviour;
   - `transaction-request.ts` (rebuilding a split for the form), the row's "my share"
