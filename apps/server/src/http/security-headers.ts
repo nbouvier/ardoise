@@ -8,7 +8,7 @@ import fp from 'fastify-plugin';
  * scripted, so the default policy forbids all of it (`default-src 'none'`,
  * `frame-ancestors 'none'`). The one HTML page, the invitation landing, sets its
  * own narrower policy (`contentSecurityPolicyFor` in
- * `features/invites/landing.ts`).
+ * `http/html.ts`).
  *
  * Helmet's other defaults stay: `X-Content-Type-Options: nosniff`,
  * `Referrer-Policy: no-referrer` (the invitation code lives in the landing page
