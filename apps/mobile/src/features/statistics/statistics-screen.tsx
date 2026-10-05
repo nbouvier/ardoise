@@ -149,9 +149,10 @@ export function StatisticsScreen({
     () =>
       categoryBreakdown(dateFilteredTransactions, {
         type,
-        // Passing `null` for "everyone" rather than every member id keeps the
-        // group total exactly `transaction.amountCents`, immune to any
-        // rounding remainder a shares split assigned only to some of them.
+        // Passing `null` for "everyone" rather than every member id lets
+        // `categoryBreakdown` apply its own rule — the members' shares, never
+        // Others' — instead of summing whichever ids happen to be listed.
+        // Others is not a member, so it is not in this list at all.
         participantIds: everyoneSelected ? null : [...selectedMemberIds],
       }),
     [dateFilteredTransactions, type, everyoneSelected, selectedMemberIds],
