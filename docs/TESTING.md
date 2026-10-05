@@ -280,8 +280,8 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   screens. Account deletion (`docs/specs/account-deletion.md`): `deleteAccount` signs out
   after a `204`, treats a `401` (already gone) as done, and stays signed in on a failure;
   the Account page opens Delete account from its own row, outside the profile menu; the
-  Delete account page states what goes and stays, lists the groups whose balance is lost
-  (or says none is), deletes nothing until the final prompt is confirmed, keeps the page
+  Delete account page states what goes and stays, totals what the user is owed and what they
+  owe, each unfolding into its groups (or says none is lost), deletes nothing until the final prompt is confirmed, keeps the page
   with an error on failure, and retries a preview that failed to load. `lib/api/account`
   covers both requests' shapes.
 - **Invitations** (`src/features/invites/`): the pending-invite store and the

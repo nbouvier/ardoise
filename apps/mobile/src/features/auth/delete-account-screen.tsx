@@ -1,16 +1,18 @@
 import type { AccountDeletionPreview } from '@ardoise/shared';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { Button } from '@/components/button';
 import { DismissiblePage } from '@/components/dismissible-page';
+import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { useDialog } from '@/components/use-dialog';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { balanceTone, groupBalanceLabel } from '@/features/transactions/balance-display';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { centsToText } from '@/features/transactions/amount-input';
+import { balanceTone } from '@/features/transactions/balance-display';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchDeletionPreview } from '@/lib/api/account';
 import { errorFields, logger } from '@/lib/logger';
@@ -114,7 +116,7 @@ export function DeleteAccountScreen({ onClose }: DeleteAccountScreenProps) {
             <Button label="Try again" variant="secondary" onPress={retry} />
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.content}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <Consequences preview={state.preview} />
             <ThemedText themeColor="textSecondary">
               It cannot be undone: signing in again later creates a new, empty account.
@@ -146,6 +148,9 @@ function Consequences({ preview }: { preview: AccountDeletionPreview }) {
         ? 'Your friend, and the group you share with them — with its sub-groups and everything in them, for them too.'
         : `Your ${preview.friendCount} friends, and the group you share with each of them — with its sub-groups and everything in them, for them too.`;
 
+  const owed = preview.balances.filter((balance) => balance.balanceCents > 0);
+  const owing = preview.balances.filter((balance) => balance.balanceCents < 0);
+
   return (
     <>
       <Section title="What is deleted">
@@ -167,22 +172,60 @@ function Consequences({ preview }: { preview: AccountDeletionPreview }) {
           Your balances disappear: nobody will pay back what you’re owed, and you won’t pay
           what you owe.
         </ThemedText>
-        {preview.balances.length === 0 ? (
+        {owed.length === 0 && owing.length === 0 ? (
           <ThemedText themeColor="textSecondary">You’re settled up in every group.</ThemedText>
-        ) : (
-          preview.balances.map((balance) => (
+        ) : null}
+        {owed.length > 0 ? <BalanceDisclosure label="You are owed" balances={owed} /> : null}
+        {owing.length > 0 ? <BalanceDisclosure label="You owe" balances={owing} /> : null}
+      </Section>
+    </>
+  );
+}
+
+type Balance = AccountDeletionPreview['balances'][number];
+
+/**
+ * One side of what the user loses — all they are owed, or all they owe — as a
+ * row showing the total, which unfolds into the groups it is made of.
+ */
+function BalanceDisclosure({ label, balances }: { label: string; balances: Balance[] }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const total = balances.reduce((sum, balance) => sum + balance.balanceCents, 0);
+  const tone = balanceTone(total);
+  const text = `${label} ${centsToText(Math.abs(total))}`;
+
+  return (
+    <View style={styles.disclosure}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={text}
+        onPress={() => setOpen((previous) => !previous)}
+        style={({ pressed }) => [
+          styles.disclosureHeader,
+          { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+        ]}>
+        <ThemedText type="smallBold" themeColor={tone} style={styles.groupName}>
+          {text}
+        </ThemedText>
+        <View style={open ? styles.chevronOpen : undefined}>
+          <Icon name="collapse" size={16} color={theme.textSecondary} />
+        </View>
+      </Pressable>
+      {open
+        ? balances.map((balance) => (
             <View key={balance.groupId} style={styles.balanceRow}>
-              <ThemedText type="smallBold" numberOfLines={1} style={styles.groupName}>
+              <ThemedText type="small" numberOfLines={1} style={styles.groupName}>
                 {balance.name}
               </ThemedText>
-              <ThemedText type="small" themeColor={balanceTone(balance.balanceCents)}>
-                {groupBalanceLabel(balance.balanceCents)}
+              <ThemedText type="small" themeColor={tone}>
+                {centsToText(Math.abs(balance.balanceCents))}
               </ThemedText>
             </View>
           ))
-        )}
-      </Section>
-    </>
+        : null}
+    </View>
   );
 }
 
@@ -240,11 +283,27 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
   },
+  disclosure: {
+    gap: Spacing.two,
+  },
+  disclosureHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.medium,
+  },
+  chevronOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
   balanceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: Spacing.three,
+    paddingHorizontal: Spacing.three,
   },
   groupName: {
     flexShrink: 1,

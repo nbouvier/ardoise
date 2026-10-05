@@ -67,13 +67,47 @@ describe('DeleteAccountScreen', () => {
     expect(screen.getByText(/cannot be undone/)).toBeTruthy();
   });
 
-  it('lists every group whose balance would be lost, with that balance', async () => {
+  it('totals what the user is owed and what they owe, groups hidden until unfolded', async () => {
     await renderLoaded();
 
+    const owed = screen.getByRole('button', { name: 'You are owed 6.00' });
+    const owing = screen.getByRole('button', { name: 'You owe 0.50' });
+    expect(screen.queryByText('Flat')).toBeNull();
+    expect(screen.queryByText('Grace Hopper')).toBeNull();
+
+    await fireEvent.press(owed);
     expect(screen.getByText('Flat')).toBeTruthy();
-    expect(screen.getByText('You are owed 6.00')).toBeTruthy();
+    expect(screen.queryByText('Grace Hopper')).toBeNull();
+
+    await fireEvent.press(owing);
     expect(screen.getByText('Grace Hopper')).toBeTruthy();
-    expect(screen.getByText('You owe 0.50')).toBeTruthy();
+
+    await fireEvent.press(owed);
+    expect(screen.queryByText('Flat')).toBeNull();
+  });
+
+  it('adds up several groups on the same side, and leaves out an empty side', async () => {
+    mockFetchPreview.mockResolvedValue({
+      friendCount: 0,
+      balances: [
+        {
+          groupId: '33333333-3333-4333-8333-333333333333',
+          kind: 'standard',
+          name: 'Flat',
+          balanceCents: 600,
+        },
+        {
+          groupId: '55555555-5555-4555-8555-555555555555',
+          kind: 'standard',
+          name: 'Trip',
+          balanceCents: 150,
+        },
+      ],
+    });
+    await renderLoaded();
+
+    expect(screen.getByRole('button', { name: 'You are owed 7.50' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^You owe/ })).toBeNull();
   });
 
   it('says so when no balance would be lost, and when there is no friend', async () => {

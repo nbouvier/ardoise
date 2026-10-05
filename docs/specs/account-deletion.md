@@ -153,8 +153,9 @@ again.
 
 - [ ] The Account page offers **Delete account**, which opens a page explaining what is
       erased, what stays, that balances in groups are lost, and that it is permanent.
-- [ ] That page lists every group where the user's own balance is not zero, with the
-      balance, and lists none when every balance is zero.
+- [ ] That page shows the total the user is owed and the total they owe, each unfolding
+      into the groups where the balance is not zero, with that balance; a side with no
+      group is not shown, and when every balance is zero the page says so.
 - [ ] Nothing is deleted until the user confirms twice (the button, then the final
       prompt); cancelling either leaves the account untouched.
 - [ ] After deletion the app is on the sign-in screen, and the account's access and
@@ -220,11 +221,13 @@ again.
 
 ## UX / UI considerations
 
-- The Delete account action sits at the bottom of the Account page, in its own section,
-  red like other destructive actions; not inside the Profile row's menu, where a wrong
+- The Delete account action sits on the Account page under the Profile row, in its own
+  section, red like other destructive actions; not inside the Profile row's menu, where a wrong
   tap next to "Sign out" would be too easy.
-- The Delete account page states the consequences as a short list, then the groups with a
-  non-zero balance (group name, amount in the usual balance colours), then the button. It
+- The Delete account page states the consequences as a short list, then what is lost as two
+  unfoldable rows — "You are owed …" and "You owe …", each the total over every group,
+  opening onto the groups it is made of (name and amount, in the usual balance colours) —
+  then the button. It
   has a loading state while the preview loads, and an error state with retry.
 - The final prompt is the app's own confirmation dialog, destructive button "Delete".
 - While deletion runs, the button shows progress and cannot be pressed again.

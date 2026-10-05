@@ -77,9 +77,9 @@ export function AccountScreen() {
           </Pressable>
         </View>
 
-        {/* Apart from the Profile row's menu, at the foot of the page: a wrong tap
-          next to "Sign out" must not be where an account gets deleted. */}
-        <View style={[styles.section, styles.danger]}>
+        {/* Apart from the Profile row's menu: a wrong tap next to "Sign out" must
+          not be where an account gets deleted. */}
+        <View style={styles.section}>
           <ThemedText type="overline" themeColor="textSecondary">
             Your data
           </ThemedText>
@@ -132,13 +132,10 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.four,
+    gap: Spacing.five,
   },
   section: {
     gap: Spacing.two,
-  },
-  danger: {
-    marginTop: 'auto',
-    paddingBottom: Spacing.four,
   },
   row: {
     flexDirection: 'row',
