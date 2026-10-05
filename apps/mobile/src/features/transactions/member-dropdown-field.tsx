@@ -1,4 +1,4 @@
-import type { FriendSummary } from '@ardoise/shared';
+import type { FriendSummary, PartyId } from '@ardoise/shared';
 import { Fragment, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -6,20 +6,30 @@ import { Avatar } from '@/components/avatar';
 import { DropdownMenu } from '@/components/dropdown-menu';
 import { Icon } from '@/components/icon';
 import { MeTag } from '@/components/me-tag';
+import { OthersAvatar } from '@/components/others-avatar';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * What a single-party field currently holds: nothing yet, or someone —
+ * `id: null` being Others (`docs/specs/transactions.md`). Two states rather
+ * than a nullable id, so "not picked yet" and "Others" can never be mistaken
+ * for each other.
+ */
+export type PartyChoice = { status: 'unset' } | { status: 'picked'; id: PartyId };
 
 export interface MemberDropdownFieldProps {
   /** What this field picks — "Who paid", "Who received it", "To"… */
   accessibilityLabel: string;
   members: FriendSummary[];
-  selectedId: string | null;
+  selected: PartyChoice;
+  /** Only ever a member: the list never offers Others. */
   onSelect: (userId: string) => void;
   /** The signed-in member — marked "Me" and pinned to the top of the list. */
   viewerId: string | null;
   /** A member to leave out of the list — typically the payer, for "To". */
-  excludeId?: string | null;
+  excludeId?: PartyId;
 }
 
 /**
@@ -30,11 +40,15 @@ export interface MemberDropdownFieldProps {
  * pick is a tinted row, not a separate checkmark. Group members, not friends:
  * anyone currently in the group is a valid choice. The viewer's own row is
  * pinned first and marked "Me", since picking yourself is the common case.
+ *
+ * Others is never a choice in the list. It can only be the *current value*,
+ * when a transaction already stored with Others as payer or recipient is being
+ * edited: the field then reads "Others", and keeps it until a member is picked.
  */
 export function MemberDropdownField({
   accessibilityLabel,
   members,
-  selectedId,
+  selected: choice,
   onSelect,
   viewerId,
   excludeId,
@@ -44,6 +58,8 @@ export function MemberDropdownField({
   const selectable = members
     .filter((member) => member.id !== excludeId)
     .sort((a, b) => (a.id === viewerId ? -1 : b.id === viewerId ? 1 : 0));
+  const selectedId = choice.status === 'picked' ? choice.id : undefined;
+  const isOthers = choice.status === 'picked' && choice.id === null;
   const selected = members.find((member) => member.id === selectedId) ?? null;
 
   return (
@@ -56,7 +72,14 @@ export function MemberDropdownField({
           styles.trigger,
           { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
         ]}>
-        {selected ? (
+        {isOthers ? (
+          <>
+            <OthersAvatar size={28} />
+            <ThemedText style={styles.name} numberOfLines={1}>
+              Others
+            </ThemedText>
+          </>
+        ) : selected ? (
           <>
             <Avatar name={selected.name} picture={selected.picture} size={28} seed={selected.id} />
             <ThemedText style={styles.name} numberOfLines={1}>

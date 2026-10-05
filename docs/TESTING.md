@@ -287,20 +287,27 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   identity down.
 - **Transactions** (`src/features/transactions/`):
   - the split editor: selection, weight stepper, live preview, mode switching, the
-    allocation indicator;
+    allocation indicator; **Others** as the last row in both modes (never "Me", not
+    concerned by default, sent as `userId: null`, zero removes it, counted in "left to
+    allocate", alone in a split);
   - the add/edit form: defaults (Other as the category), the request shape for each
     kind, full-replace edit, transfer validation, the category badge that opens the
-    picker sheet and updates without a separate save step;
+    picker sheet and updates without a separate save step; **Others** as a split
+    participant in the request, never listed by "Who paid" / "To", and kept as the
+    payer or the transfer's recipient when a stored transaction is edited (a stored
+    null payer is not read as the viewer, an unpicked recipient is not read as Others);
   - the category picker: selection, every category reachable, none with a "clear"
     behaviour;
   - `transaction-request.ts` (rebuilding a split for the form), the row's "my share"
-    calculation and category emoji, the date field's local-date conversion (no time-zone
+    calculation (the spec's 60 € example reads +20 for the payer, an Others payer reads
+    "Others" and "—") and category emoji, the date field's local-date conversion (no time-zone
     shift) and its iOS / Android wiring.
 - **Statistics** (`src/features/statistics/`): the donut geometry (the ring always
   closes, a sliver stays visible, a full ring is drawn as two halves) and the sheet —
   totals and legend, one arc per category, the type toggle, narrowing and summing the
   per-member selection, the "select at least one" empty state, selecting and deselecting a
-  slice, each empty state saying *which* view is empty.
+  slice, each empty state saying *which* view is empty; a transaction partly or wholly for
+  Others counting members' shares only, and Others never in the participant checklist.
 - **Reimbursements** (`src/features/reimbursements/`): a chain of debts shown as one
   payment; each payment worded from the viewer's point of view, their own first;
   recording one by tapping it; the explained (not silent) refusal on an archived group or
