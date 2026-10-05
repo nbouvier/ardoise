@@ -542,6 +542,12 @@ A card: the **category's emoji on a badge in the category's own colour**, then t
 then a second line of date · kind · payer, then the viewer's own share, coloured. The
 emoji is the badge — it is *not* prefixed to the title text.
 
+The share is the transaction's effect on the viewer's balance (`balanceEffectCents` from
+`@ardoise/shared`, never re-derived in the app): a payer is credited the members' shares
+only, not Others'. A payer who is **Others** reads "Others" on the second line, and a
+transaction that moves nothing for the viewer — Others paid, or only Others is concerned —
+shows the neutral "—".
+
 ### Reimbursements (`src/features/reimbursements/reimbursements-screen.tsx`)
 
 The group's Balances tab, in full. **The figures first, then what to do about them**:
@@ -678,6 +684,15 @@ asks for. Its dropdown additionally pins the viewer's own row **first** — pick
 scroll or search for. The friend picker deliberately shows **no balance**: it is a
 selection list, and a money figure there is noise.
 
+**Others is never a choice in `MemberDropdownField`.** It can only be the field's *current
+value*: when a transaction already stored with Others as payer ("Who paid") or as the
+transfer's recipient ("To") is edited, the trigger reads "Others" behind the neutral
+`OthersAvatar` (no `MeTag`), and saving sends `null` back unless a member is picked
+instead — after which Others is no longer offered, so cancelling the form is the way
+back. The field takes an explicit `PartyChoice` (`unset`, or `picked` with a member id or
+`null` for Others) rather than a nullable id, so "nothing picked yet" on a new transfer is
+never mistaken for Others.
+
 ### Split editor (`src/features/transactions/split-editor.tsx`)
 
 Every member always has a row — concerned or not — so the layout never reflows as people
@@ -704,6 +719,16 @@ typing a non-zero amount, is what adds a member to the split; bringing either ba
 exactly zero removes them — the schema never persists a weight or amount of zero, so a
 "zero" row is simply not a participant. A not-yet-concerned row still shows its stepper or
 amount field, just resting at zero, rather than appearing once picked some other way.
+
+**Others** is the **very last row**, after every member, in every group and in both modes.
+Its label is "Others" with a `small` secondary line "People outside the group", and an
+`OthersAvatar` — a neutral disc (`backgroundSelected`) with the people icon, no initial and
+no medallion colour — where a member shows an `Avatar` (the same `OthersAvatar` stands in
+wherever a member's avatar would appear for Others). It is otherwise a member row: same
+stepper or amount field, same tint when concerned, zero removes it, and its amount counts
+in the fixed-mode "left to allocate" line. It is never pinned and never marked "Me", and it
+is **not concerned by default** — a new transaction still starts with every member at
+weight 1 and Others at zero. A split whose only participant is Others is valid.
 
 In fixed-amount mode, the "Fully allocated" / "x.xx left to allocate" / "x.xx over the
 total" line below the member `Card` reads as a **caption on that card**, not a sibling
