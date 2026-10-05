@@ -113,8 +113,8 @@ A placeholder never acts, so it never counts when the rules ask who is there to 
 
 ## Edge cases
 
-- **Two people claiming the same placeholder at once**: one wins, the other is told it has
-  already been claimed and stays a plain member.
+- **Two people claiming the same placeholder at once**: one wins, the other is told that
+  person is no longer in the group — claimed or removed — and stays a plain member.
 - **One person claiming two placeholders at once**: one wins, the other is refused as
   already claimed by them.
 - **The placeholder was removed, or renamed, while the prompt was open**: claiming a

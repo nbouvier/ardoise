@@ -5,11 +5,17 @@ import { z } from 'zod';
  * every entry of a friend list, and every member of a group. Deliberately
  * narrower than `UserProfile` (which describes *oneself*) — it carries no email
  * address.
+ *
+ * `placeholder` is `true` for a group member known by name only, with no
+ * account behind it (`docs/specs/placeholder-members.md`) — as a member, a
+ * payer or a participant. Absent for everyone with an account, so an inviter
+ * or a friend never carries it.
  */
 export const friendSummarySchema = z.object({
   id: z.uuid(),
   name: z.string().min(1),
   picture: z.url().nullable(),
+  placeholder: z.literal(true).optional(),
 });
 export type FriendSummary = z.infer<typeof friendSummarySchema>;
 

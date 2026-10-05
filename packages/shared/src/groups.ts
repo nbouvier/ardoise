@@ -118,6 +118,11 @@ export const groupDetailSchema = groupSummarySchema.extend({
   subgroups: z.array(subgroupSummarySchema),
   readOnly: z.boolean(),
   pairRooted: z.boolean(),
+  /**
+   * The viewer has not claimed a placeholder of this group's tree yet, so
+   * "This is me" can still be offered (`docs/specs/placeholder-members.md`).
+   */
+  viewerCanClaim: z.boolean(),
 });
 export type GroupDetail = z.infer<typeof groupDetailSchema>;
 
@@ -142,8 +147,25 @@ export type GroupsListResponse = z.infer<typeof groupsListResponseSchema>;
 export const groupResponseSchema = z.object({ group: groupDetailSchema });
 export type GroupResponse = z.infer<typeof groupResponseSchema>;
 
+/** A placeholder member's name (`docs/specs/placeholder-members.md`). */
+export const placeholderNameSchema = z.string().trim().min(1).max(60);
+
 /**
- * `POST /groups`. `memberIds` must be friends of the caller. `parentId`,
+ * New placeholders' names, at most 50 at once and never the same name twice
+ * (whatever the case) — the server also refuses one already in the tree.
+ */
+export const placeholderNamesSchema = z
+  .array(placeholderNameSchema)
+  .max(50)
+  .refine(
+    (names) => new Set(names.map((name) => name.toLowerCase())).size === names.length,
+    { message: 'duplicate placeholder name' },
+  );
+
+/**
+ * `POST /groups`. `memberIds` must be friends of the caller, or — for a
+ * sub-group — placeholders of its tree. `placeholderNames` creates new
+ * placeholder members (`docs/specs/placeholder-members.md`). `parentId`,
  * when given, creates a sub-group under that group instead of a root group —
  * the caller must belong to it, and it is added (with every other initial
  * member) to that group's own ancestors too, since membership always flows
@@ -152,6 +174,7 @@ export type GroupResponse = z.infer<typeof groupResponseSchema>;
 export const createGroupRequestSchema = z.object({
   name: groupNameSchema,
   memberIds: z.array(z.uuid()).max(50).optional(),
+  placeholderNames: placeholderNamesSchema.optional(),
   parentId: z.uuid().optional(),
 });
 export type CreateGroupRequest = z.infer<typeof createGroupRequestSchema>;
@@ -167,8 +190,46 @@ export const updateGroupRequestSchema = z
   });
 export type UpdateGroupRequest = z.infer<typeof updateGroupRequestSchema>;
 
-/** `POST /groups/:groupId/members`. */
-export const addGroupMembersRequestSchema = z.object({
-  memberIds: z.array(z.uuid()).min(1).max(50),
-});
+/**
+ * `POST /groups/:groupId/members`. `memberIds` are friends of the caller or
+ * placeholders of the group's tree; `placeholderNames` creates new
+ * placeholders. At least one person, either way.
+ */
+export const addGroupMembersRequestSchema = z
+  .object({
+    memberIds: z.array(z.uuid()).max(50).optional(),
+    placeholderNames: placeholderNamesSchema.optional(),
+  })
+  .refine(
+    (value) => (value.memberIds?.length ?? 0) + (value.placeholderNames?.length ?? 0) > 0,
+    { message: 'nobody to add' },
+  );
 export type AddGroupMembersRequest = z.infer<typeof addGroupMembersRequestSchema>;
+
+/** `PATCH /groups/:groupId/placeholders/:placeholderId`. */
+export const renamePlaceholderRequestSchema = z.object({ name: placeholderNameSchema });
+export type RenamePlaceholderRequest = z.infer<typeof renamePlaceholderRequestSchema>;
+
+/**
+ * A placeholder of a group's tree, as the claim prompt and "This is me" show
+ * it: what claiming it would take over. `transactionCount` counts its
+ * transactions across the whole tree; `balanceCents` is its balance in the
+ * group asked about, positive when it is owed.
+ */
+export const claimablePlaceholderSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  transactionCount: z.number().int().nonnegative(),
+  balanceCents: z.number().int(),
+});
+export type ClaimablePlaceholder = z.infer<typeof claimablePlaceholderSchema>;
+
+/**
+ * `GET /groups/:groupId/placeholders` — every placeholder of the group's
+ * tree, alphabetical. `viewerCanClaim` is `GroupDetail.viewerCanClaim`.
+ */
+export const placeholdersResponseSchema = z.object({
+  placeholders: z.array(claimablePlaceholderSchema),
+  viewerCanClaim: z.boolean(),
+});
+export type PlaceholdersResponse = z.infer<typeof placeholdersResponseSchema>;

@@ -21,7 +21,10 @@ export type GroupAccessReason =
   | 'owner_cannot_leave'
   | 'cannot_remove_owner'
   | 'not_friends'
-  | 'max_depth_reached';
+  | 'max_depth_reached'
+  | 'placeholder_not_found'
+  | 'placeholder_name_taken'
+  | 'already_claimed';
 
 export class GroupAccessError extends Error {
   constructor(readonly reason: GroupAccessReason) {

@@ -306,6 +306,9 @@ Shared error codes:
 | `409`  | `cannot_remove_owner`  | Members may remove each other, but not the owner             |
 | `400`  | `not_friends`          | Only the caller's own friends can be added directly         |
 | `409`  | `max_depth_reached`    | A sub-group cannot nest past the five-level cap              |
+| `404`  | `placeholder_not_found` | No such placeholder in the group (or its tree, for a claim) — it may have been claimed or removed |
+| `409`  | `placeholder_name_taken` | Another placeholder of the tree already has that name, whatever the case |
+| `409`  | `already_claimed`      | The caller already claimed a placeholder of this tree        |
 
 `GroupSummary` is `{ id, kind, name, memberCount, parentId, depth, ancestors, subgroupCount, viewerBalanceCents, favorite, archivedAt, createdAt, viewerRole }`, with `kind` one of `standard` / `pair`. `favorite` is the caller's own marker (`docs/specs/favorites.md`), never another member's — see `PUT`/`DELETE /groups/:groupId/favorite` below. `parentId` is
 `null` for a root group; `depth` is `0` for a root group and capped at `4`; `subgroupCount`
@@ -323,7 +326,14 @@ read per row.
 `FriendSummary` plus `role`), `subgroups` (the group's direct sub-groups — see
 below), `readOnly` — `true` when the group itself is
 archived *or any ancestor of it is*; for a root group this always equals
-`archivedAt !== null`, since it has no ancestors — and `pairRooted`. A **pair group stores
+`archivedAt !== null`, since it has no ancestors — `pairRooted`, and `viewerCanClaim` —
+the caller has not claimed a placeholder of this tree yet.
+
+**Placeholder members** (`docs/specs/placeholder-members.md`) are members known by name
+only. They appear in `members` — and as a payer or participant of a transaction — as a
+`FriendSummary` with `placeholder: true`; an account never carries the flag. They count in
+`memberCount`, but never in "who is left": the owner may leave when only placeholders
+remain, and a group with no account left is deleted with them. A **pair group stores
 no name**: the API fills it with the *other* member's name, so each side sees who they
 share with. A pair group's own parent is always `null`, and it can never be nested under
 something else — but it *can* be a parent: a friendship can have sub-groups, exactly like a
@@ -370,10 +380,13 @@ Response `200`: `{ "groups": [ "<GroupSummary>" ] }` — every entry has `favori
 
 ### `POST /groups`
 
-Create a group. `memberIds` is optional and must contain only friends of the caller.
+Create a group. `memberIds` is optional and must contain only friends of the caller —
+or, for a sub-group, placeholders of its tree. `placeholderNames` is optional: new
+placeholder members, at most 50, never the same name twice whatever the case (`400`), nor
+one the tree already has (`409 placeholder_name_taken`).
 
-Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"] }` → Response
-`201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
+Request: `{ "name": "Corsica 2026", "memberIds": ["<uuid>"], "placeholderNames": ["Alex"] }`
+→ Response `201 { "group": "<GroupDetail>" }`. The creator is the group's `owner`.
 
 `parentId` is optional and creates a **sub-group** under that group instead of a root
 group (`docs/specs/groups.md`): the caller must belong to `parentId`, which must be
@@ -382,7 +395,8 @@ implicit pair group. Every initial member (the creator included) is also added t
 ancestor of the new group in the same request — membership always flows down the tree.
 When `parentId` is `pairRooted`, the friendship's other person is added automatically
 regardless of `memberIds` — there is no one else it could legitimately hold — and any id
-other than theirs is refused with `409 pair_group_immutable`.
+other than theirs, or any `placeholderNames`, is refused with `409 pair_group_immutable`.
+New placeholders created in a sub-group join every group above it too.
 
 Request: `{ "name": "Ajaccio weekend", "parentId": "<uuid>" }` → Response
 `201 { "group": "<GroupDetail>" }`, with `parentId` and `depth` set accordingly.
@@ -411,12 +425,15 @@ reaches, just from the group's own side rather than the friend's.
 
 ### `POST /groups/:groupId/members`
 
-Add friends of the caller. Already-members are ignored rather than rejected. Each added
-person is also added to every ancestor of `groupId` in the same request — membership
-always flows down the tree (`docs/specs/groups.md`); the response's `memberCount` and
-`subgroups` describe `groupId` itself only.
+Add friends of the caller, placeholders of the group's tree (`memberIds`), and new
+placeholders (`placeholderNames`, same rules as on `POST /groups`) — at least one person
+in all. Already-members are ignored rather than rejected. Each added person is also added
+to every ancestor of `groupId` in the same request — membership always flows down the
+tree (`docs/specs/groups.md`); the response's `memberCount` and `subgroups` describe
+`groupId` itself only.
 
-Request: `{ "memberIds": ["<uuid>"] }` → Response `200 { "group": "<GroupDetail>" }`.
+Request: `{ "memberIds": ["<uuid>"], "placeholderNames": ["Sam"] }` → Response
+`200 { "group": "<GroupDetail>" }`.
 
 ### `DELETE /groups/:groupId/members/:userId`
 
@@ -425,12 +442,51 @@ someone who already left is a no-op. This also removes that person from every on
 `groupId`'s descendants, since nobody can remain in a sub-group of a group they are no
 longer part of (`docs/specs/groups.md`). When the last member of a group leaves, it is
 deleted with its contents; the same applies to any descendant left with nobody in it by
-this cascade.
+this cascade. "Nobody" means no account: placeholders do not keep a group alive.
+
+A **placeholder removed from its tree's root** leaves the whole tree and is deleted: its
+part in every transaction becomes Others, exactly as for a deleted account
+(`docs/specs/placeholder-members.md`). Removed from a sub-group, it is a member like any
+other: it leaves that branch and the transactions there keep naming it.
 
 The **owner cannot be removed** by another member: that would leave a group nobody is
 allowed to delete. They leave on their own terms, or delete it. The same refusal
 (`409 owner_cannot_leave`) now also covers cascading someone out of a sub-group they solely
 own while others remain in it — leaving or being removed from `groupId` would strand it.
+
+### `GET /groups/:groupId/placeholders`
+
+Every placeholder of the group's **tree** (not only this group's), alphabetical — what
+the claim prompt after joining, and "This is me", show (`docs/specs/placeholder-members.md`).
+Response `200`:
+
+```json
+{
+  "placeholders": [{ "id": "<uuid>", "name": "Alex", "transactionCount": 7, "balanceCents": 1200 }],
+  "viewerCanClaim": true
+}
+```
+
+`transactionCount` counts the transactions naming it across the tree; `balanceCents` is
+its balance **in `groupId`**, positive when it is owed. Empty for a pair group's tree.
+
+### `PATCH /groups/:groupId/placeholders/:placeholderId`
+
+Rename a placeholder that is a member of `groupId`. Request `{ "name": "Alexandra" }` →
+Response `200 { "group": "<GroupDetail>" }`. `404 placeholder_not_found` for anyone else,
+`409 placeholder_name_taken`, `409 group_archived`.
+
+### `POST /groups/:groupId/placeholders/:placeholderId/claim`
+
+"This is me": merge a placeholder of `groupId`'s tree into the caller's account, in one
+database transaction. Every transaction naming it names the caller instead — shares added
+together where the caller was already on it, a transfer between the two deleted — the
+caller joins every group it was in, and it is deleted. Response
+`200 { "group": "<GroupDetail>" }`, with `viewerCanClaim: false`.
+
+`409 already_claimed` when the caller already claimed one in this tree,
+`404 placeholder_not_found` when it is gone (claimed or removed by someone else, including
+a concurrent claim), `409 group_archived` when `groupId` or an ancestor is archived.
 
 ### `POST /groups/:groupId/join`
 

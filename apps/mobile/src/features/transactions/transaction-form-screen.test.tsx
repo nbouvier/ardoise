@@ -28,6 +28,7 @@ const group: GroupDetail = {
   ancestors: [],
   readOnly: false,
   pairRooted: false,
+  viewerCanClaim: false,
 };
 
 const existing: Transaction = {

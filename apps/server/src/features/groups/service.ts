@@ -1,16 +1,19 @@
 import type {
+  AddGroupMembersRequest,
   CreateGroupRequest,
   GroupAncestor,
   GroupDetail,
   GroupRole,
   GroupSummary,
   Invite,
+  PlaceholdersResponse,
   UpdateGroupRequest,
 } from '@ardoise/shared';
 
 import type { GroupRow } from '../../db/schema.js';
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
+import type { ReplacedParty } from '../transactions/replace-party.js';
 import { toUserSummary } from '../users/repository.js';
 
 import {
@@ -24,7 +27,7 @@ import {
   isEffectivelyArchived,
   isPairRooted,
 } from './membership.js';
-import type { GroupsRepository, MemberWithUser } from './repository.js';
+import type { ClaimedPlaceholder, GroupsRepository, MemberWithUser } from './repository.js';
 
 /**
  * A group the caller is allowed to see, with the role that lets them see it
@@ -49,6 +52,11 @@ export interface GroupLabel {
 export interface RemovedMember {
   /** The group had no members left and was deleted with its contents. */
   groupDeleted: boolean;
+  /**
+   * Set when the person removed was a placeholder taken out of its whole
+   * tree: what turning its part into Others changed.
+   */
+  placeholderRemoved?: ReplacedParty;
   /**
    * How many of the group's descendants the person also lost membership at,
    * as a side effect (`docs/specs/groups.md`) — `0` when the group has none,
@@ -78,8 +86,28 @@ export interface GroupsService {
   create(userId: string, input: CreateGroupRequest): Promise<GroupDetail>;
   update(userId: string, groupId: string, input: UpdateGroupRequest): Promise<GroupDetail>;
   remove(userId: string, groupId: string): Promise<void>;
-  addMembers(userId: string, groupId: string, memberIds: string[]): Promise<GroupDetail>;
+  /** Friends, placeholders of the tree, and new placeholders, in one request. */
+  addMembers(userId: string, groupId: string, input: AddGroupMembersRequest): Promise<GroupDetail>;
+  /**
+   * Remove a member, or leave. A placeholder removed from its tree's root is
+   * removed from the whole tree, its part turned into Others
+   * (`docs/specs/placeholder-members.md`).
+   */
   removeMember(userId: string, groupId: string, targetId: string): Promise<RemovedMember>;
+  /** Every placeholder of `groupId`'s tree, with what claiming it would take over. */
+  listPlaceholders(userId: string, groupId: string): Promise<PlaceholdersResponse>;
+  renamePlaceholder(
+    userId: string,
+    groupId: string,
+    placeholderId: string,
+    name: string,
+  ): Promise<GroupDetail>;
+  /** "This is me": merge a placeholder of `groupId`'s tree into the caller's account. */
+  claimPlaceholder(
+    userId: string,
+    groupId: string,
+    placeholderId: string,
+  ): Promise<{ group: GroupDetail; claimed: ClaimedPlaceholder }>;
   /**
    * Join a sub-group visible in a group the caller already belongs to —
    * lighter than an invitation link, since being in the parent is already a
@@ -303,6 +331,13 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     // The rows themselves still answer "is any of them archived / is this
     // tree pair-rooted" below; the breadcrumb needs them named.
     const ancestors = await nameAncestors(ancestorRows, viewerId);
+    const pairRooted = isPairRooted(group, ancestorRows);
+    // A claim is recorded on the viewer's own row of the tree's root
+    // (`docs/specs/placeholder-members.md`); a pair tree has no placeholder.
+    const rootMembership = pairRooted
+      ? undefined
+      : await repository.findMembership((ancestorRows[0] ?? group).id, viewerId);
+    const viewerCanClaim = rootMembership !== undefined && rootMembership.claimedPlaceholderAt === null;
     // Every joined child's own role, for its row-level actions menu — a
     // child absent from this map is simply one the viewer hasn't joined
     // (`docs/specs/groups.md`).
@@ -361,7 +396,8 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // has no ancestors — this only differs from `archivedAt !== null` for a
       // sub-group whose ancestor is archived (`docs/specs/groups.md`).
       readOnly: isEffectivelyArchived(group, ancestorRows),
-      pairRooted: isPairRooted(group, ancestorRows),
+      pairRooted,
+      viewerCanClaim,
     };
   }
 
@@ -401,14 +437,45 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     return context;
   }
 
-  /** Only the caller's own friends can be pulled into a group directly. */
-  async function requireFriends(userId: string, memberIds: readonly string[]) {
+  /**
+   * Only the caller's own friends can be pulled into a group directly — and
+   * the placeholders of the tree it is in, which are already its members
+   * somewhere (`docs/specs/placeholder-members.md`). `rootId` is that tree's
+   * root, or `null` for a group that does not exist yet and has none.
+   */
+  async function requireAddable(
+    userId: string,
+    memberIds: readonly string[],
+    rootId: string | null,
+  ) {
     const wanted = [...new Set(memberIds)].filter((id) => id !== userId);
-    const friendIds = await repository.filterFriendIds(userId, wanted);
-    if (friendIds.length !== wanted.length) {
+    const placeholderIds = rootId ? await repository.filterPlaceholderIds(rootId, wanted) : [];
+    const others = wanted.filter((id) => !placeholderIds.includes(id));
+    const friendIds = await repository.filterFriendIds(userId, others);
+    if (friendIds.length !== others.length) {
       throw new GroupAccessError('not_friends');
     }
-    return friendIds;
+    return [...friendIds, ...placeholderIds];
+  }
+
+  /** New placeholders can never go anywhere in a friendship's two-person tree. */
+  function assertPlaceholdersAllowed(
+    ceiling: ReadonlySet<string> | null,
+    names: readonly string[] | undefined,
+  ): void {
+    if (ceiling && (names?.length ?? 0) > 0) {
+      throw new GroupAccessError('pair_immutable');
+    }
+  }
+
+  /** A placeholder of `groupId`'s tree that is a member of `groupId` itself. */
+  async function requirePlaceholderHere(groupId: string, placeholderId: string) {
+    const rootId = await repository.findRootId(groupId);
+    const placeholder = await repository.findPlaceholder(rootId, placeholderId);
+    if (!placeholder || !(await repository.findMembership(groupId, placeholderId))) {
+      throw new GroupAccessError('placeholder_not_found');
+    }
+    return { rootId, placeholder };
   }
 
   return {
@@ -506,6 +573,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       let parentId: string | null = null;
       let depth = 0;
       let ceiling: ReadonlySet<string> | null = null;
+      let rootId: string | null = null;
 
       if (input.parentId) {
         // Creating a sub-group is available to any member of the parent —
@@ -519,9 +587,11 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         parentId = parent.id;
         depth = parent.depth + 1;
         ceiling = await pairCeiling(repository, parent);
+        rootId = await repository.findRootId(parent.id);
       }
 
-      let memberIds = await requireFriends(userId, input.memberIds ?? []);
+      assertPlaceholdersAllowed(ceiling, input.placeholderNames);
+      let memberIds = await requireAddable(userId, input.memberIds ?? [], rootId);
       assertWithinPairCeiling(ceiling, memberIds);
       if (ceiling) {
         // A pair-rooted sub-group can only ever hold the friendship's own two
@@ -534,6 +604,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         name: input.name,
         ownerId: userId,
         memberIds,
+        placeholderNames: input.placeholderNames ?? [],
         parentId,
         depth,
       });
@@ -571,21 +642,41 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       await repository.deleteGroup(group.id);
     },
 
-    async addMembers(userId, groupId, memberIds) {
+    async addMembers(userId, groupId, input) {
       const { group, role, favoritedAt } = await requireManageable(userId, groupId);
       await assertGroupEffectivelyActive(group);
 
-      const friendIds = await requireFriends(userId, memberIds);
-      assertWithinPairCeiling(await pairCeiling(repository, group), friendIds);
-      await repository.addMembers(groupId, friendIds);
+      const ceiling = await pairCeiling(repository, group);
+      assertPlaceholdersAllowed(ceiling, input.placeholderNames);
+      const rootId = await repository.findRootId(groupId);
+      const memberIds = await requireAddable(userId, input.memberIds ?? [], rootId);
+      assertWithinPairCeiling(ceiling, memberIds);
+      await repository.addMembers(groupId, memberIds);
+      if (input.placeholderNames && input.placeholderNames.length > 0) {
+        await repository.addPlaceholders(rootId, groupId, input.placeholderNames);
+      }
       return detailOf(group, userId, role, favoritedAt);
     },
 
     async removeMember(userId, groupId, targetId) {
       const { group, role } = await requireManageable(userId, groupId);
 
+      // A placeholder taken out of its tree's root leaves the whole tree,
+      // and nobody can bring it back: its part becomes Others
+      // (`docs/specs/placeholder-members.md`). Out of a sub-group, it is a
+      // member like any other, below.
+      if (group.parentId === null && targetId !== userId) {
+        const placeholder = await repository.findPlaceholder(group.id, targetId);
+        if (placeholder) {
+          await assertGroupEffectivelyActive(group);
+          const placeholderRemoved = await repository.removePlaceholder(group.id, targetId);
+          return { groupDeleted: false, removedFromDescendantCount: 0, placeholderRemoved };
+        }
+      }
+
       if (targetId === userId) {
-        assertCanLeave(role, await repository.countMembers(groupId));
+        // Placeholders never act, so they are nobody the owner would strand.
+        assertCanLeave(role, await repository.countAccountMembers(groupId));
       } else {
         // Removing someone else is a management action; leaving is not.
         await assertGroupEffectivelyActive(group);
@@ -636,6 +727,62 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // in the response.
       const membership = await repository.findMembership(group.id, userId);
       return detailOf(group, userId, membership!.role as GroupRole, membership!.favoritedAt);
+    },
+
+    async listPlaceholders(userId, groupId) {
+      const { group } = await requireMembership(userId, groupId);
+      const ancestors = await repository.listAncestors(group.id);
+      if (isPairRooted(group, ancestors)) {
+        return { placeholders: [], viewerCanClaim: false };
+      }
+      const rootId = (ancestors[0] ?? group).id;
+      const [rows, membership] = await Promise.all([
+        repository.listPlaceholders(rootId),
+        repository.findMembership(rootId, userId),
+      ]);
+      const counts = await repository.countTransactionsNaming(rows.map((row) => row.id));
+      // One ledger read per placeholder: a tree holds a handful of them.
+      const placeholders = await Promise.all(
+        rows.map(async (row) => ({
+          id: row.id,
+          name: row.name,
+          transactionCount: counts.get(row.id) ?? 0,
+          balanceCents: await ownBalance(ledger, row.id, groupId),
+        })),
+      );
+      return {
+        placeholders,
+        viewerCanClaim: membership !== undefined && membership.claimedPlaceholderAt === null,
+      };
+    },
+
+    async renamePlaceholder(userId, groupId, placeholderId, name) {
+      const { group, role, favoritedAt } = await requireManageable(userId, groupId);
+      await assertGroupEffectivelyActive(group);
+      await requirePlaceholderHere(groupId, placeholderId);
+      await repository.renamePlaceholder(placeholderId, name, now());
+      return detailOf(group, userId, role, favoritedAt);
+    },
+
+    async claimPlaceholder(userId, groupId, placeholderId) {
+      const { group } = await requireManageable(userId, groupId);
+      await assertGroupEffectivelyActive(group);
+      // Any placeholder of the tree, not only this group's: whoever joined
+      // a sub-group through its link is offered the whole tree's.
+      const rootId = await repository.findRootId(groupId);
+      const claimed = await repository.claimPlaceholder(rootId, placeholderId, userId, now());
+      // Re-read: the claim may have just made the caller a member of more
+      // sub-groups, and records that they can claim no more.
+      const membership = await repository.findMembership(group.id, userId);
+      return {
+        group: await detailOf(
+          group,
+          userId,
+          membership!.role as GroupRole,
+          membership!.favoritedAt,
+        ),
+        claimed,
+      };
     },
 
     async setFavorite(userId, groupId, favorite) {

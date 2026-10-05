@@ -78,6 +78,13 @@
       "when": 1791199946241,
       "tag": "0010_account_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791206078358,
+      "tag": "0011_placeholder_members",
+      "breakpoints": true
     }
   ]
 }

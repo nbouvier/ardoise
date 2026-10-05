@@ -8,25 +8,58 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 /**
- * A person who has signed in with Google. Identified across sign-ins by the
- * stable Google subject id (`sub`). Only the minimum profile fields are stored.
+ * A person a group can name: payer, participant, member.
+ *
+ * `kind = 'account'` has signed in with Google, identified across sign-ins by
+ * the stable Google subject id (`sub`); only the minimum profile fields are
+ * stored. `kind = 'placeholder'` is a member known by name only, with no
+ * Google identity and no e-mail, so nothing can ever sign in as it. It belongs
+ * to the root group of the tree it was created in, and goes with that group;
+ * claiming it re-points everything that names it at an account and deletes it
+ * (`docs/specs/placeholder-members.md`). Two placeholders of one tree never
+ * share a name.
  */
-export const users = pgTable('users', {
-  id: uuid('id')
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  googleSub: text('google_sub').notNull().unique(),
-  email: text('email').notNull(),
-  name: text('name').notNull(),
-  picture: text('picture'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    kind: text('kind').notNull().default('account'),
+    googleSub: text('google_sub').unique(),
+    email: text('email'),
+    name: text('name').notNull(),
+    picture: text('picture'),
+    placeholderGroupId: uuid('placeholder_group_id').references((): AnyPgColumn => groups.id, {
+      onDelete: 'cascade',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('users_kind_valid', sql`${table.kind} in ('account', 'placeholder')`),
+    // The two shapes are exclusive: an account has a Google identity and an
+    // e-mail and belongs to no group; a placeholder has neither and belongs
+    // to exactly one tree.
+    check(
+      'users_account_shape',
+      sql`(${table.kind} = 'account') = (${table.googleSub} is not null and ${table.email} is not null)`,
+    ),
+    check(
+      'users_placeholder_shape',
+      sql`(${table.kind} = 'placeholder') = (${table.placeholderGroupId} is not null)`,
+    ),
+    uniqueIndex('users_placeholder_name_unique')
+      .on(table.placeholderGroupId, sql`lower(${table.name})`)
+      .where(sql`${table.kind} = 'placeholder'`),
+  ],
+);
 
 /**
  * A refresh-token session. One row per issued refresh token; rotation revokes
@@ -167,6 +200,10 @@ export const groupMembers = pgTable(
     role: text('role').notNull().default('member'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
     favoritedAt: timestamp('favorited_at', { withTimezone: true }),
+    // Set on the member's row of a tree's root group once they have claimed
+    // one of its placeholders: one claim per member per tree
+    // (`docs/specs/placeholder-members.md`).
+    claimedPlaceholderAt: timestamp('claimed_placeholder_at', { withTimezone: true }),
   },
   (table) => [
     unique('group_members_unique').on(table.groupId, table.userId),
@@ -250,8 +287,11 @@ export const transactions = pgTable(
     // `NULL` is Others — people outside the group — never a missing value.
     // Deleting a user still named here is refused rather than cascaded: it
     // would take other people's transactions with it. Account deletion turns
-    // the user into Others first (`docs/specs/account-deletion.md`).
-    payerId: uuid('payer_id').references(() => users.id, { onDelete: 'restrict' }),
+    // the user into Others first (`docs/specs/account-deletion.md`). The check
+    // is DEFERRABLE INITIALLY DEFERRED, written into migration 0011 by hand
+    // (drizzle cannot declare it): it runs at commit, so deleting a group can
+    // take its placeholders and their transactions in one statement.
+    payerId: uuid('payer_id').references(() => users.id),
     splitMode: text('split_mode').notNull(),
     // `NULL` once the account that recorded it is deleted: who recorded a
     // transaction is forgotten with them.
@@ -299,8 +339,8 @@ export const transactionParticipants = pgTable(
     transactionId: uuid('transaction_id')
       .notNull()
       .references(() => transactions.id, { onDelete: 'cascade' }),
-    // Restricted like `transactions.payer_id`, for the same reason.
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
+    // Checked like `transactions.payer_id`, for the same reasons.
+    userId: uuid('user_id').references(() => users.id),
     shareCents: integer('share_cents').notNull(),
     weight: integer('weight'),
   },

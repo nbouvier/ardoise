@@ -1,15 +1,8 @@
-import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, notExists, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
-import {
-  deletedAccounts,
-  friendships,
-  groupMembers,
-  groups,
-  transactionParticipants,
-  transactions,
-  users,
-} from '../../db/schema.js';
+import { deletedAccounts, friendships, groupMembers, groups, users } from '../../db/schema.js';
+import { replaceParty } from '../transactions/replace-party.js';
 
 /** What one account deletion touched — counts only, for the log. */
 export interface DeletionSummary {
@@ -97,10 +90,11 @@ export function createAccountRepository(db: Database): AccountRepository {
         // right now finishes before we go on (and is anonymised with the
         // rest), and one that starts after waits, then fails on the missing
         // user instead of naming an account that no longer exists.
+        // Accounts only: a placeholder's id is not an account to delete.
         const [user] = await tx
           .select({ id: users.id })
           .from(users)
-          .where(eq(users.id, userId))
+          .where(and(eq(users.id, userId), eq(users.kind, 'account')))
           .for('update');
         if (!user) {
           return null;
@@ -114,101 +108,16 @@ export function createAccountRepository(db: Database): AccountRepository {
           .where(or(eq(friendships.userAId, userId), eq(friendships.userBId, userId)))
           .returning({ id: friendships.id });
 
-        // A transfer between this user and Others would become Others to
-        // Others: not a valid transfer, and it moves nothing.
-        const doomedTransfers = await tx
-          .select({ id: transactions.id })
-          .from(transactions)
-          .innerJoin(
-            transactionParticipants,
-            eq(transactionParticipants.transactionId, transactions.id),
-          )
-          .where(
-            and(
-              eq(transactions.kind, 'transfer'),
-              or(
-                and(eq(transactions.payerId, userId), isNull(transactionParticipants.userId)),
-                and(isNull(transactions.payerId), eq(transactionParticipants.userId, userId)),
-              ),
-            ),
-          );
-        if (doomedTransfers.length > 0) {
-          await tx.delete(transactions).where(
-            inArray(
-              transactions.id,
-              doomedTransfers.map((row) => row.id),
-            ),
-          );
-        }
-
-        const anonymised = new Set<string>();
-
-        // A transaction has at most one Others share: where it already has
-        // one, the user's share is added to it rather than becoming a second.
-        // Weights add up too (both set for a split by shares, both `NULL`
-        // for a split by amounts).
-        const others = aliasedTable(transactionParticipants, 'others');
-        const merges = await tx
-          .select({
-            userRowId: transactionParticipants.id,
-            othersRowId: others.id,
-            transactionId: transactionParticipants.transactionId,
-            shareCents: transactionParticipants.shareCents,
-            weight: transactionParticipants.weight,
-          })
-          .from(transactionParticipants)
-          .innerJoin(
-            others,
-            and(
-              eq(others.transactionId, transactionParticipants.transactionId),
-              isNull(others.userId),
-            ),
-          )
-          .where(eq(transactionParticipants.userId, userId));
-        for (const merge of merges) {
-          await tx
-            .update(transactionParticipants)
-            .set({
-              shareCents: sql`${transactionParticipants.shareCents} + ${merge.shareCents}`,
-              weight:
-                merge.weight === null
-                  ? null
-                  : sql`${transactionParticipants.weight} + ${merge.weight}`,
-            })
-            .where(eq(transactionParticipants.id, merge.othersRowId));
-          anonymised.add(merge.transactionId);
-        }
-        if (merges.length > 0) {
-          await tx.delete(transactionParticipants).where(
-            inArray(
-              transactionParticipants.id,
-              merges.map((merge) => merge.userRowId),
-            ),
-          );
-        }
-
-        // Every other share, and every payment, becomes Others'.
-        const shares = await tx
-          .update(transactionParticipants)
-          .set({ userId: null })
-          .where(eq(transactionParticipants.userId, userId))
-          .returning({ transactionId: transactionParticipants.transactionId });
-        const payments = await tx
-          .update(transactions)
-          .set({ payerId: null })
-          .where(eq(transactions.payerId, userId))
-          .returning({ id: transactions.id });
-        for (const row of shares) {
-          anonymised.add(row.transactionId);
-        }
-        for (const row of payments) {
-          anonymised.add(row.id);
-        }
+        // Every share and payment becomes Others' — a transfer with Others
+        // at its other end, which would run from Others to Others, is deleted.
+        const { transactionsRewritten, transfersDeleted } = await replaceParty(tx, userId, null);
 
         // Leave every remaining group. Where the user was the owner, the
-        // member who joined earliest takes over (id breaks a tie, so the
-        // choice is stable); a group left with nobody in it is deleted, and
-        // its sub-groups are necessarily empty too.
+        // member with an account who joined earliest takes over (id breaks a
+        // tie, so the choice is stable) — never a placeholder; a group left
+        // with no account in it is deleted with its placeholders, and its
+        // sub-groups are necessarily in the same state
+        // (`docs/specs/placeholder-members.md`).
         const left = await tx
           .delete(groupMembers)
           .where(eq(groupMembers.userId, userId))
@@ -220,6 +129,7 @@ export function createAccountRepository(db: Database): AccountRepository {
           const heirs = await tx
             .selectDistinctOn([groupMembers.groupId], { id: groupMembers.id })
             .from(groupMembers)
+            .innerJoin(users, and(eq(users.id, groupMembers.userId), eq(users.kind, 'account')))
             .where(inArray(groupMembers.groupId, ownedIds))
             .orderBy(groupMembers.groupId, asc(groupMembers.joinedAt), asc(groupMembers.id));
           if (heirs.length > 0) {
@@ -250,7 +160,8 @@ export function createAccountRepository(db: Database): AccountRepository {
                   tx
                     .select({ id: groupMembers.id })
                     .from(groupMembers)
-                    .where(eq(groupMembers.groupId, groups.id)),
+                    .innerJoin(users, eq(users.id, groupMembers.userId))
+                    .where(and(eq(groupMembers.groupId, groups.id), eq(users.kind, 'account'))),
                 ),
               ),
             )
@@ -262,7 +173,8 @@ export function createAccountRepository(db: Database): AccountRepository {
 
         // Sessions and invitations cascade; who recorded a transaction is
         // set to `NULL`. A payer or a share still naming the user would make
-        // this fail rather than cascade (`ON DELETE RESTRICT`).
+        // this fail at commit rather than cascade (the foreign keys are
+        // checked, deferred, `docs/DATABASE.md`).
         await tx.delete(users).where(eq(users.id, userId));
 
         return {
@@ -270,8 +182,8 @@ export function createAccountRepository(db: Database): AccountRepository {
           groupsLeft: left.length,
           ownershipsPassed,
           groupsDeleted,
-          transactionsAnonymised: anonymised.size,
-          transfersDeleted: doomedTransfers.length,
+          transactionsAnonymised: transactionsRewritten,
+          transfersDeleted,
         };
       });
     },

@@ -1,6 +1,7 @@
 import {
   addGroupMembersRequestSchema,
   createGroupRequestSchema,
+  renamePlaceholderRequestSchema,
   updateGroupRequestSchema,
 } from '@ardoise/shared';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -30,6 +31,7 @@ export interface GroupsPluginOptions {
 
 const groupParamsSchema = z.object({ groupId: z.uuid() });
 const memberParamsSchema = groupParamsSchema.extend({ userId: z.uuid() });
+const placeholderParamsSchema = groupParamsSchema.extend({ placeholderId: z.uuid() });
 
 export const groupsPlugin = fp<GroupsPluginOptions>(
   async (app, opts) => {
@@ -124,6 +126,7 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
             userId: request.userId,
             groupId: group.id,
             memberCount: group.memberCount,
+            placeholdersCreated: parsed.data.placeholderNames?.length ?? 0,
             parentId: group.parentId,
           },
           'groups.created',
@@ -179,10 +182,64 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
         if (!parsed.success) {
           return reply.code(400).send({ error: 'invalid_request' });
         }
-        const group = await groups.addMembers(userId, params.groupId, parsed.data.memberIds);
+        const group = await groups.addMembers(userId, params.groupId, parsed.data);
         app.log.info(
-          { userId, groupId: group.id, added: parsed.data.memberIds.length },
+          {
+            userId,
+            groupId: group.id,
+            added: parsed.data.memberIds?.length ?? 0,
+            placeholdersCreated: parsed.data.placeholderNames?.length ?? 0,
+          },
           'groups.members.added',
+        );
+        return reply.send({ group });
+      }),
+    );
+
+    // Placeholder members (`docs/specs/placeholder-members.md`). Their names
+    // are personal data typed by members: logged by id only.
+    app.get(
+      '/groups/:groupId/placeholders',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply }) =>
+        reply.send(await groups.listPlaceholders(userId, params.groupId)),
+      ),
+    );
+
+    app.patch(
+      '/groups/:groupId/placeholders/:placeholderId',
+      authenticated,
+      route(placeholderParamsSchema, async ({ params, userId, reply, body }) => {
+        const parsed = renamePlaceholderRequestSchema.safeParse(body);
+        if (!parsed.success) {
+          return reply.code(400).send({ error: 'invalid_request' });
+        }
+        const group = await groups.renamePlaceholder(
+          userId,
+          params.groupId,
+          params.placeholderId,
+          parsed.data.name,
+        );
+        app.log.info(
+          { userId, groupId: params.groupId, placeholderId: params.placeholderId },
+          'groups.placeholder.renamed',
+        );
+        return reply.send({ group });
+      }),
+    );
+
+    app.post(
+      '/groups/:groupId/placeholders/:placeholderId/claim',
+      authenticated,
+      route(placeholderParamsSchema, async ({ params, userId, reply }) => {
+        const { group, claimed } = await groups.claimPlaceholder(
+          userId,
+          params.groupId,
+          params.placeholderId,
+        );
+        app.log.info(
+          { userId, groupId: params.groupId, placeholderId: params.placeholderId, ...claimed },
+          'groups.placeholder.claimed',
         );
         return reply.send({ group });
       }),
@@ -192,11 +249,21 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId/members/:userId',
       authenticated,
       route(memberParamsSchema, async ({ params, userId, reply }) => {
-        const { groupDeleted, removedFromDescendantCount } = await groups.removeMember(
-          userId,
-          params.groupId,
-          params.userId,
-        );
+        const { groupDeleted, removedFromDescendantCount, placeholderRemoved } =
+          await groups.removeMember(userId, params.groupId, params.userId);
+        if (placeholderRemoved) {
+          app.log.info(
+            {
+              userId,
+              groupId: params.groupId,
+              placeholderId: params.userId,
+              transactionsAnonymised: placeholderRemoved.transactionsRewritten,
+              transfersDeleted: placeholderRemoved.transfersDeleted,
+            },
+            'groups.placeholder.removed',
+          );
+          return reply.code(204).send();
+        }
         app.log.info(
           {
             userId,

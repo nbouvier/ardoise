@@ -241,6 +241,28 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     failing with a server error;
   - the operator command's logic (`deleteAccounts`): deletes, keeps listing an id
     already gone, refuses what is not an id, and repeating it changes nothing.
+- **Placeholder members** (`src/features/groups/`, `docs/specs/placeholder-members.md`):
+  - generated ledger (`claim.test.ts`): the placeholder, the claimer, another member and
+    Others as every payer against every set of concerned parties in both split modes;
+    after the claim every row equals the same ledger written with the claimer in the
+    placeholder's place from the start (shares merged with the claimer's own, a transfer
+    between the two gone), each transaction still sums to its amount with one share per
+    person, and every balance is unchanged by the rewrite;
+  - end to end (`placeholders.test.ts`): created with a group or later, counted as
+    members and flagged, names unique per tree whatever the case, a sub-group taking its
+    parent's and adding new ones upward, another tree's refused as a stranger, refused in
+    a friendship's tree; paying, sharing and balances; the owner leaving when only
+    placeholders remain deletes the group with them, but not when another account
+    remains; a group deleted with placeholders still on transactions; never an heir on
+    account deletion; the claim list across the tree with counts and per-group balance;
+    a claim rewriting transactions and memberships, merging with a former member and
+    dropping the self-transfer; one claim per member and per placeholder, two racing
+    claims with one winner; refused archived and to a non-member; rename within the
+    uniqueness rule; removal from the root turning its part into Others, from a
+    sub-group only leaving the branch.
+  - Breaking the self-transfer deletion, letting a placeholder inherit ownership, letting
+    placeholders keep a group alive, or skipping the claimer's new memberships each makes
+    them fail.
 
 ### `packages/shared`
 
@@ -252,6 +274,9 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   the balance rule — the spec's Others example, only-Others, an Others payer, income, and
   members summing to zero.
 - **Categories**: unique keys, and an emoji, a label and a distinct colour each.
+- **Group requests** (`groups.test.ts`): placeholder names are trimmed, never empty and
+  never the same twice whatever the case; adding members takes friends, new placeholders
+  or both, and refuses a request that adds nobody.
 - **Statistics** (`categoryBreakdown`): kind filtering (transfers never count), a
   selected subset of participants counted by their own shares rather than what they paid
   (one member, several summed, an empty selection), ordering, and the two sum invariants —

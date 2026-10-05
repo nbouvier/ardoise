@@ -10,7 +10,13 @@ import { users, type UserRow } from '../../db/schema.js';
  * oneself — no email address.
  */
 export function toUserSummary(user: UserRow): FriendSummary {
-  return { id: user.id, name: user.name, picture: user.picture };
+  const summary: FriendSummary = { id: user.id, name: user.name, picture: user.picture };
+  // Only ever present, and `true`, for a member known by name only
+  // (`docs/specs/placeholder-members.md`).
+  if (user.kind === 'placeholder') {
+    summary.placeholder = true;
+  }
+  return summary;
 }
 
 export interface UsersRepository {
