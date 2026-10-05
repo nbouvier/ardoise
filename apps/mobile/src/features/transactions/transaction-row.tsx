@@ -1,4 +1,9 @@
-import { categoryDefinition, type RecentTransaction, type Transaction } from '@ardoise/shared';
+import {
+  balanceEffectCents,
+  categoryDefinition,
+  type RecentTransaction,
+  type Transaction,
+} from '@ardoise/shared';
 import { StyleSheet, View } from 'react-native';
 
 import { Breadcrumb } from '@/components/breadcrumb';
@@ -39,23 +44,6 @@ function formatOccurredOn(occurredOn: string): string {
 }
 
 /**
- * What this transaction means for the viewer, in the same sign convention as
- * the group's balances: positive means it moved money toward them.
- */
-function myShareCents(transaction: Transaction, viewerId: string): number {
-  const sign = transaction.kind === 'income' ? -1 : 1;
-  let net = 0;
-  if (transaction.payer.id === viewerId) {
-    net += sign * transaction.amountCents;
-  }
-  const participant = transaction.participants.find((p) => p.user.id === viewerId);
-  if (participant) {
-    net -= sign * participant.shareCents;
-  }
-  return net;
-}
-
-/**
  * One card of a group's transaction list — or of the home's, which passes
  * `group` so each row says where it happened. The category badge carries the
  * category's own colour, so a list reads as a spread of spending before a
@@ -67,7 +55,9 @@ export function TransactionRow({
   onPress,
   group,
 }: TransactionRowProps) {
-  const myShare = myShareCents(transaction, viewerId);
+  // The transaction's effect on the viewer's balance — the shared rule, so
+  // Others' share is never shown as owed to a payer.
+  const myShare = balanceEffectCents(transaction, viewerId);
   const category = categoryDefinition(transaction.category);
 
   const content = (
@@ -85,7 +75,7 @@ export function TransactionRow({
         <ThemedText numberOfLines={1}>{transaction.title}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {formatOccurredOn(transaction.occurredOn)} · {kindLabels[transaction.kind]} ·{' '}
-          {transaction.payer.name}
+          {transaction.payer?.name ?? 'Others'}
         </ThemedText>
       </View>
       <ThemedText type="smallBold" themeColor={balanceTone(myShare)}>

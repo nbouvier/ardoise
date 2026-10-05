@@ -50,7 +50,7 @@ export function SplitEditor({ members, amountCents, value, onChange, viewerId }:
     a.id === viewerId ? -1 : b.id === viewerId ? 1 : 0,
   );
 
-  const preview: Map<string, number> | null =
+  const preview: Map<string | null, number> | null =
     value.mode === 'shares' && value.participants.length > 0
       ? new Map(splitByShares(amountCents, value.participants).map((s) => [s.userId, s.shareCents]))
       : null;

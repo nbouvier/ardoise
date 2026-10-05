@@ -262,7 +262,7 @@ describe('computePairwiseBalances', () => {
             participants.push(
               participant({
                 transactionId: id,
-                userId: share.userId,
+                userId: share.userId!,
                 shareCents: share.shareCents,
               }),
             );

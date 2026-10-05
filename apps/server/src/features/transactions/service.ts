@@ -4,6 +4,7 @@ import type {
   CreateTransactionRequest,
   FriendSummary,
   GroupDetail,
+  PartyId,
   RecentTransaction,
   SplitMode,
   Transaction,
@@ -76,6 +77,17 @@ export interface TransactionsServiceDeps {
 }
 
 /**
+ * A party the request names, resolved against the group's current
+ * membership. Others (`null`) is not accepted by this service yet.
+ */
+function memberId(memberIds: ReadonlySet<string>, id: PartyId): string {
+  if (id === null || !memberIds.has(id)) {
+    throw new TransactionError('not_group_member');
+  }
+  return id;
+}
+
+/**
  * Turn a create/update request into what actually gets persisted: which
  * split mode, and each participant's cents. Shares are computed here (the
  * server is the authority, independent of what the client previewed); fixed
@@ -86,56 +98,58 @@ export interface TransactionsServiceDeps {
 function resolveSplit(
   input: CreateTransactionRequest,
   memberIds: ReadonlySet<string>,
-): { splitMode: SplitMode; participants: ParticipantInput[] } {
-  if (!memberIds.has(input.payerId)) {
-    throw new TransactionError('not_group_member');
-  }
+): { splitMode: SplitMode; payerId: string; participants: ParticipantInput[] } {
+  const payerId = memberId(memberIds, input.payerId);
 
   if (input.kind === 'transfer') {
     if (input.toUserId === input.payerId) {
       throw new TransactionError('invalid_split');
     }
-    if (!memberIds.has(input.toUserId)) {
-      throw new TransactionError('not_group_member');
-    }
+    const toUserId = memberId(memberIds, input.toUserId);
     return {
       splitMode: 'amount',
-      participants: [{ userId: input.toUserId, shareCents: input.amount, weight: null }],
+      payerId,
+      participants: [{ userId: toUserId, shareCents: input.amount, weight: null }],
     };
   }
 
-  const participantIds = input.split.participants.map((p) => p.userId);
-  if (participantIds.some((id) => !memberIds.has(id))) {
-    throw new TransactionError('not_group_member');
-  }
+  const split = input.split.participants.map((p) => ({ ...p, userId: memberId(memberIds, p.userId) }));
 
   if (input.split.mode === 'shares') {
-    const shares = splitByShares(input.amount, input.split.participants);
     const weightById = new Map(input.split.participants.map((p) => [p.userId, p.weight]));
+    const shares = splitByShares(
+      input.amount,
+      split.map(({ userId }) => ({ userId, weight: weightById.get(userId) ?? 1 })),
+    );
     return {
       splitMode: 'shares',
+      payerId,
       participants: shares.map((share) => ({
-        userId: share.userId,
+        userId: memberId(memberIds, share.userId),
         shareCents: share.shareCents,
         weight: weightById.get(share.userId) ?? null,
       })),
     };
   }
 
-  const participants: ParticipantInput[] = input.split.participants.map((p) => ({
-    userId: p.userId,
-    shareCents: p.amount,
+  const amountById = new Map(
+    input.split.participants.map((p) => [p.userId, 'amount' in p ? p.amount : 0]),
+  );
+  const participants: ParticipantInput[] = split.map(({ userId }) => ({
+    userId,
+    shareCents: amountById.get(userId) ?? 0,
     weight: null,
   }));
   if (!splitSumsTo(input.amount, participants)) {
     throw new TransactionError('invalid_split');
   }
-  return { splitMode: 'amount', participants };
+  return { splitMode: 'amount', payerId, participants };
 }
 
 function toTransactionFields(
   input: CreateTransactionRequest,
   splitMode: SplitMode,
+  payerId: string,
 ): Omit<TransactionFields, 'groupId'> {
   return {
     kind: input.kind,
@@ -144,7 +158,7 @@ function toTransactionFields(
     occurredOn: input.occurredOn,
     comment: input.comment ?? null,
     category: input.category ?? DEFAULT_TRANSACTION_CATEGORY,
-    payerId: input.payerId,
+    payerId,
     splitMode,
   };
 }
@@ -314,10 +328,10 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
       const group = await requireMembership(userId, groupId);
       requireActive(group);
       const memberIds = new Set(group.members.map((member) => member.id));
-      const { splitMode, participants } = resolveSplit(input, memberIds);
+      const { splitMode, payerId, participants } = resolveSplit(input, memberIds);
 
       const created = await repository.create(
-        { groupId, ...toTransactionFields(input, splitMode) },
+        { groupId, ...toTransactionFields(input, splitMode, payerId) },
         userId,
         participants,
       );
@@ -329,11 +343,11 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
       requireActive(group);
       await requireTransaction(groupId, transactionId);
       const memberIds = new Set(group.members.map((member) => member.id));
-      const { splitMode, participants } = resolveSplit(input, memberIds);
+      const { splitMode, payerId, participants } = resolveSplit(input, memberIds);
 
       const updated = await repository.update(
         transactionId,
-        toTransactionFields(input, splitMode),
+        toTransactionFields(input, splitMode, payerId),
         participants,
         now(),
       );

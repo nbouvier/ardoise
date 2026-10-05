@@ -103,7 +103,7 @@ export function TransactionFormScreen({
   const [category, setCategory] = useState<TransactionCategory>(
     initial?.category ?? DEFAULT_TRANSACTION_CATEGORY,
   );
-  const [payerId, setPayerId] = useState(initial?.payer.id ?? start?.payerId ?? viewerId);
+  const [payerId, setPayerId] = useState(initial?.payer?.id ?? start?.payerId ?? viewerId);
   const [split, setSplit] = useState<SplitInput>(
     initial && initial.kind !== 'transfer'
       ? splitFrom(initial)
@@ -111,7 +111,7 @@ export function TransactionFormScreen({
   );
   const [toUserId, setToUserId] = useState<string | null>(
     initial?.kind === 'transfer'
-      ? (initial.participants[0]?.user.id ?? null)
+      ? (initial.participants[0]?.user?.id ?? null)
       : (start?.toUserId ?? null),
   );
   const [busy, setBusy] = useState(false);

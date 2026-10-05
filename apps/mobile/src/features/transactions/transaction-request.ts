@@ -6,13 +6,13 @@ export function splitFrom(transaction: Transaction): SplitInput {
     return {
       mode: 'shares',
       participants: transaction.participants.map((p) => ({
-        userId: p.user.id,
+        userId: p.user?.id ?? null,
         weight: p.weight ?? 1,
       })),
     };
   }
   return {
     mode: 'amount',
-    participants: transaction.participants.map((p) => ({ userId: p.user.id, amount: p.shareCents })),
+    participants: transaction.participants.map((p) => ({ userId: p.user?.id ?? null, amount: p.shareCents })),
   };
 }
