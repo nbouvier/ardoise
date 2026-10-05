@@ -205,8 +205,9 @@ release is a separate, manual process (see "Distribution notes").
    variables → Actions). Check the Sentry secret and variables the workflow reads are there
    too (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT_MOBILE`).
 5. **The signing keystores**, one per app: run the first `staging` build and the first
-   `production` build **from the machine** (`eas build --platform android --profile
-   staging`, then `--profile production-apk`), and accept when EAS offers to generate the
+   `production` build **from the machine**, in `apps/mobile` (`eas build --platform android
+   --profile staging`, then `--profile production-apk`; from the repository root, `eas`
+   finds no `eas.json` and generates a default one instead), and accept when EAS offers to generate the
    keystore (the workflow runs non-interactively and cannot answer). EAS keeps them. Each is
    the app's identity for ever — **a lost keystore means users cannot update** — so back
    both up: `eas credentials` → Android → the app id → Keystore → download, and store them
