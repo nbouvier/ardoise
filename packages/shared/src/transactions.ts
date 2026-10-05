@@ -161,7 +161,8 @@ export const transactionSchema = z.object({
   payer: friendSummarySchema.nullable(),
   splitMode: splitModeSchema,
   participants: z.array(transactionParticipantSchema),
-  createdBy: z.uuid(),
+  /** `null` once the account that recorded it is deleted. */
+  createdBy: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
