@@ -305,6 +305,153 @@ describe('TransactionFormScreen — recording', () => {
   });
 });
 
+describe('TransactionFormScreen — Others as payer or recipient', () => {
+  const renderForm = (initial?: Transaction) =>
+    render(
+      <TransactionFormScreen
+        group={group}
+        viewerId={ada.id}
+        initial={initial}
+        onSaved={jest.fn()}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+  const paidByOthers: Transaction = {
+    ...existing,
+    payer: null,
+    participants: [
+      { user: ada, shareCents: 500, weight: 1 },
+      { user: null, shareCents: 500, weight: 1 },
+    ],
+  };
+
+  const transferToOthers: Transaction = {
+    ...existing,
+    kind: 'transfer',
+    title: 'Advance',
+    splitMode: 'amount',
+    participants: [{ user: null, shareCents: 1000, weight: null }],
+  };
+
+  it('never offers Others in “Who paid”, for a new transaction', async () => {
+    await renderForm();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Who paid' }));
+
+    expect(screen.getByRole('radio', { name: 'Ada Lovelace' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Grace Hopper' })).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: 'Others' })).toBeNull();
+  });
+
+  it('never offers Others in “To”, for a new transfer', async () => {
+    await renderForm();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Transfer' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'To' }));
+
+    expect(screen.getByRole('radio', { name: 'Grace Hopper' })).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: 'Others' })).toBeNull();
+  });
+
+  it('shows Others as the payer of a stored transaction, not the viewer', async () => {
+    await renderForm(paidByOthers);
+
+    expect(screen.getByRole('button', { name: 'Who paid' })).toHaveTextContent(/Others/);
+    expect(screen.getByRole('button', { name: 'Who paid' })).not.toHaveTextContent(/Me/);
+  });
+
+  it('keeps Others as the payer on save', async () => {
+    await renderForm(paidByOthers);
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Groceries (corrected)');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({
+        payerId: null,
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: ada.id, weight: 1 },
+            { userId: null, weight: 1 },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('replaces Others as the payer when a member is picked', async () => {
+    await renderForm(paidByOthers);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Who paid' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({ payerId: grace.id }),
+    );
+  });
+
+  it('keeps Others as the recipient of a stored transfer on save', async () => {
+    await renderForm(transferToOthers);
+
+    expect(screen.getByRole('button', { name: 'To' })).toHaveTextContent(/Others/);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({ kind: 'transfer', payerId: ada.id, toUserId: null }),
+    );
+  });
+
+  it('replaces Others as the recipient when a member is picked', async () => {
+    await renderForm(transferToOthers);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'To' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Grace Hopper' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({ kind: 'transfer', toUserId: grace.id }),
+    );
+  });
+
+  it('refuses a transfer between Others and Others', async () => {
+    await renderForm({ ...transferToOthers, payer: null });
+
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: true }),
+    );
+  });
+
+  it('does not take “nothing picked yet” for Others on a new transfer', async () => {
+    await renderForm();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Transfer' }));
+
+    expect(screen.getByRole('button', { name: 'To' })).not.toHaveTextContent(/Others/);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: true }),
+    );
+  });
+});
+
 describe('TransactionFormScreen — editing', () => {
   it('pre-fills every field from the existing transaction', async () => {
     await render(
