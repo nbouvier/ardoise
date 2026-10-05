@@ -78,10 +78,11 @@ export interface TransactionsServiceDeps {
 
 /**
  * A party the request names, resolved against the group's current
- * membership. Others (`null`) is not accepted by this service yet.
+ * membership. Others (`null`) is never checked: it stands for everyone
+ * outside the group and is always available (`docs/specs/transactions.md`).
  */
-function memberId(memberIds: ReadonlySet<string>, id: PartyId): string {
-  if (id === null || !memberIds.has(id)) {
+function partyId(memberIds: ReadonlySet<string>, id: PartyId): PartyId {
+  if (id !== null && !memberIds.has(id)) {
     throw new TransactionError('not_group_member');
   }
   return id;
@@ -98,14 +99,15 @@ function memberId(memberIds: ReadonlySet<string>, id: PartyId): string {
 function resolveSplit(
   input: CreateTransactionRequest,
   memberIds: ReadonlySet<string>,
-): { splitMode: SplitMode; payerId: string; participants: ParticipantInput[] } {
-  const payerId = memberId(memberIds, input.payerId);
+): { splitMode: SplitMode; payerId: PartyId; participants: ParticipantInput[] } {
+  const payerId = partyId(memberIds, input.payerId);
 
   if (input.kind === 'transfer') {
+    // Covers Others to Others too: a transfer always has two distinct ends.
     if (input.toUserId === input.payerId) {
       throw new TransactionError('invalid_split');
     }
-    const toUserId = memberId(memberIds, input.toUserId);
+    const toUserId = partyId(memberIds, input.toUserId);
     return {
       splitMode: 'amount',
       payerId,
@@ -113,7 +115,7 @@ function resolveSplit(
     };
   }
 
-  const split = input.split.participants.map((p) => ({ ...p, userId: memberId(memberIds, p.userId) }));
+  const split = input.split.participants.map((p) => ({ ...p, userId: partyId(memberIds, p.userId) }));
 
   if (input.split.mode === 'shares') {
     const weightById = new Map(input.split.participants.map((p) => [p.userId, p.weight]));
@@ -125,7 +127,7 @@ function resolveSplit(
       splitMode: 'shares',
       payerId,
       participants: shares.map((share) => ({
-        userId: memberId(memberIds, share.userId),
+        userId: share.userId,
         shareCents: share.shareCents,
         weight: weightById.get(share.userId) ?? null,
       })),
@@ -149,7 +151,7 @@ function resolveSplit(
 function toTransactionFields(
   input: CreateTransactionRequest,
   splitMode: SplitMode,
-  payerId: string,
+  payerId: PartyId,
 ): Omit<TransactionFields, 'groupId'> {
   return {
     kind: input.kind,
@@ -163,7 +165,14 @@ function toTransactionFields(
   };
 }
 
-function resolveUser(userMap: ReadonlyMap<string, FriendSummary>, userId: string): FriendSummary {
+/** `null` (Others) stays `null`: it is not a user, and has no profile. */
+function resolveParty(
+  userMap: ReadonlyMap<string, FriendSummary>,
+  userId: PartyId,
+): FriendSummary | null {
+  if (userId === null) {
+    return null;
+  }
   // The account could have been deleted since; the transaction still has to
   // render, the same way a pair group falls back when the other member is
   // gone (see groups/service.ts).
@@ -184,10 +193,10 @@ function toTransaction(
     occurredOn: row.occurredOn,
     comment: row.comment,
     category: row.category as TransactionCategory,
-    payer: resolveUser(userMap, row.payerId),
+    payer: resolveParty(userMap, row.payerId),
     splitMode: row.splitMode as SplitMode,
     participants: participants.map((participant) => ({
-      user: resolveUser(userMap, participant.userId),
+      user: resolveParty(userMap, participant.userId),
       shareCents: participant.shareCents,
       weight: participant.weight,
     })),
@@ -234,8 +243,10 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     return row;
   }
 
-  async function buildUserMap(ids: readonly string[]): Promise<Map<string, FriendSummary>> {
-    const rows = await users.findManyByIds([...new Set(ids)]);
+  /** Profiles of every user named; Others (`null`) has none to look up. */
+  async function buildUserMap(ids: readonly PartyId[]): Promise<Map<string, FriendSummary>> {
+    const userIds = ids.filter((id): id is string => id !== null);
+    const rows = await users.findManyByIds([...new Set(userIds)]);
     return new Map(rows.map((user) => [user.id, toUserSummary(user)]));
   }
 

@@ -236,7 +236,7 @@ An expense, income or transfer recorded in a group.
 | `occurred_on`   | date             | A calendar date, not a timestamp — no time zone drift      |
 | `comment`       | text, null       | Optional                                                   |
 | `category`      | text             | One of a fixed preset list; default `'other'`, never `NULL` |
-| `payer_id`      | uuid FK          | → `users.id`, `ON DELETE CASCADE`                          |
+| `payer_id`      | uuid FK, null    | → `users.id`, `ON DELETE CASCADE`; `NULL` is Others        |
 | `split_mode`    | text             | `shares` or `amount`                                       |
 | `created_by`    | uuid FK          | → `users.id`, `ON DELETE CASCADE`; who recorded it         |
 | `created_at`    | timestamptz      | `now()`                                                     |
@@ -258,19 +258,27 @@ balance calculation) treats all three kinds uniformly.
 
 ### `transaction_participants`
 
-One member's share of a transaction.
+One member's share of a transaction — or Others'.
 
 | Column           | Type        | Notes                                                              |
 | ---------------- | ----------- | -------------------------------------------------------------------- |
 | `id`             | uuid PK     | `gen_random_uuid()`                                                   |
 | `transaction_id` | uuid FK     | → `transactions.id`, `ON DELETE CASCADE`                              |
-| `user_id`        | uuid FK     | → `users.id`, `ON DELETE CASCADE`                                     |
+| `user_id`        | uuid FK, null | → `users.id`, `ON DELETE CASCADE`; `NULL` is Others                 |
 | `share_cents`    | integer     | ≥ 0; `shares` mode's computed output, or `amount` mode's input        |
 | `weight`         | integer, null | Set only in `shares` mode: the input the split was computed from     |
 
-Constraints: `transaction_participants_unique` on (`transaction_id`, `user_id`) — one row
-per person per transaction; `transaction_participants_share_non_negative`;
-`transaction_participants_weight_positive` (`weight is null or weight > 0`).
+Constraints: `transaction_participants_unique` on (`transaction_id`, `user_id`), declared
+`NULLS NOT DISTINCT` — one row per person per transaction, and at most one Others row;
+`transaction_participants_share_non_negative`; `transaction_participants_weight_positive`
+(`weight is null or weight > 0`).
+
+**Others** — people outside the group (`docs/specs/transactions.md`) — is a `NULL` user,
+not a row in `users`: in `transactions.payer_id` and in `transaction_participants.user_id`
+alike, `NULL` always means Others, never a missing value. Every balance computation leaves
+it out: the payer is credited the members' shares only, and a transaction Others paid
+moves nothing. The two SQL aggregates in `transactions/repository.ts` filter it with an
+explicit `is not null` rather than relying on `<>` dropping a `NULL`.
 
 Index: `transaction_participants_user_id_idx`.
 
@@ -283,10 +291,11 @@ enforced by the service inside the same database transaction that writes both ta
 schema, which means deleting a user's account would currently delete every transaction
 they paid for or recorded — including ones shared with people who remain in the group,
 silently breaking their balances. There is no account-deletion feature yet to trigger
-this, so it is left as-is for consistency with the rest of the schema; if one is added,
-revisit this the way a pair group's missing member is already handled at the API layer
-(`ON DELETE SET NULL` plus a "deleted user" fallback when rendering), rather than losing
-shared history.
+this, so it is left as-is for consistency with the rest of the schema. The planned
+account deletion turns a user's participations into Others (a `NULL` payer or participant)
+before the account goes, so shared history survives; the payer and participant FKs are
+then meant to become `ON DELETE RESTRICT`, so a deletion that skipped that step fails
+loudly instead of cascading.
 
 ## Cascades worth knowing
 
@@ -330,3 +339,8 @@ shared history.
   (`parent_id NULL`, `depth 0`) automatically, since the column defaults to `0`.
 - Migration `0008_*` — adds `group_members.favorited_at`, nullable, no backfill needed
   (favorites, `docs/specs/favorites.md`).
+- Migration `0009_*` — makes `transactions.payer_id` and
+  `transaction_participants.user_id` nullable (`NULL` is Others), and recreates
+  `transaction_participants_unique` as `NULLS NOT DISTINCT` so a transaction has at most one
+  Others row. No backfill: every existing row names a user. Needs Postgres 15+ (production
+  runs 17; the PGlite used in development and tests supports it too).

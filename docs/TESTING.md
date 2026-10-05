@@ -177,7 +177,10 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   including HTML escaping of both an inviter name and a group name.
 - **Friends** (`src/features/friends/`): the invitation lifecycle, friendship symmetry,
   and `GET /friends` carrying the pair group's `groupId` and `favorite`, personal to the
-  caller, with favorited friends first (`docs/specs/favorites.md`).
+  caller, with favorited friends first (`docs/specs/favorites.md`). Friend balances
+  (`balances.test.ts`): the per-friend SQL aggregate cross-checked against its in-memory
+  oracle `computePairwiseBalances` on a ledger with Others on every side, and Others never
+  counted between two friends.
 - **Groups** (`src/features/groups/`), unit and integration:
   - membership authorization on every route, archiving, deletion cascades, group
     invitations;
@@ -197,6 +200,15 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     roll-up.
 - **Transactions** (`src/features/transactions/`), unit and integration:
   - the balance calculation in isolation (sign convention, sum to zero);
+  - **Others** (`docs/specs/transactions.md`): the spec's 60 € example, an only-Others
+    split, Others as payer and at either end of a transfer, income — none of it reaching a
+    balance. The generated-ledger property (group balances sum to zero, a member's pairwise
+    balances sum back to their group balance) runs with Others as both payer and
+    participant. End to end: the API accepts Others everywhere and refuses it twice in a
+    split or at both ends of a transfer; the database itself refuses a second Others row;
+    an edit keeps it; and on one mixed ledger the group's balances, each member's
+    `viewerBalanceCents` (the per-group SQL aggregate) and `/friends` (the per-friend one)
+    all agree. These Others tests fail against the pre-Others rules;
   - end to end: every split shape, archived-group read-only behaviour, cross-group
     transaction access, cascade deletion;
   - the pair-group regression: transactions must **not** be refused by the guard that
@@ -212,13 +224,18 @@ What each suite covers, by workspace and feature. Paths are relative to the work
 ### `packages/shared`
 
 - **Splits** (`splitByShares`): the sum invariant across many generated totals, weights
-  and group sizes; rounding determinism; tie-breaking. The transaction request schema's
-  shape per kind.
+  and group sizes; rounding determinism; tie-breaking, Others last. The transaction request
+  schema's shape per kind, and Others (`null`): accepted as participant, payer and either
+  transfer end, refused twice, never inferred from a missing `userId`.
+- **Balance effect** (`balanceEffectCents`, `memberSharesCents`): the client's statement of
+  the balance rule — the spec's Others example, only-Others, an Others payer, income, and
+  members summing to zero.
 - **Categories**: unique keys, and an emoji, a label and a distinct colour each.
 - **Statistics** (`categoryBreakdown`): kind filtering (transfers never count), a
   selected subset of participants counted by their own shares rather than what they paid
   (one member, several summed, an empty selection), ordering, and the two sum invariants —
-  amounts to the total, percentages to exactly 100 — across many generated shapes.
+  amounts to the total, percentages to exactly 100 — across many generated shapes. Others'
+  share is never counted, whoever paid, and an Others payer still counts the members'.
 - **Reimbursements** (`planReimbursements`): the clearing property and the payment-count
   bound over 200 generated balance sets, exact-match pairing, a chain of debts collapsing
   into one payment, zero-balance people left out, independence from input order.
