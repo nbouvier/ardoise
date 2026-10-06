@@ -1,11 +1,13 @@
 import type { Balance } from '@ardoise/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
 import { fetchBalances } from '@/lib/api/transactions';
-import { errorFields, logger } from '@/lib/logger';
+import { loggedRead, readStatus, type ReadStatus } from '@/lib/query/client';
+import { queryKeys } from '@/lib/query/keys';
 
-export type BalancesStatus = 'loading' | 'ready' | 'error';
+export type BalancesStatus = ReadStatus;
 
 export interface UseBalancesResult {
   status: BalancesStatus;
@@ -16,37 +18,16 @@ export interface UseBalancesResult {
 /** Every current member's net balance in the group. Positive: owed to them. */
 export function useBalances(groupId: string): UseBalancesResult {
   const { authorizedFetch } = useAuth();
-  const [status, setStatus] = useState<BalancesStatus>('loading');
-  const [balances, setBalances] = useState<Balance[]>([]);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-
-    fetchBalances(authorizedFetch, groupId)
-      .then((loaded) => {
-        if (active) {
-          setBalances(loaded);
-          setStatus('ready');
-        }
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        logger.warn('balances.load.failed', errorFields(error));
-        setStatus('error');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [authorizedFetch, groupId, reloadToken]);
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.balances(groupId),
+    queryFn: () =>
+      loggedRead('balances.load.failed', () => fetchBalances(authorizedFetch, groupId)),
+  });
 
   const refresh = useCallback(() => {
-    setStatus('loading');
-    setReloadToken((token) => token + 1);
-  }, []);
+    void queryClient.refetchQueries({ queryKey: queryKeys.balances(groupId) });
+  }, [groupId, queryClient]);
 
-  return { status, balances, refresh };
+  return { status: readStatus(query), balances: query.data ?? [], refresh };
 }

@@ -18,9 +18,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api/errors';
 import { createGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
 import { FriendPickerCard } from './friend-picker';
-import { groupsChanged } from './groups-changed';
 import { OtherParticipants } from './other-participants';
 
 export interface CreateGroupScreenProps {
@@ -58,6 +58,7 @@ export function CreateGroupScreen({
   parentPlaceholders = [],
 }: CreateGroupScreenProps) {
   const { authorizedFetch } = useAuth();
+  const invalidation = useInvalidation();
   const theme = useTheme();
   const [name, setName] = useState('');
   // Friends and the parent's placeholders alike: both are ids to add.
@@ -86,7 +87,7 @@ export function CreateGroupScreen({
         ...(placeholderNames.length > 0 ? { placeholderNames } : {}),
         parentId,
       });
-      groupsChanged.notify();
+      void invalidation.groupsChanged();
       onCreated(group);
     } catch (cause: unknown) {
       logger.warn('groups.create.failed', errorFields(cause));

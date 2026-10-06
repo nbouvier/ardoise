@@ -1,10 +1,11 @@
 import type { GroupSummary } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
+import { queryKeys } from '@/lib/query/keys';
+import { render } from '@/test-utils/render';
 
-import { groupsChanged } from './groups-changed';
 import { GroupsScreen } from './groups-screen';
 
 const trip: GroupSummary = {
@@ -356,14 +357,14 @@ describe('GroupsScreen', () => {
       // (`docs/specs/favorites.md`), and this is where that finally shows.
       .mockResolvedValue([{ ...zulu, favorite: true }, alpha]);
 
-    await render(<GroupsScreen />);
+    const { queryClient } = await render(<GroupsScreen />);
     await screen.findByText('Alpha');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Add Zulu to favorites' }));
     await screen.findByRole('button', { name: 'Remove Zulu from favorites' });
 
     await act(async () => {
-      groupsChanged.notify();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.groups });
     });
 
     await waitFor(() => {

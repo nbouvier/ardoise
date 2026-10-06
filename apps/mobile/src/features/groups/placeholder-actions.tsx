@@ -9,7 +9,6 @@ import { PromptDialog } from '@/components/prompt-dialog';
 import { useDialog } from '@/components/use-dialog';
 import { useAuth } from '@/features/auth/use-auth';
 import { centsToText } from '@/features/transactions/amount-input';
-import { transactionsChanged } from '@/features/transactions/transactions-changed';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api/errors';
 import {
@@ -19,8 +18,8 @@ import {
   renamePlaceholder,
 } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
-import { groupsChanged } from './groups-changed';
 
 export interface PlaceholderActionsOptions {
   /** `null` while the group is still loading: nothing is offered then. */
@@ -65,6 +64,7 @@ export function usePlaceholderActions({
   onChanged,
 }: PlaceholderActionsOptions): PlaceholderActions {
   const { authorizedFetch } = useAuth();
+  const invalidation = useInvalidation();
   const theme = useTheme();
   const { dialog, confirm, inform } = useDialog();
   const [menuFor, setMenuFor] = useState<GroupMember | null>(null);
@@ -118,8 +118,7 @@ export function usePlaceholderActions({
       onConfirm: () => {
         claimPlaceholder(authorizedFetch, group.id, member.id)
           .then((updated) => {
-            groupsChanged.notify();
-            transactionsChanged.notify();
+            void invalidation.transactionsChanged();
             onChanged(updated);
           })
           .catch((error: unknown) => refused('claim', member, error));
@@ -139,10 +138,8 @@ export function usePlaceholderActions({
       onConfirm: () => {
         removeGroupMember(authorizedFetch, group.id, member.id)
           .then(() => {
-            groupsChanged.notify();
-            if (fromRoot) {
-              transactionsChanged.notify();
-            }
+            // From the root, its part became Others: the figures moved too.
+            void (fromRoot ? invalidation.transactionsChanged() : invalidation.groupsChanged());
             onChanged(null);
           })
           .catch((error: unknown) => refused('remove', member, error));
@@ -157,8 +154,7 @@ export function usePlaceholderActions({
     }
     renamePlaceholder(authorizedFetch, group.id, member.id, name)
       .then((updated) => {
-        groupsChanged.notify();
-        transactionsChanged.notify();
+        void invalidation.transactionsChanged();
         onChanged(updated);
       })
       .catch((error: unknown) => refused('rename', member, error));

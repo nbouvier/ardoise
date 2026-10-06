@@ -1,6 +1,7 @@
 import type { Invite } from '@ardoise/shared';
 import * as Clipboard from 'expo-clipboard';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -19,11 +20,11 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { useTimeout } from '@/hooks/use-timeout';
 import type { AuthorizedFetch } from '@/lib/api/client';
 import { errorFields, logger } from '@/lib/logger';
-
-type InviteState =
-  { status: 'loading' } | { status: 'ready'; invite: Invite } | { status: 'error' };
+import { loggedRead, readStatus } from '@/lib/query/client';
+import { queryKeys } from '@/lib/query/keys';
 
 /** How long the "Copied" tooltip stays up. */
 const COPIED_TOOLTIP_MS = 2000;
@@ -46,6 +47,8 @@ export interface InviteShareScreenProps {
   blurb: string;
   /** The message the OS share sheet is pre-filled with. */
   shareMessage: (url: string) => string;
+  /** Which link this is, for the cache: `friend`, or `group:<id>`. */
+  inviteKey: string;
   load: (fetcher: AuthorizedFetch) => Promise<Invite>;
   rotate: (fetcher: AuthorizedFetch) => Promise<Invite>;
   /**
@@ -64,63 +67,36 @@ export function InviteShareScreen({
   title,
   blurb,
   shareMessage,
+  inviteKey,
   load,
   rotate,
   embedded = false,
 }: InviteShareScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
-  const [state, setState] = useState<InviteState>({ status: 'loading' });
-  const [reloadToken, setReloadToken] = useState(0);
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.invite(inviteKey),
+    queryFn: () => loggedRead('invites.share.load.failed', () => load(authorizedFetch)),
+  });
   const [rotating, setRotating] = useState(false);
+  // A failed rotation leaves no link worth showing: the old one may be dead.
+  const [rotateFailed, setRotateFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The "Copied" tooltip is a passing acknowledgement, not a state to keep.
+  const copiedTimeout = useTimeout();
   const rootRef = useRef<View>(null);
   // Where the tooltip goes: the spot that was tapped, in the root's own coordinates.
   const [tooltipAt, setTooltipAt] = useState<{ x: number; y: number } | null>(null);
 
-  // The "Copied" tooltip is a passing acknowledgement, not a state to keep.
-  useEffect(
-    () => () => {
-      if (copiedTimer.current) {
-        clearTimeout(copiedTimer.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    let active = true;
-
-    load(authorizedFetch)
-      .then((invite) => {
-        if (active) {
-          setState({ status: 'ready', invite });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        logger.warn('invites.share.load.failed', errorFields(error));
-        setState({ status: 'error' });
-      });
-
-    return () => {
-      active = false;
-    };
-    // `load` is a prop: depending on it would reload whenever the caller
-    // re-renders with a fresh closure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorizedFetch, reloadToken]);
-
   const retry = useCallback(() => {
-    setState({ status: 'loading' });
-    setReloadToken((token) => token + 1);
-  }, []);
+    setRotateFailed(false);
+    void queryClient.refetchQueries({ queryKey: queryKeys.invite(inviteKey) });
+  }, [inviteKey, queryClient]);
 
-  const invite = state.status === 'ready' ? state.invite : null;
+  const status = rotateFailed ? 'error' : readStatus(query);
+  const invite = status === 'ready' ? (query.data ?? null) : null;
 
   async function handleCopy(event?: GestureResponderEvent) {
     if (!invite) {
@@ -136,10 +112,7 @@ export function InviteShareScreen({
         rootRef.current?.measureInWindow?.((x, y) => setTooltipAt({ x: pageX - x, y: pageY - y }));
       }
       setCopied(true);
-      if (copiedTimer.current) {
-        clearTimeout(copiedTimer.current);
-      }
-      copiedTimer.current = setTimeout(() => setCopied(false), COPIED_TOOLTIP_MS);
+      copiedTimeout.schedule(() => setCopied(false), COPIED_TOOLTIP_MS);
     } catch (error) {
       // The link stays on screen and can still be shared, so this is not fatal.
       logger.warn('invites.share.copy.failed', errorFields(error));
@@ -161,16 +134,16 @@ export function InviteShareScreen({
     setRotating(true);
     setCopied(false);
     try {
-      setState({ status: 'ready', invite: await rotate(authorizedFetch) });
+      queryClient.setQueryData(queryKeys.invite(inviteKey), await rotate(authorizedFetch));
     } catch (error) {
       logger.warn('invites.share.rotate.failed', errorFields(error));
-      setState({ status: 'error' });
+      setRotateFailed(true);
     } finally {
       setRotating(false);
     }
   }
 
-  if (state.status === 'error') {
+  if (status === 'error') {
     return (
       <ThemedView
         style={

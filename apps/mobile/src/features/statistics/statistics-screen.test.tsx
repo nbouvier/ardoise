@@ -5,8 +5,10 @@ import type {
   TransactionsListResponse,
 } from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';
+
+import { render } from '@/test-utils/render';
 
 import { StatisticsScreen } from './statistics-screen';
 

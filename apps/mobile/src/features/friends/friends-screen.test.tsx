@@ -1,10 +1,11 @@
 import type { FriendEntry } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import { groupsChanged } from '@/features/groups/groups-changed';
 import { pendingInvite } from '@/features/invites/pending-invite';
 import { ApiError } from '@/lib/api/errors';
+import { queryKeys } from '@/lib/query/keys';
+import { render } from '@/test-utils/render';
 
 import { FriendsScreen } from './friends-screen';
 
@@ -264,14 +265,14 @@ describe('FriendsScreen', () => {
       // (`docs/specs/favorites.md`), and this is where that finally shows.
       .mockResolvedValue([{ ...grace, favorite: true }, alan]);
 
-    await render(<FriendsScreen />);
+    const { queryClient } = await render(<FriendsScreen />);
     await screen.findByText('Alan Turing');
 
     await fireEvent.press(screen.getByRole('button', { name: 'Add Grace Hopper to favorites' }));
     await screen.findByRole('button', { name: 'Remove Grace Hopper from favorites' });
 
     await act(async () => {
-      groupsChanged.notify();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.friends });
     });
 
     await waitFor(() => {

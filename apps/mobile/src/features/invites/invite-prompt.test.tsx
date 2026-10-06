@@ -1,6 +1,8 @@
 import type { InvitePreview } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
+
+import { render } from '@/test-utils/render';
 
 import { InviteLinkHandler } from './invite-link-handler';
 import { InvitePrompt } from './invite-prompt';

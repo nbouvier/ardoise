@@ -9,16 +9,16 @@ import type {
   TransactionsListResponse,
 } from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
-import { friendsChanged } from '@/features/friends/friends-changed';
 import { ApiError } from '@/lib/api/errors';
+import { queryKeys } from '@/lib/query/keys';
 import { mockBackButton } from '@/test-utils/back-button';
+import { render } from '@/test-utils/render';
 
 import { GroupScreen } from './group-screen';
-import { groupsChanged } from './groups-changed';
 
 const ada: FriendSummary = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -402,9 +402,11 @@ describe('GroupScreen', () => {
   it('tells the Friends tab to reload after a transaction is saved', async () => {
     // A friend's per-group balance changed here has no other way to reach the
     // Friends tab's own per-friend total — it can only find out by asking.
-    const notify = jest.spyOn(friendsChanged, 'notify');
-    await render(<GroupScreen groupId={trip.id} />);
+    const { queryClient } = await render(<GroupScreen groupId={trip.id} />);
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
     await screen.findByText('Corsica 2026');
+    // What the server answers from then on: the list re-read after saving.
+    mockFetchTransactions.mockResolvedValue({ transactions: [groceries], excludedSubgroupCount: 0 });
 
     await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
     await fireEvent.changeText(await screen.findByLabelText('Title'), 'Groceries');
@@ -412,7 +414,7 @@ describe('GroupScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText('Groceries')).toBeTruthy();
-    expect(notify).toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.friends });
   });
 
   it('keeps the members and management actions on the Manage tab', async () => {
@@ -1179,7 +1181,7 @@ describe('GroupScreen', () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);
-      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+      await fireEvent.press(await screen.findByText('Show sub-groups I’m not in (1)'));
       await fireEvent.press(await screen.findByText('Bastia weekend'));
 
       expect(await screen.findByText('Join this group?')).toBeTruthy();
@@ -1191,7 +1193,7 @@ describe('GroupScreen', () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [unjoinedSub], subgroupCount: 1 });
 
       await render(<GroupScreen groupId={trip.id} />);
-      await fireEvent.press(screen.getByText('Show sub-groups I’m not in (1)'));
+      await fireEvent.press(await screen.findByText('Show sub-groups I’m not in (1)'));
       await fireEvent.press(await screen.findByText('Bastia weekend'));
       await fireEvent.press(await screen.findByRole('button', { name: 'Join' }));
 
@@ -1263,13 +1265,13 @@ describe('GroupScreen', () => {
     });
 
     it('reloads its subgroups when notified — e.g. right after creating one', async () => {
-      await render(<GroupScreen groupId={trip.id} />);
+      const { queryClient } = await render(<GroupScreen groupId={trip.id} />);
       await screen.findByText('Corsica 2026');
       expect(mockFetchGroup).toHaveBeenCalledTimes(1);
 
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
       await act(async () => {
-        groupsChanged.notify();
+        await queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       });
 
       expect(await screen.findByText('Ajaccio weekend')).toBeTruthy();

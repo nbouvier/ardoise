@@ -16,6 +16,7 @@ export function InviteScreen({ embedded }: InviteScreenProps = {}) {
       title="Invite a friend"
       blurb={FRIEND_INVITE_BLURB}
       shareMessage={(url) => `Join me on Ardoise: ${url}`}
+      inviteKey="friend"
       load={fetchInvite}
       rotate={rotateInvite}
       embedded={embedded}

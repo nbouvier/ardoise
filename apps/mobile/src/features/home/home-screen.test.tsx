@@ -1,10 +1,10 @@
 import type { GroupSummary, RecentTransaction } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
-import { groupsChanged } from '@/features/groups/groups-changed';
-import { transactionsChanged } from '@/features/transactions/transactions-changed';
+import { queryKeys } from '@/lib/query/keys';
 import { ada, groupSummary, transaction } from '@/test-utils/api-fakes';
+import { render } from '@/test-utils/render';
 
 import { HomeScreen } from './home-screen';
 
@@ -180,21 +180,21 @@ describe('HomeScreen', () => {
   });
 
   it('re-reads the latest list when a transaction changes elsewhere', async () => {
-    await render(<HomeScreen />);
+    const { queryClient } = await render(<HomeScreen />);
     await screen.findByText(/Transactions you’re part of/);
 
     mockFetchRecent.mockResolvedValue([entry]);
-    await act(async () => transactionsChanged.notify());
+    await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.ledger }));
 
     expect(await screen.findByText('Groceries')).toBeTruthy();
   });
 
   it('re-reads the favorites when a group changes elsewhere', async () => {
-    await render(<HomeScreen />);
+    const { queryClient } = await render(<HomeScreen />);
     await screen.findByText(/Star a group/);
 
     mockFetchFavoriteGroups.mockResolvedValue([trip]);
-    await act(async () => groupsChanged.notify());
+    await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.groups }));
 
     expect(await screen.findByText('Corsica 2026')).toBeTruthy();
   });

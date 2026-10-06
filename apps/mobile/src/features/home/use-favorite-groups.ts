@@ -1,20 +1,19 @@
 import type { GroupSummary } from '@ardoise/shared';
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
-import { groupsChanged } from '@/features/groups/groups-changed';
-import type { AuthorizedFetch } from '@/lib/api/client';
 import { fetchFavoriteGroups, setGroupFavorite } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
+import { loggedRead, readStatus, type ReadStatus } from '@/lib/query/client';
+import { queryKeys } from '@/lib/query/keys';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
-export type FavoriteGroupsStatus = 'loading' | 'ready' | 'error';
+export type FavoriteGroupsStatus = ReadStatus;
 
-interface FavoriteGroupsState {
+export interface UseFavoriteGroupsResult {
   status: FavoriteGroupsStatus;
   groups: GroupSummary[];
-}
-
-export interface UseFavoriteGroupsResult extends FavoriteGroupsState {
   /**
    * Reload the section — its retry action. Resolves once the read lands,
    * either way, so pull-to-refresh can spin until it does.
@@ -27,58 +26,26 @@ export interface UseFavoriteGroupsResult extends FavoriteGroupsState {
 }
 
 /**
- * One read of the section, as the change it makes to the state — so the
- * mount-and-refetch effect and `refresh` share the read itself rather than
- * two copies of it. A failure keeps whatever is already on screen.
- */
-async function readFavorites(
-  fetcher: AuthorizedFetch,
-): Promise<(current: FavoriteGroupsState) => FavoriteGroupsState> {
-  try {
-    const groups = await fetchFavoriteGroups(fetcher);
-    return () => ({ status: 'ready', groups });
-  } catch (error: unknown) {
-    logger.warn('groups.favorites.load.failed', errorFields(error));
-    return (current) => ({ ...current, status: 'error' });
-  }
-}
-
-/**
  * The groups the signed-in user has starred — every kind at once, unlike the
  * group list: a sub-group and the implicit pair group behind a favorited
- * friend both belong here (`docs/specs/home.md`).
+ * friend both belong here (`docs/specs/home.md`). Starring a group anywhere
+ * else refetches it (`useInvalidation`).
  */
 export function useFavoriteGroups(): UseFavoriteGroupsResult {
   const { authorizedFetch } = useAuth();
-  const [state, setState] = useState<FavoriteGroupsState>({ status: 'loading', groups: [] });
+  const queryClient = useQueryClient();
+  const invalidation = useInvalidation();
+  const query = useQuery({
+    queryKey: queryKeys.favoriteGroups,
+    queryFn: () =>
+      loggedRead('groups.favorites.load.failed', () => fetchFavoriteGroups(authorizedFetch)),
+  });
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
-  // Starring a group anywhere else — its own page, the group list, a friend's
-  // row — changes what belongs in this section.
-  const groupsVersion = useSyncExternalStore(
-    groupsChanged.subscribe,
-    groupsChanged.getSnapshot,
-    groupsChanged.getSnapshot,
+
+  const refresh = useCallback(
+    () => queryClient.refetchQueries({ queryKey: queryKeys.favoriteGroups }),
+    [queryClient],
   );
-
-  useEffect(() => {
-    let active = true;
-    // Deliberately without flipping to "loading": a refetch caused by
-    // something else keeps the current rows visible until the new ones land.
-    void readFavorites(authorizedFetch).then((apply) => {
-      if (active) {
-        setState(apply);
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [authorizedFetch, groupsVersion]);
-
-  const refresh = useCallback(async () => {
-    setState((current) => ({ ...current, status: 'loading' }));
-    setState(await readFavorites(authorizedFetch));
-  }, [authorizedFetch]);
 
   const toggleFavorite = useCallback(
     (group: GroupSummary) => {
@@ -88,22 +55,28 @@ export function useFavoriteGroups(): UseFavoriteGroupsResult {
       // star: this section *is* the favorites, so an unfavorited group has
       // nowhere to stay. Nothing to preserve the order of either, unlike a
       // list where the row would only move (`docs/specs/favorites.md`).
-      setState((current) => ({
-        ...current,
-        groups: current.groups.filter((g) => g.id !== group.id),
-      }));
+      void queryClient.cancelQueries({ queryKey: queryKeys.favoriteGroups });
+      queryClient.setQueryData<GroupSummary[]>(queryKeys.favoriteGroups, (groups) =>
+        groups?.filter((g) => g.id !== group.id),
+      );
 
       setGroupFavorite(authorizedFetch, group.id, next)
-        .then(() => groupsChanged.notify())
-        .catch(async (error: unknown) => {
+        .then(() => invalidation.groupsChanged())
+        .catch((error: unknown) => {
           logger.warn('groups.favorite.failed', errorFields(error));
           // Put it back wherever the server still says it belongs.
-          setState(await readFavorites(authorizedFetch));
+          void refresh();
         })
         .finally(() => setFavoriteBusyId(null));
     },
-    [authorizedFetch],
+    [authorizedFetch, invalidation, queryClient, refresh],
   );
 
-  return { ...state, refresh, toggleFavorite, favoriteBusyId };
+  return {
+    status: readStatus(query),
+    groups: query.data ?? [],
+    refresh,
+    toggleFavorite,
+    favoriteBusyId,
+  };
 }

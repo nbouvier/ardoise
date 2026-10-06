@@ -10,15 +10,14 @@ import { ThemedView } from '@/components/themed-view';
 import { useDialog } from '@/components/use-dialog';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
-import { groupsChanged } from '@/features/groups/groups-changed';
 import { centsToText } from '@/features/transactions/amount-input';
-import { transactionsChanged } from '@/features/transactions/transactions-changed';
 import { useTheme } from '@/hooks/use-theme';
 import { getApiBaseUrl } from '@/lib/api/config';
 import { ApiError } from '@/lib/api/errors';
 import { claimPlaceholder, fetchPlaceholders } from '@/lib/api/groups';
 import { acceptInvite, previewInvite } from '@/lib/api/invites';
 import { errorFields, logger } from '@/lib/logger';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
 /**
  * Why an invitation cannot be used. `dead` covers unknown, expired, revoked and
@@ -129,6 +128,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   const [accepting, setAccepting] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const { dialog, confirm, inform } = useDialog();
+  const invalidation = useInvalidation();
 
   useEffect(() => {
     let active = true;
@@ -205,8 +205,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
         setClaiming(true);
         claimPlaceholder(authorizedFetch, result.group.id, placeholder.id)
           .then(() => {
-            groupsChanged.notify();
-            transactionsChanged.notify();
+            void invalidation.transactionsChanged();
             setState({ status: 'accepted', result, claimedName: placeholder.name });
           })
           .catch((error: unknown) => {

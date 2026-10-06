@@ -82,6 +82,12 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - When a type or schema is needed on both sides, it moves into `@ardoise/shared`
   rather than being duplicated.
 - The mobile client treats the server as authoritative: no offline write model yet.
+  It reads through TanStack Query (`apps/mobile/src/lib/query/`): a cache of what is on
+  screen, one per signed-in session, refetched when a screen mounts, when the app returns
+  to the foreground, and whenever a change invalidates it. A change says what it touched
+  — `useInvalidation().groupsChanged()`, `transactionsChanged()`, `friendsChanged()` — and
+  every read showing it refetches; the keys are grouped under `groups`, `ledger` and
+  `friends` (`lib/query/keys.ts`) so one prefix covers each.
 - Auth: the client sends a Google ID token, the server verifies it and returns a
   Ardoise session (short access JWT + rotating refresh token). The client stores the
   refresh token in the OS secure store and refreshes transparently on 401.
@@ -114,6 +120,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | Server framework   | Fastify                                   |
 | Server dev runner  | tsx; build via `tsc`                      |
 | Validation         | Zod (server, and the shared API contract) |
+| Mobile data reads  | TanStack Query                            |
 | Mobile tests       | jest-expo                                 |
 | Server tests       | Vitest (`app.inject` integration tests)   |
 | Mobile lint        | `eslint-config-expo` (flat)               |
@@ -218,6 +225,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-05 | Server request logs drop the client's IP address and port (custom `req` serializer) | Data minimisation: the privacy policy can say no IP is kept, with no retention to define for it. Rate limiting keeps using it in memory |
 | 2026-10-05 | `transactions.payer_id` and `transaction_participants.user_id` are `DEFERRABLE INITIALLY DEFERRED` instead of `ON DELETE RESTRICT` | Deleting a root group cascades to its placeholders and to its transactions in one statement, in no guaranteed order; an immediate check refuses the placeholder first. Checked at commit, the keys still refuse deleting anyone a transaction names, and a write naming a deleted person still fails (at commit) as `not_group_member`. drizzle cannot express it, so the migration carries it by hand |
 | 2026-10-06 | Housekeeping (deleting expired rows) runs inside the server: `schedulePeriodicTask` (`src/periodic-task.ts`) runs a task once the app is ready, then on an interval, never two at once, until it closes | No scheduler to deploy or monitor for a few idempotent `DELETE`s; with several instances each runs its own, which is harmless. A failure is logged and reported to Sentry, and the next run retries |
+| 2026-10-06 | Mobile server reads go through TanStack Query, replacing hand-written fetch hooks and the `*Changed` change signals | Eight hooks repeated the same fetch / status / reload cycle three different ways. The cache shows a screen's last data at once when it is reopened, deduplicates identical reads, and invalidation by key prefix replaces signals each screen had to subscribe to one by one. It also provides the infinite query the paginated transaction list needs. The cache is dropped on sign-out (it lives under the auth gate) |
 | 2026-10-06 | Group-scoped routes outside `groups` authorize through `GroupsService.access` (membership, member ids, optionally "not archived"), not `GroupsService.get` | `get` builds the whole group detail — members, sub-groups, ancestors, balances — about a dozen queries; a transaction route needs three to five. Both share `requireMembership`, so they refuse identically |
 
 ## Open items

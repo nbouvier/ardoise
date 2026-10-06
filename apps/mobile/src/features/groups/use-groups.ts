@@ -1,14 +1,16 @@
 import type { GroupSummary } from '@ardoise/shared';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
 import { fetchGroups, setGroupFavorite } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
-import { preserveOrder } from '@/lib/stable-order';
+import { loggedRead, readStatus, type ReadStatus } from '@/lib/query/client';
+import { queryKeys } from '@/lib/query/keys';
+import { createListOrderKeeper } from '@/lib/query/stable-order';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
-import { groupsChanged } from './groups-changed';
-
-export type GroupsStatus = 'loading' | 'ready' | 'error';
+export type GroupsStatus = ReadStatus;
 
 export interface UseGroupsResult {
   status: GroupsStatus;
@@ -35,112 +37,68 @@ export interface UseGroupsResult {
  */
 export function useGroups(): UseGroupsResult {
   const { authorizedFetch } = useAuth();
-  const [state, setState] = useState<{ status: GroupsStatus; groups: GroupSummary[] }>({
-    status: 'loading',
-    groups: [],
+  const queryClient = useQueryClient();
+  const invalidation = useInvalidation();
+  // Held for exactly the one refetch a star tap causes: the row has already
+  // moved where it belongs (the screen splits favorites from the rest) and
+  // must not jump a second time when the server's answer lands
+  // (`docs/specs/favorites.md`). Every other read is trusted for order —
+  // this is not a standing "never reorder" switch.
+  const [order] = useState(() => createListOrderKeeper<GroupSummary>((group) => group.id));
+  const query = useQuery({
+    queryKey: queryKeys.groupList,
+    queryFn: () => loggedRead('groups.list.failed', () => fetchGroups(authorizedFetch)),
+    structuralSharing: order.structuralSharing,
   });
-  const [reloadToken, setReloadToken] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [favoriteBusyId, setFavoriteBusyId] = useState<string | null>(null);
-  const externalVersion = useSyncExternalStore(
-    groupsChanged.subscribe,
-    groupsChanged.getSnapshot,
-    groupsChanged.getSnapshot,
+
+  const refetch = useCallback(
+    () => queryClient.refetchQueries({ queryKey: queryKeys.groupList }),
+    [queryClient],
   );
-  // Whether the *next* fetch to resolve should be trusted for row order.
-  // Default true — a background refetch triggered by something else (another
-  // screen archiving a group, an invite accepted) is free to bring the
-  // pinned order into view, the same "don't blink" eventual consistency
-  // every other silent refetch in this app already has. `toggleFavorite`
-  // below sets this `false` for exactly the one refetch *it* causes: a
-  // group's own row jumping the instant its own star is tapped reads as
-  // disorienting mid-scroll (`docs/specs/favorites.md`) — every fetch after
-  // that one goes back to trusting the server, this is not a standing
-  // "never reorder" switch. The Groups tab stays mounted across tab
-  // switches (native tabs), so there is no remount to reset it otherwise.
-  const trustNextOrder = useRef(true);
-  const displayedOrder = useRef<string[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    const trustOrder = trustNextOrder.current;
-    trustNextOrder.current = true;
-
-    fetchGroups(authorizedFetch)
-      .then((groups) => {
-        if (!active) {
-          return;
-        }
-        const ordered = trustOrder
-          ? groups
-          : preserveOrder(displayedOrder.current, groups, (group) => group.id);
-        displayedOrder.current = ordered.map((group) => group.id);
-        setState({ status: 'ready', groups: ordered });
-        setRefreshing(false);
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        logger.warn('groups.list.failed', errorFields(error));
-        setState((current) => ({ ...current, status: 'error' }));
-        setRefreshing(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [authorizedFetch, reloadToken, externalVersion]);
 
   const refresh = useCallback(() => {
-    trustNextOrder.current = true;
-    setState((current) => ({ ...current, status: 'loading' }));
-    setReloadToken((token) => token + 1);
-  }, []);
+    void refetch();
+  }, [refetch]);
 
   const pullRefresh = useCallback(() => {
-    trustNextOrder.current = true;
     setRefreshing(true);
-    setReloadToken((token) => token + 1);
-  }, []);
+    void refetch().finally(() => setRefreshing(false));
+  }, [refetch]);
 
   const toggleFavorite = useCallback(
     (group: GroupSummary) => {
       const next = !group.favorite;
+      const flip = (favorite: boolean) =>
+        queryClient.setQueryData<GroupSummary[]>(queryKeys.groupList, (groups) =>
+          groups?.map((g) => (g.id === group.id ? { ...g, favorite } : g)),
+        );
       setFavoriteBusyId(group.id);
-      // Suppress reordering on the one refetch this toggle itself is about
-      // to trigger below (`trustNextOrder` above) — flip the star in place
-      // instead, without moving the row.
-      trustNextOrder.current = false;
-      setState((current) => ({
-        ...current,
-        groups: current.groups.map((g) => (g.id === group.id ? { ...g, favorite: next } : g)),
-      }));
+      void queryClient.cancelQueries({ queryKey: queryKeys.groupList });
+      flip(next);
 
       setGroupFavorite(authorizedFetch, group.id, next)
-        .then(() => groupsChanged.notify())
+        .then(() => order.keepWhile(invalidation.groupsChanged))
         .catch((error: unknown) => {
           logger.warn('groups.favorite.failed', errorFields(error));
-          setState((current) => ({
-            ...current,
-            groups: current.groups.map((g) => (g.id === group.id ? { ...g, favorite: !next } : g)),
-          }));
+          flip(!next);
         })
         .finally(() => setFavoriteBusyId(null));
     },
-    [authorizedFetch],
+    [authorizedFetch, invalidation, order, queryClient],
   );
 
-  const { active, archived } = useMemo(
-    () => ({
-      active: state.groups.filter((group) => group.archivedAt === null),
-      archived: state.groups.filter((group) => group.archivedAt !== null),
-    }),
-    [state.groups],
-  );
+  const { active, archived } = useMemo(() => {
+    const groups = query.data ?? [];
+    return {
+      active: groups.filter((group) => group.archivedAt === null),
+      archived: groups.filter((group) => group.archivedAt !== null),
+    };
+  }, [query.data]);
 
   return {
-    status: state.status,
+    status: readStatus(query),
     active,
     archived,
     refresh,

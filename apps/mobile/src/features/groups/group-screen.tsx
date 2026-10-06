@@ -41,7 +41,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/features/auth/use-auth';
-import { friendsChanged } from '@/features/friends/friends-changed';
 import {
   ReimbursementsScreen,
   type Suggestion,
@@ -53,7 +52,6 @@ import {
   type TransactionPrefill,
 } from '@/features/transactions/transaction-form-screen';
 import { TransactionRow } from '@/features/transactions/transaction-row';
-import { transactionsChanged } from '@/features/transactions/transactions-changed';
 import { useBalances } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
@@ -72,10 +70,10 @@ import { errorFields, logger } from '@/lib/logger';
 import { CreateGroupScreen } from './create-group-screen';
 import { GroupActionsMenu } from './group-actions-menu';
 import { InvitePanel } from './invite-panel';
-import { groupsChanged } from './groups-changed';
 import { usePlaceholderActions } from './placeholder-actions';
 import { useGroup } from './use-group';
 import { useDialog } from '@/components/use-dialog';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 import { useGroupRowActions } from './use-group-row-actions';
 
 /**
@@ -147,6 +145,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   const [favoriteBusySubgroupId, setFavoriteBusySubgroupId] = useState<string | null>(null);
   const subgroupActions = useGroupRowActions();
   const { dialog, confirm, inform } = useDialog();
+  const invalidation = useInvalidation();
   const transactionsResult = useTransactions(groupId);
   // Read once here rather than inside the Balances tab: a recorded transaction
   // refreshes it from wherever the form was opened, and the tab is not
@@ -194,7 +193,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
     setBusy(true);
     try {
       const updated = await action();
-      groupsChanged.notify();
+      void invalidation.groupsChanged();
       if (updated) {
         set(updated);
       }
@@ -213,18 +212,19 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   }
 
   function leaveScreen() {
-    groupsChanged.notify();
+    void invalidation.groupsChanged();
     router.back();
   }
 
   /**
-   * A transaction changed here, which the home screen shows from somewhere
-   * else entirely: its latest list (`transactionsChanged`) and the group's
-   * own balance on its favorited row (`groupsChanged`).
+   * A transaction was recorded, edited or deleted here. Balances cannot be
+   * recomputed from one transaction — every member's share of it moved — and
+   * the figures shown elsewhere (each friend's total, the home's latest list
+   * and the group's own balance on its favorited row) depend on it too.
    */
-  function announceTransactionChange() {
-    transactionsChanged.notify();
-    groupsChanged.notify();
+  function afterTransactionChange() {
+    void invalidation.transactionsChanged();
+    closeTransaction();
   }
 
   if (status === 'loading') {
@@ -313,13 +313,13 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
   /**
    * A sub-group shown in this group's own sub-groups section: the API call
    * targets the sub-group, not this screen's group, so its response cannot
-   * feed `set()` directly — a `groupsChanged` notification is what brings
+   * feed `set()` directly — invalidating the groups is what brings
    * this screen's own `subgroups` list (order included) back in sync.
    */
   function toggleSubgroupFavorite(subgroup: SubgroupSummary) {
     setFavoriteBusySubgroupId(subgroup.id);
     setGroupFavorite(authorizedFetch, subgroup.id, !subgroup.favorite)
-      .then(() => groupsChanged.notify())
+      .then(() => invalidation.groupsChanged())
       .catch((error: unknown) => {
         logger.warn('groups.favorite.failed', errorFields(error));
         inform('That didn’t work', 'Check your connection and try again.');
@@ -379,7 +379,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
         setBusy(true);
         joinGroup(authorizedFetch, subgroup.id)
           .then(() => {
-            groupsChanged.notify();
+            void invalidation.groupsChanged();
             openGroup(subgroup.id);
           })
           .catch((error: unknown) => {
@@ -445,26 +445,13 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
             prefill={prefill ?? undefined}
             onSaved={(transaction) => {
               transactionsResult.upsert(transaction);
-              // Unlike the list, balances cannot be recomputed from one
-              // transaction — every member's share of it moved.
-              balancesResult.refresh();
-              // A friend's per-friend total on the Friends tab may depend on
-              // this transaction too; it has no other way to know.
-              friendsChanged.notify();
-              // And so do the home's two sections: the group's own balance on
-              // its favorited row, and the transaction itself in the latest
-              // list (`docs/specs/home.md`).
-              announceTransactionChange();
-              closeTransaction();
+              afterTransactionChange();
             }}
             onDeleted={() => {
               if (editingTransaction) {
                 transactionsResult.remove(editingTransaction.id);
               }
-              balancesResult.refresh();
-              friendsChanged.notify();
-              announceTransactionChange();
-              closeTransaction();
+              afterTransactionChange();
             }}
             onCancel={closeTransaction}
           />
@@ -637,7 +624,7 @@ export function GroupScreen({ groupId, initialTab = 'transactions' }: GroupScree
           pairRooted={pairRooted}
           parentPlaceholders={group.members.filter((member) => member.placeholder)}
           onCreated={(created) => {
-            groupsChanged.notify();
+            void invalidation.groupsChanged();
             setSheet(null);
             openGroup(created.id);
           }}
