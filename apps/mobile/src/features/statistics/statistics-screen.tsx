@@ -34,6 +34,7 @@ import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
 
 import { DonutChart } from './donut-chart';
+import { useFollowAllSelection } from './use-follow-all-selection';
 
 export interface StatisticsScreenProps {
   groupId: string;
@@ -100,8 +101,9 @@ export function StatisticsScreen({
   // product that crosses into sub-groups, and it says so on the field:
   // balances and the reimbursement plan are each scoped to one group
   // (`docs/specs/balances.md`).
-  const [selectedSubgroupIds, setSelectedSubgroupIds] = useState<ReadonlySet<string>>(
-    () => new Set(subgroups.map((subgroup) => subgroup.id)),
+  // Follows sub-groups created while this tab stays mounted (see the hook).
+  const [selectedSubgroupIds, setSelectedSubgroupIds] = useFollowAllSelection(
+    subgroups.map((subgroup) => subgroup.id),
   );
   const allSubgroupsSelected = selectedSubgroupIds.size === subgroups.length;
   const scope: TransactionsListScope =
@@ -118,8 +120,9 @@ export function StatisticsScreen({
   );
   // Everyone is selected by default — this is what makes the group's total
   // match "the group" scope the feature started with.
-  const [selectedMemberIds, setSelectedMemberIds] = useState<ReadonlySet<string>>(
-    () => new Set(members.map((member) => member.id)),
+  // Follows members who join or leave while this tab stays mounted.
+  const [selectedMemberIds, setSelectedMemberIds] = useFollowAllSelection(
+    members.map((member) => member.id),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
   // `null` means "no bound" — the breakdown covers every date, same as before
