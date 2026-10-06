@@ -1,3 +1,4 @@
+import { SignJWT } from 'jose';
 import { describe, expect, it } from 'vitest';
 
 import { AccessTokenError, createAccessTokenService } from './tokens.js';
@@ -33,6 +34,19 @@ describe('access token service', () => {
     const { token } = await issuer.issue('user-1');
 
     await expect(verifier.verify(token)).rejects.toBeInstanceOf(AccessTokenError);
+  });
+
+  it('rejects a token signed with another algorithm, even with the right secret', async () => {
+    const verifier = createAccessTokenService(SECRET, 900);
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS512' })
+      .setSubject('user-1')
+      .setIssuer('ardoise')
+      .setAudience('ardoise')
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode(SECRET));
+
+    await expect(verifier.verify(token)).rejects.toMatchObject({ reason: 'invalid' });
   });
 
   it('rejects a malformed token', async () => {

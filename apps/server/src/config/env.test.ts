@@ -5,7 +5,7 @@ import { loadEnv, parseTrustProxy } from './env.js';
 /** The variables that are required whatever the environment. */
 const base = {
   GOOGLE_CLIENT_IDS: 'web.apps.googleusercontent.com',
-  AUTH_JWT_SECRET: 'a-secret-that-is-long-enough',
+  AUTH_JWT_SECRET: 'x'.repeat(32),
 };
 
 const production = {
@@ -29,6 +29,12 @@ describe('loadEnv', () => {
       expect(env.DATABASE_URL).toBeUndefined();
       expect(env.PUBLIC_BASE_URL).toBe('http://localhost:3000');
       expect(env.TRUST_PROXY).toBe(false);
+    });
+
+    it('refuses a JWT secret shorter than 32 characters', () => {
+      expect(() =>
+        loadEnv({ ...base, NODE_ENV: 'development', AUTH_JWT_SECRET: 'x'.repeat(31) }),
+      ).toThrow(/AUTH_JWT_SECRET/);
     });
   });
 

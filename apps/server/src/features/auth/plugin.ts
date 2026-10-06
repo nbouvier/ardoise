@@ -6,6 +6,8 @@ import {
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 
+import { schedulePeriodicTask } from '../../periodic-task.js';
+
 import { createGoogleVerifier, GoogleVerificationError, type GoogleVerifier } from './google.js';
 import { createAuthRepository } from './repository.js';
 import { createAuthService, type AuthService } from './service.js';
@@ -39,6 +41,13 @@ export const authPlugin = fp<AuthPluginOptions>(
     const repository = createAuthRepository(app.db);
     const sessions = createSessionService(repository);
     const auth = createAuthService({ google, accessTokens, sessions, repository });
+
+    // Every refresh adds a session row; the expired ones are no use to anyone.
+    schedulePeriodicTask(app, {
+      name: 'auth.sessions.purge',
+      intervalMs: 60 * 60 * 1000,
+      run: () => sessions.purgeExpired(),
+    });
 
     app.decorate('auth', auth);
     app.decorate('authenticate', async function authenticate(request, reply) {
@@ -91,7 +100,8 @@ export const authPlugin = fp<AuthPluginOptions>(
       } catch (error) {
         if (error instanceof SessionError) {
           if (error.reason === 'revoked') {
-            app.log.warn('auth.session.refresh.reused');
+            // Every session of the user has just been revoked (see sessions.ts).
+            app.log.warn({ userId: error.userId }, 'auth.session.refresh.reused');
           }
           return unauthorized(reply, 'invalid_refresh_token');
         }

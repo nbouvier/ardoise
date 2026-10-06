@@ -102,6 +102,12 @@ One row per issued refresh token. Rotation revokes the old row and inserts a new
 
 Index: `sessions_user_id_idx` on `user_id`.
 
+Rotation is one transaction: `UPDATE … WHERE revoked_at IS NULL AND expires_at > now
+RETURNING user_id` claims the old row (a concurrent rotation of the same token matches
+nothing), then the new row is inserted. The server deletes **expired** rows every hour
+(`auth.sessions.purge`); revoked rows stay until they expire, since a revoked token coming
+back is what reveals a stolen one.
+
 ### `friendships`
 
 A symmetric friendship, stored once per pair.

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import { sessions, users, type SessionRow, type UserRow } from '../../db/schema.js';
@@ -21,8 +21,22 @@ export interface AuthRepository {
   findUserById(id: string): Promise<UserRow | undefined>;
   insertSession(input: InsertSessionInput): Promise<void>;
   findSessionByHash(refreshTokenHash: string): Promise<SessionRow | undefined>;
-  revokeSessionById(id: string, at: Date): Promise<void>;
   revokeSessionByHash(refreshTokenHash: string, at: Date): Promise<void>;
+  /**
+   * Atomically revoke the live session behind `refreshTokenHash` and insert
+   * `next` in its place, for that session's user. `undefined` when no live
+   * session matched: unknown, already revoked or expired. Of two concurrent
+   * rotations of the same token, exactly one gets a session.
+   */
+  rotateSession(
+    refreshTokenHash: string,
+    at: Date,
+    next: Omit<InsertSessionInput, 'userId'>,
+  ): Promise<{ userId: string } | undefined>;
+  /** Revoke every live session of a user; returns how many were. */
+  revokeUserSessions(userId: string, at: Date): Promise<number>;
+  /** Delete the sessions expired at `at`; returns how many were. */
+  deleteExpiredSessions(at: Date): Promise<number>;
 }
 
 export function createAuthRepository(db: Database): AuthRepository {
@@ -66,13 +80,6 @@ export function createAuthRepository(db: Database): AuthRepository {
       return row;
     },
 
-    async revokeSessionById(id, at) {
-      await db
-        .update(sessions)
-        .set({ revokedAt: at })
-        .where(and(eq(sessions.id, id), isNull(sessions.revokedAt)));
-    },
-
     async revokeSessionByHash(refreshTokenHash, at) {
       await db
         .update(sessions)
@@ -80,6 +87,46 @@ export function createAuthRepository(db: Database): AuthRepository {
         .where(
           and(eq(sessions.refreshTokenHash, refreshTokenHash), isNull(sessions.revokedAt)),
         );
+    },
+
+    async rotateSession(refreshTokenHash, at, next) {
+      return db.transaction(async (tx) => {
+        // The `revoked_at IS NULL` condition is the claim: a concurrent
+        // rotation of the same token waits on the row lock, then matches nothing.
+        const [claimed] = await tx
+          .update(sessions)
+          .set({ revokedAt: at, lastUsedAt: at })
+          .where(
+            and(
+              eq(sessions.refreshTokenHash, refreshTokenHash),
+              isNull(sessions.revokedAt),
+              gt(sessions.expiresAt, at),
+            ),
+          )
+          .returning({ userId: sessions.userId });
+        if (!claimed) {
+          return undefined;
+        }
+        await tx.insert(sessions).values({ ...next, userId: claimed.userId });
+        return { userId: claimed.userId };
+      });
+    },
+
+    async revokeUserSessions(userId, at) {
+      const revoked = await db
+        .update(sessions)
+        .set({ revokedAt: at })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+        .returning({ id: sessions.id });
+      return revoked.length;
+    },
+
+    async deleteExpiredSessions(at) {
+      const deleted = await db
+        .delete(sessions)
+        .where(lte(sessions.expiresAt, at))
+        .returning({ id: sessions.id });
+      return deleted.length;
     },
   };
 }

@@ -76,7 +76,9 @@ Rotate a session. The supplied refresh token is revoked and a new pair is return
 Request: `{ "refreshToken": "<opaque>" }` → Response `200`: same shape as `POST /auth/google`.
 
 `401 { "error": "invalid_refresh_token" }` when the token is unknown, expired, revoked or
-already rotated.
+already rotated. A revoked or already rotated token is a theft signal: every session of
+its user is revoked too, on every device. Of two concurrent refreshes with the same token,
+one succeeds and the other is that case.
 
 ### `POST /auth/logout`
 
