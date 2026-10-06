@@ -1,3 +1,11 @@
+import type {
+  GroupKind,
+  GroupRole,
+  InviteKind,
+  SplitMode,
+  TransactionCategory,
+  TransactionKind,
+} from '@ardoise/shared';
 import { sql } from 'drizzle-orm';
 import {
   check,
@@ -31,7 +39,7 @@ export const users = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    kind: text('kind').notNull().default('account'),
+    kind: text('kind').$type<'account' | 'placeholder'>().notNull().default('account'),
     googleSub: text('google_sub').unique(),
     email: text('email'),
     name: text('name').notNull(),
@@ -139,7 +147,7 @@ export const groups = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    kind: text('kind').notNull().default('standard'),
+    kind: text('kind').$type<GroupKind>().notNull().default('standard'),
     name: text('name'),
     friendshipId: uuid('friendship_id')
       .unique()
@@ -197,7 +205,7 @@ export const groupMembers = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    role: text('role').notNull().default('member'),
+    role: text('role').$type<GroupRole>().notNull().default('member'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
     favoritedAt: timestamp('favorited_at', { withTimezone: true }),
     // Set on the member's row of a tree's root group once they have claimed
@@ -229,7 +237,7 @@ export const invites = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    kind: text('kind').notNull(),
+    kind: text('kind').$type<InviteKind>().notNull(),
     inviterId: uuid('inviter_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -272,7 +280,7 @@ export const transactions = pgTable(
     groupId: uuid('group_id')
       .notNull()
       .references(() => groups.id, { onDelete: 'cascade' }),
-    kind: text('kind').notNull(),
+    kind: text('kind').$type<TransactionKind>().notNull(),
     title: text('title').notNull(),
     amountCents: integer('amount_cents').notNull(),
     // A calendar date, not an instant: "the meal on the 3rd" should not shift
@@ -283,7 +291,7 @@ export const transactions = pgTable(
     // in code, not a table — nothing creates, renames or reorders one today.
     // This CHECK is the one place that list is duplicated; keep both in sync.
     // Always set — an uncategorised transaction is recorded as 'other'.
-    category: text('category').notNull().default('other'),
+    category: text('category').$type<TransactionCategory>().notNull().default('other'),
     // `NULL` is Others — people outside the group — never a missing value.
     // Deleting a user still named here is refused rather than cascaded: it
     // would take other people's transactions with it. Account deletion turns
@@ -292,7 +300,7 @@ export const transactions = pgTable(
     // (drizzle cannot declare it): it runs at commit, so deleting a group can
     // take its placeholders and their transactions in one statement.
     payerId: uuid('payer_id').references(() => users.id),
-    splitMode: text('split_mode').notNull(),
+    splitMode: text('split_mode').$type<SplitMode>().notNull(),
     // `NULL` once the account that recorded it is deleted: who recorded a
     // transaction is forgotten with them.
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),

@@ -102,7 +102,7 @@ export function createInvitesService(deps: InvitesServiceDeps): InvitesService {
     const invite = await repository.findByCode(code);
     assertInviteUsable(invite, now());
 
-    const handler = handlers.get(invite.kind as InviteKind);
+    const handler = handlers.get(invite.kind);
     if (!handler) {
       // A kind nobody claims cannot lead anywhere; the holder's next step is
       // the same as for a dead link.

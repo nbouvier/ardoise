@@ -304,7 +304,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   ): GroupSummary {
     return {
       id: group.id,
-      kind: group.kind as GroupSummary['kind'],
+      kind: group.kind,
       name,
       memberCount,
       parentId: group.parentId,
@@ -424,7 +424,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     }
     const membership = await repository.findMembership(groupId, userId);
     if (membership) {
-      return { group, role: membership.role as GroupRole, favoritedAt: membership.favoritedAt };
+      return { group, role: membership.role, favoritedAt: membership.favoritedAt };
     }
     if (group.parentId && (await repository.findMembership(group.parentId, userId))) {
       throw new GroupAccessError('join_required');
@@ -691,7 +691,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           // Already out — nothing to do, and nothing to disclose.
           return { groupDeleted: false, removedFromDescendantCount: 0 };
         }
-        assertRemovable(target.role as GroupRole);
+        assertRemovable(target.role);
         const rootId = group.parentId === null ? group.id : await repository.findRootId(groupId);
         if (!(await repository.findPlaceholder(rootId, targetId))) {
           assertCanRemoveOthers(role);
@@ -736,7 +736,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // caller already a member — as an owner, say — must not be downgraded
       // in the response.
       const membership = await repository.findMembership(group.id, userId);
-      return detailOf(group, userId, membership!.role as GroupRole, membership!.favoritedAt);
+      return detailOf(group, userId, membership!.role, membership!.favoritedAt);
     },
 
     async listPlaceholders(userId, groupId) {
@@ -788,7 +788,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         group: await detailOf(
           group,
           userId,
-          membership!.role as GroupRole,
+          membership!.role,
           membership!.favoritedAt,
         ),
         claimed,

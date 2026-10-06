@@ -288,7 +288,7 @@ async function insertPlaceholders(
   }
   const created = await tx
     .insert(users)
-    .values(names.map((name) => ({ kind: 'placeholder', name, placeholderGroupId: rootId })))
+    .values(names.map((name) => ({ kind: 'placeholder' as const, name, placeholderGroupId: rootId })))
     .returning({ id: users.id });
   await tx.insert(groupMembers).values(
     groupIds.flatMap((groupId) =>
@@ -434,7 +434,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
           asc(groups.name),
         );
 
-      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
+      return withSubgroupCounts(db, own);
     },
 
     async listFavoriteGroupsForUser(userId) {
@@ -457,7 +457,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         )
         .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role);
 
-      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
+      return withSubgroupCounts(db, own);
     },
 
     async listMembers(groupId) {
@@ -468,7 +468,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(eq(groupMembers.groupId, groupId))
         .orderBy(asc(users.name));
 
-      return rows.map((row) => ({ user: row.user, role: row.role as GroupRole }));
+      return rows;
     },
 
     async countMembers(groupId) {
@@ -743,7 +743,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .insert(groupMembers)
         .values(
           targets.flatMap((targetGroupId) =>
-            userIds.map((userId) => ({ groupId: targetGroupId, userId, role: 'member' })),
+            userIds.map((userId) => ({ groupId: targetGroupId, userId, role: 'member' as const })),
           ),
         )
         .onConflictDoNothing()
@@ -881,7 +881,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(
           and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, [...groupIds])),
         );
-      return new Map(rows.map((row) => [row.groupId, row.role as GroupRole]));
+      return new Map(rows.map((row) => [row.groupId, row.role]));
     },
 
     async listFavoriteGroupIds(userId, groupIds) {

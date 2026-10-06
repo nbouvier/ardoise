@@ -109,7 +109,7 @@ describe('account deletion on a generated ledger', () => {
       members.map((userId, position) => ({
         groupId: group!.id,
         userId,
-        role: position === 0 ? 'owner' : 'member',
+        role: position === 0 ? ('owner' as const) : ('member' as const),
       })),
     );
 

@@ -71,7 +71,7 @@ export function createAccountRepository(db: Database): AccountRepository {
 
       return own.map((group) => ({
         groupId: group.groupId,
-        kind: group.kind as 'standard' | 'pair',
+        kind: group.kind,
         name: group.name ?? friendNames.get(group.groupId) ?? 'Shared expenses',
       }));
     },

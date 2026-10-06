@@ -8,8 +8,6 @@ import type {
   RecentTransaction,
   SplitMode,
   Transaction,
-  TransactionCategory,
-  TransactionKind,
   TransactionsListScope,
   UpdateTransactionRequest,
 } from '@ardoise/shared';
@@ -187,14 +185,14 @@ function toTransaction(
   return {
     id: row.id,
     groupId: row.groupId,
-    kind: row.kind as TransactionKind,
+    kind: row.kind,
     title: row.title,
     amountCents: row.amountCents,
     occurredOn: row.occurredOn,
     comment: row.comment,
-    category: row.category as TransactionCategory,
+    category: row.category,
     payer: resolveParty(userMap, row.payerId),
-    splitMode: row.splitMode as SplitMode,
+    splitMode: row.splitMode,
     participants: participants.map((participant) => ({
       user: resolveParty(userMap, participant.userId),
       shareCents: participant.shareCents,
