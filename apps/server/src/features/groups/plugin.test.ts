@@ -585,6 +585,22 @@ describe('groups routes', () => {
         expect(favorite.ancestors).toEqual([{ id: root.id, name: 'Corsica 2026' }]);
       });
 
+      it('names a friendship ancestor after the other member, for each side', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        await befriend(ada, grace);
+        const pair = (await pairGroup(ada, grace.userId)).json().group;
+        const sub = await createdSubgroup(ada, pair.id, 'Concert tickets');
+        await setFavorite(ada, sub.id, true);
+        await setFavorite(grace, sub.id, true);
+
+        const [seenByAda] = (await listFavorites(ada)).json().groups;
+        const [seenByGrace] = (await listFavorites(grace)).json().groups;
+
+        expect(seenByAda.ancestors).toEqual([{ id: pair.id, name: 'Grace Hopper' }]);
+        expect(seenByGrace.ancestors).toEqual([{ id: pair.id, name: 'Ada Lovelace' }]);
+      });
+
       it('is empty when nothing is favorited, and never shows another member’s', async () => {
         const ada = await signIn('ada');
         const grace = await signIn('grace');

@@ -118,6 +118,56 @@ describe('groups repository — tree primitives', () => {
     });
   });
 
+  describe('listAncestorsOf', () => {
+    it('gives each group its own chain, root first, and leaves root groups out', async () => {
+      const root = await insertGroup({ name: 'Corsica' });
+      const child = await insertGroup({ name: 'Ajaccio', parentId: root.id, depth: 1 });
+      const grandchild = await insertGroup({ name: 'Beach day', parentId: child.id, depth: 2 });
+      const sibling = await insertGroup({ name: 'Bastia', parentId: root.id, depth: 1 });
+      const otherRoot = await insertGroup({ name: 'Flat' });
+
+      const ancestors = await repository.listAncestorsOf([
+        grandchild.id,
+        sibling.id,
+        otherRoot.id,
+      ]);
+
+      const ids = (groupId: string) => ancestors.get(groupId)?.map((group) => group.id);
+      expect(ids(grandchild.id)).toEqual([root.id, child.id]);
+      expect(ids(sibling.id)).toEqual([root.id]);
+      expect(ancestors.has(otherRoot.id)).toBe(false);
+    });
+  });
+
+  describe('listMembersOf', () => {
+    it("groups each group's members under its id, alphabetical", async () => {
+      const ada = await insertUser('ada');
+      const grace = await insertUser('grace');
+      const flat = await insertGroup({ name: 'Flat' });
+      const trip = await insertGroup({ name: 'Corsica' });
+      const empty = await insertGroup({ name: 'Empty' });
+      await addMember(flat.id, grace.id);
+      await addMember(flat.id, ada.id);
+      await addMember(trip.id, grace.id);
+
+      const members = await repository.listMembersOf([flat.id, trip.id, empty.id]);
+
+      const names = (groupId: string) => members.get(groupId)?.map((member) => member.user.name);
+      expect(names(flat.id)).toEqual(['ada', 'grace']);
+      expect(names(trip.id)).toEqual(['grace']);
+      expect(members.has(empty.id)).toBe(false);
+    });
+
+    it('reads no e-mail or Google identity', async () => {
+      const ada = await insertUser('ada');
+      const flat = await insertGroup({ name: 'Flat' });
+      await addMember(flat.id, ada.id);
+
+      const [member] = (await repository.listMembersOf([flat.id])).get(flat.id)!;
+      expect(Object.keys(member!.user).sort()).toEqual(['id', 'kind', 'name', 'picture']);
+    });
+  });
+
   describe('listDescendantIds', () => {
     it('returns nothing for a leaf group', async () => {
       const root = await insertGroup({ name: 'Corsica' });

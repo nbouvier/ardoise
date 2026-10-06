@@ -231,6 +231,10 @@ See `docs/API.md` for the authoritative surface.
   the names. The friend-list entry gets its own shape; the summary used for group members,
   transaction participants and invitation previews stays unchanged and carries no balance.
 - Amounts are integer cents, as everywhere else.
+- Every balance is aggregated in the database, a group's per-member list included: none
+  of them loads a group's history into the server. `computeBalances` and
+  `computePairwiseBalances` (`apps/server/src/features/transactions/balances.ts`) state
+  the rules in readable form, and the SQL aggregates are tested against them.
 - The viewer's own figure **rides on the group it belongs to**: `GET /groups` and
   `GET /groups/:groupId` each carry it, scoped to that group, and a group's `subgroups`
   entries carry their own. `GET /groups/:groupId/transactions/balances` remains the one

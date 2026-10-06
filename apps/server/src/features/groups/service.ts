@@ -51,6 +51,12 @@ export interface GroupLabel {
   ancestors: GroupAncestor[];
 }
 
+/** What {@link GroupsService.access} lets the caller go on with. */
+export interface GroupAccess {
+  /** Everyone currently in the group, placeholders included. */
+  memberIds: string[];
+}
+
 export interface RemovedMember {
   /** The group had no members left and was deleted with its contents. */
   groupDeleted: boolean;
@@ -85,6 +91,17 @@ export interface GroupsService {
    */
   labels(userId: string, groupIds: readonly string[]): Promise<Map<string, GroupLabel>>;
   get(userId: string, groupId: string): Promise<GroupDetail>;
+  /**
+   * The membership check a group-scoped route outside `groups` needs, without
+   * building the group's whole detail: refuses exactly as {@link get} does,
+   * and also as `archived` when `writable` is asked for and the group or any
+   * ancestor of it is archived (`docs/specs/groups.md`).
+   */
+  access(
+    userId: string,
+    groupId: string,
+    options?: { writable?: boolean },
+  ): Promise<GroupAccess>;
   create(userId: string, input: CreateGroupRequest): Promise<GroupDetail>;
   update(userId: string, groupId: string, input: UpdateGroupRequest): Promise<GroupDetail>;
   remove(userId: string, groupId: string): Promise<void>;
@@ -228,8 +245,7 @@ async function pairCeiling(
     return null;
   }
   const root = ancestors[0] ?? group;
-  const members = await repository.listMembers(root.id);
-  return new Set(members.map((member) => member.user.id));
+  return new Set(await repository.listMemberIds(root.id));
 }
 
 /** Throws `pair_immutable` when `candidateIds` would add someone `ceiling` does not already allow. */
@@ -260,21 +276,36 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const pairTrees = createPairTreeSettlement(repository, ledger);
 
   /**
-   * A group as somewhere other than its own page presents it. Costs a read
-   * only for what it cannot know from the row itself: a pair group's members
-   * (it stores no name) and a sub-group's ancestors. A favorited root group,
-   * the common case, costs neither.
+   * Groups as somewhere other than their own page presents them, keyed by
+   * id. Reads only what the rows cannot say themselves — the sub-groups'
+   * ancestors, then the members of every pair group among all of them (a
+   * pair group stores no name) — in one query each, however many groups.
    */
-  async function labelOf(group: GroupRow, viewerId: string): Promise<GroupLabel> {
-    const [name, ancestors] = await Promise.all([
-      group.kind === 'pair'
-        ? repository.listMembers(group.id).then((members) => nameFor(group, viewerId, members))
-        : Promise.resolve(ownName(group)),
-      group.parentId
-        ? repository.listAncestors(group.id).then((rows) => nameAncestors(rows, viewerId))
-        : Promise.resolve([]),
-    ]);
-    return { name, ancestors };
+  async function labelsOf(
+    rows: readonly GroupRow[],
+    viewerId: string,
+  ): Promise<Map<string, GroupLabel>> {
+    const ancestorsById = await repository.listAncestorsOf(
+      rows.filter((group) => group.parentId !== null).map((group) => group.id),
+    );
+    const pairIds = [...rows, ...[...ancestorsById.values()].flat()]
+      .filter((group) => group.kind === 'pair')
+      .map((group) => group.id);
+    const membersById = await repository.listMembersOf([...new Set(pairIds)]);
+    const name = (group: GroupRow) => nameFor(group, viewerId, membersById.get(group.id) ?? []);
+
+    return new Map(
+      rows.map((group) => [
+        group.id,
+        {
+          name: name(group),
+          ancestors: (ancestorsById.get(group.id) ?? []).map((ancestor) => ({
+            id: ancestor.id,
+            name: name(ancestor),
+          })),
+        },
+      ]),
+    );
   }
 
   /**
@@ -530,24 +561,23 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         rows.map(({ group }) => group.id),
       );
 
-      // `labelOf`'s per-row reads are bounded by how many groups one person
-      // has starred, which is a handful by construction: the point of a
-      // favorite is to be one of few.
-      const summaries = await Promise.all(
-        rows.map(async ({ group, memberCount, subgroupCount, role }) => {
-          const { name, ancestors } = await labelOf(group, userId);
-          return summaryOf(
-            group,
-            name,
-            memberCount,
-            subgroupCount,
-            balances.get(group.id) ?? 0,
-            true,
-            ancestors,
-            role,
-          );
-        }),
+      const labels = await labelsOf(
+        rows.map(({ group }) => group),
+        userId,
       );
+      const summaries = rows.map(({ group, memberCount, subgroupCount, role }) => {
+        const { name, ancestors } = labels.get(group.id)!;
+        return summaryOf(
+          group,
+          name,
+          memberCount,
+          subgroupCount,
+          balances.get(group.id) ?? 0,
+          true,
+          ancestors,
+          role,
+        );
+      });
 
       // Sorted here rather than in SQL: a pair group's name is not a column,
       // it is the other member's, so the database cannot order on it.
@@ -563,20 +593,21 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // Membership decides what is answered for, in one query — a caller who
       // is no longer in a group gets nothing back for it rather than its name.
       const allowed = await repository.filterMemberGroupIds(userId, wanted);
-
-      const entries = await Promise.all(
-        allowed.map(async (groupId) => {
-          const group = await repository.findGroupById(groupId);
-          return group ? ([groupId, await labelOf(group, userId)] as const) : null;
-        }),
-      );
-
-      return new Map(entries.filter((entry) => entry !== null));
+      return labelsOf(await repository.findGroupsByIds(allowed), userId);
     },
 
     async get(userId, groupId) {
       const { group, role, favoritedAt } = await requireMembership(userId, groupId);
       return detailOf(group, userId, role, favoritedAt);
+    },
+
+    async access(userId, groupId, { writable = false } = {}) {
+      const { group } = await requireMembership(userId, groupId);
+      const [memberIds] = await Promise.all([
+        repository.listMemberIds(groupId),
+        writable ? assertGroupEffectivelyActive(group) : undefined,
+      ]);
+      return { memberIds };
     },
 
     async create(userId, input) {
