@@ -1,7 +1,7 @@
 import type { Transaction } from '@ardoise/shared';
 import { describe, expect, it } from '@jest/globals';
 
-import { splitFrom } from './transaction-request';
+import { formParties, splitFrom } from './transaction-request';
 
 const ada = { id: 'ada', name: 'Ada Lovelace', picture: null };
 const grace = { id: 'grace', name: 'Grace Hopper', picture: null };
@@ -25,6 +25,28 @@ const sharesExpense: Transaction = {
   createdAt: '2026-09-11T12:00:00.000Z',
   updatedAt: '2026-09-11T12:00:00.000Z',
 };
+
+describe('formParties', () => {
+  const alan = { id: 'alan', name: 'Alan Turing', picture: null };
+
+  it('offers the current members on a new transaction', () => {
+    expect(formParties([ada, grace], undefined)).toEqual([ada, grace]);
+  });
+
+  it('adds whoever the edited transaction names but has left the group, once', () => {
+    const named: Transaction = {
+      ...sharesExpense,
+      payer: grace,
+      participants: [
+        { user: ada, shareCents: 500, weight: 1 },
+        { user: grace, shareCents: 500, weight: 1 },
+        { user: null, shareCents: 0, weight: 1 },
+      ],
+    };
+
+    expect(formParties([ada, alan], named)).toEqual([ada, alan, grace]);
+  });
+});
 
 describe('splitFrom', () => {
   it('rebuilds a shares split with each participant’s weight', () => {

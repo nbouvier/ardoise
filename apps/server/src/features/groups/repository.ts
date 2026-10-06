@@ -1,7 +1,7 @@
 import type { GroupRole } from '@ardoise/shared';
 import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 
-import type { Database } from '../../db/client.js';
+import type { Database, DatabaseTransaction } from '../../db/client.js';
 import {
   friendships,
   groupMembers,
@@ -14,11 +14,7 @@ import {
   type UserRow,
 } from '../../db/schema.js';
 import type { FriendshipPair } from '../friends/friendships.js';
-import {
-  replaceParty,
-  type DatabaseTransaction,
-  type ReplacedParty,
-} from '../transactions/replace-party.js';
+import { replaceParty, type ReplacedParty } from '../transactions/replace-party.js';
 
 import { GroupAccessError } from './membership.js';
 
@@ -206,7 +202,6 @@ export interface GroupsRepository {
    * request won the race — the unique constraint on `friendship_id` is what
    * guarantees there is only ever one.
    */
-  createPairGroup(friendshipId: string, pair: FriendshipPair): Promise<GroupRow>;
   /**
    * Every ancestor of a group, root first (ascending `depth`) — nearest parent
    * last. Empty for a root group. Used for breadcrumbs and for the
@@ -253,6 +248,33 @@ async function refusingTakenNames<T>(write: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+/**
+ * The pair group of a friendship, created with its two memberships unless it
+ * exists. Runs in the caller's transaction: the friends feature creates the
+ * friendship in the same one, so neither exists without the other.
+ */
+export async function ensurePairGroup(
+  tx: DatabaseTransaction,
+  friendshipId: string,
+  pair: FriendshipPair,
+): Promise<void> {
+  const [group] = await tx
+    .insert(groups)
+    .values({ kind: 'pair', name: null, friendshipId })
+    .onConflictDoNothing()
+    .returning({ id: groups.id });
+
+  // Already there (another request created it first): nothing to add.
+  if (!group) {
+    return;
+  }
+
+  await tx.insert(groupMembers).values([
+    { groupId: group.id, userId: pair.userAId, role: 'member' },
+    { groupId: group.id, userId: pair.userBId, role: 'member' },
+  ]);
 }
 
 /** New placeholder rows, and their memberships at each of `groupIds`. */
@@ -303,7 +325,10 @@ async function fetchAncestorIds(db: Database, groupId: string): Promise<string[]
  * to build `listDescendantIds` and to cascade a membership removal down the
  * tree. Bounded the same way `fetchAncestorIds` is (`docs/specs/groups.md`).
  */
-async function fetchDescendantIds(db: Database, groupId: string): Promise<string[]> {
+async function fetchDescendantIds(
+  db: Database | DatabaseTransaction,
+  groupId: string,
+): Promise<string[]> {
   const { rows } = await db.execute<{ id: string }>(sql`
     WITH RECURSIVE descendants(id) AS (
       SELECT id FROM groups WHERE parent_id = ${groupId}
@@ -740,44 +765,48 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async removeMemberWithDescendants(groupId, userId) {
-      const scope = [groupId, ...(await fetchDescendantIds(db, groupId))];
+      // One transaction: a failure between the two deletes would otherwise
+      // leave groups nobody belongs to, unreachable but never deleted.
+      return db.transaction(async (tx) => {
+        const scope = [groupId, ...(await fetchDescendantIds(tx, groupId))];
 
-      const removed = await db
-        .delete(groupMembers)
-        .where(and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, scope)))
-        .returning({ groupId: groupMembers.groupId });
+        const removed = await tx
+          .delete(groupMembers)
+          .where(and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, scope)))
+          .returning({ groupId: groupMembers.groupId });
 
-      if (removed.length === 0) {
-        return { removedFromGroupIds: [], deletedGroupIds: [] };
-      }
+        if (removed.length === 0) {
+          return { removedFromGroupIds: [], deletedGroupIds: [] };
+        }
 
-      // Any of the touched groups left with no account in it is gone too —
-      // the same "a group nobody belongs to is unreachable" rule as a single
-      // group's last member leaving, applied at every level this reached.
-      // Placeholders do not keep a group alive: they never act, and a root
-      // group takes its own with it (`users.placeholder_group_id`). Deleting
-      // it cascades its *own* remaining sub-tree through `groups.parent_id`,
-      // so nothing further is needed for a deeper branch that became empty
-      // this same way.
-      const deleted = await db
-        .delete(groups)
-        .where(
-          and(
-            inArray(groups.id, scope),
-            notExists(
-              db
-                .select({ id: groupMembers.id })
-                .from(groupMembers)
-                .where(and(eq(groupMembers.groupId, groups.id), isAccountMembership)),
+        // Any of the touched groups left with no account in it is gone too —
+        // the same "a group nobody belongs to is unreachable" rule as a single
+        // group's last member leaving, applied at every level this reached.
+        // Placeholders do not keep a group alive: they never act, and a root
+        // group takes its own with it (`users.placeholder_group_id`). Deleting
+        // it cascades its *own* remaining sub-tree through `groups.parent_id`,
+        // so nothing further is needed for a deeper branch that became empty
+        // this same way.
+        const deleted = await tx
+          .delete(groups)
+          .where(
+            and(
+              inArray(groups.id, scope),
+              notExists(
+                tx
+                  .select({ id: groupMembers.id })
+                  .from(groupMembers)
+                  .where(and(eq(groupMembers.groupId, groups.id), isAccountMembership)),
+              ),
             ),
-          ),
-        )
-        .returning({ id: groups.id });
+          )
+          .returning({ id: groups.id });
 
-      return {
-        removedFromGroupIds: removed.map((row) => row.groupId),
-        deletedGroupIds: deleted.map((row) => row.id),
-      };
+        return {
+          removedFromGroupIds: removed.map((row) => row.groupId),
+          deletedGroupIds: deleted.map((row) => row.id),
+        };
+      });
     },
 
     async listOwnedPopulatedDescendants(groupId, userId) {
@@ -884,38 +913,6 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .update(groupMembers)
         .set({ favoritedAt })
         .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
-    },
-
-    async createPairGroup(friendshipId, pair) {
-      const created = await db.transaction(async (tx) => {
-        const [group] = await tx
-          .insert(groups)
-          .values({ kind: 'pair', name: null, friendshipId })
-          .onConflictDoNothing()
-          .returning();
-
-        if (!group) {
-          return undefined;
-        }
-
-        await tx.insert(groupMembers).values([
-          { groupId: group.id, userId: pair.userAId, role: 'member' },
-          { groupId: group.id, userId: pair.userBId, role: 'member' },
-        ]);
-
-        return group;
-      });
-
-      if (created) {
-        return created;
-      }
-
-      // Another request created it first; its row is the authoritative one.
-      const [existing] = await db
-        .select()
-        .from(groups)
-        .where(eq(groups.friendshipId, friendshipId));
-      return existing!;
     },
 
     async listAncestors(groupId) {

@@ -638,6 +638,66 @@ describe('transactions routes', () => {
       expect(response.json()).toEqual({ error: 'group_archived' });
     });
 
+    describe('naming someone who has left the group since', () => {
+      async function groupGraceLeft(ada: TestUser, grace: TestUser) {
+        await befriend(ada, grace);
+        const group = await createdGroup(ada, 'Trip', [grace.userId]);
+        return {
+          group,
+          leave: () =>
+            app.inject({
+              method: 'DELETE',
+              url: `/groups/${group.id}/members/${grace.userId}`,
+              headers: grace.headers,
+            }),
+        };
+      }
+
+      it('keeps them as a participant', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        const { group, leave } = await groupGraceLeft(ada, grace);
+        const tx = await createdTx(ada, group.id, expense(ada.userId, [ada.userId, grace.userId], 1000));
+        expect((await leave()).statusCode).toBe(204);
+
+        const response = await updateTx(ada, group.id, tx.id, {
+          ...expense(ada.userId, [ada.userId, grace.userId], 1200),
+          title: 'Groceries (corrected)',
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(
+          response.json().transaction.participants.map((p: { user: { id: string } }) => p.user.id),
+        ).toContain(grace.userId);
+      });
+
+      it('keeps them as the payer', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        const { group, leave } = await groupGraceLeft(ada, grace);
+        const tx = await createdTx(ada, group.id, expense(grace.userId, [ada.userId, grace.userId], 1000));
+        expect((await leave()).statusCode).toBe(204);
+
+        const response = await updateTx(ada, group.id, tx.id, expense(grace.userId, [ada.userId], 1000));
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().transaction.payer.id).toBe(grace.userId);
+      });
+
+      it('still refuses adding them to a transaction that did not name them', async () => {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        const { group, leave } = await groupGraceLeft(ada, grace);
+        const tx = await createdTx(ada, group.id, expense(ada.userId, [ada.userId], 1000));
+        expect((await leave()).statusCode).toBe(204);
+
+        const response = await updateTx(ada, group.id, tx.id, expense(ada.userId, [ada.userId, grace.userId], 1000));
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toEqual({ error: 'not_group_member' });
+      });
+    });
+
     it('refuses a transaction id from a different group', async () => {
       const ada = await signIn('ada');
       const groupA = await createdGroup(ada, 'Group A');

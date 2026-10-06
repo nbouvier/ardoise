@@ -128,6 +128,9 @@ acceptance, where the insert uses `ON CONFLICT DO NOTHING`. A check constraint
 Index: `friendships_user_b_id_idx` on `user_b_id` (the `user_a_id` side is covered by the
 unique constraint's index).
 
+A friendship and its pair group are created in one transaction: the friend list joins
+through the pair group, so a friendship without one would exist yet be invisible.
+
 ### `groups`
 
 A space shared by a set of people, and later the expenses they record in it.
@@ -240,7 +243,10 @@ Indexes: `invites_inviter_id_idx`, `invites_group_id_idx`.
 "One active invitation" is scoped differently per kind and enforced by the service rather
 than a constraint: a **friend** invitation is one per inviter (the link *is* "add me"), a
 **group** invitation is one per group whoever created it (the link belongs to the group,
-and keeps working after that person leaves).
+and keeps working after that person leaves). Creating and rotating run in a transaction
+holding a per-target advisory lock (`pg_advisory_xact_lock`), so two concurrent requests
+cannot leave two usable links. A unique index cannot express it: an expired invitation is
+never revoked, it just stops being usable.
 
 Unlike `sessions.refresh_token_hash`, the code is stored **in clear**. It has to be
 redisplayable ("copy my link again"), and it only grants a narrow, expiring, revocable

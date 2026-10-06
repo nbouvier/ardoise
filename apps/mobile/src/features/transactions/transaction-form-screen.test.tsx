@@ -552,4 +552,36 @@ describe('TransactionFormScreen — editing', () => {
     );
     expect(onSaved).toHaveBeenCalled();
   });
+
+  it('shows and keeps a participant who has left the group since', async () => {
+    const graceLeft: GroupDetail = { ...group, memberCount: 1, members: [{ ...ada, role: 'owner' }] };
+    await render(
+      <TransactionFormScreen
+        group={graceLeft}
+        viewerId={ada.id}
+        initial={existing}
+        onSaved={jest.fn()}
+        onDeleted={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Grace Hopper')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockUpdateTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      group.id,
+      existing.id,
+      expect.objectContaining({
+        split: {
+          mode: 'shares',
+          participants: [
+            { userId: ada.id, weight: 1 },
+            { userId: grace.id, weight: 1 },
+          ],
+        },
+      }),
+    );
+  });
 });

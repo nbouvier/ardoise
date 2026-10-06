@@ -352,9 +352,18 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     async update(userId, groupId, transactionId, input) {
       const group = await requireMembership(userId, groupId);
       requireActive(group);
-      await requireTransaction(groupId, transactionId);
-      const memberIds = new Set(group.members.map((member) => member.id));
-      const { splitMode, payerId, participants } = resolveSplit(input, memberIds);
+      const stored = await requireTransaction(groupId, transactionId);
+      // Someone who has left the group since stays on a transaction that
+      // already names them: editing it must not force rewriting history. They
+      // still cannot be added where they were not (`docs/specs/transactions.md`).
+      const storedParticipants = await repository.listParticipants([stored.id]);
+      const allowedIds = new Set([
+        ...group.members.map((member) => member.id),
+        ...[stored.payerId, ...storedParticipants.map((p) => p.userId)].filter(
+          (id): id is string => id !== null,
+        ),
+      ]);
+      const { splitMode, payerId, participants } = resolveSplit(input, allowedIds);
 
       const updated = await repository.update(
         transactionId,
