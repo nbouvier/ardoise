@@ -696,13 +696,16 @@ describe('transactions routes', () => {
       await befriend(ada, grace);
       const pair = await pairGroupOf(ada, grace.userId);
       await createdTx(ada, pair.id, expense(ada.userId, [ada.userId, grace.userId]));
+      // Grace pays her 450 back: unfriending is refused while money is owed.
+      await createdTx(grace, pair.id, expense(grace.userId, [ada.userId], 450));
 
-      await app.inject({
+      const removal = await app.inject({
         method: 'DELETE',
         url: `/friends/${grace.userId}`,
         headers: ada.headers,
       });
 
+      expect(removal.statusCode).toBe(204);
       expect(await app.db.select().from(transactions)).toHaveLength(0);
       expect(await app.db.select().from(transactionParticipants)).toHaveLength(0);
     });
