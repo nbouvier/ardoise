@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TransactionCategory } from './categories.js';
-import { categoryBreakdown } from './statistics.js';
+import { breakdownFromTotals, categoryBreakdown, groupStatisticsQuerySchema } from './statistics.js';
 import type { Transaction, TransactionKind } from './transactions.js';
 
 const alice = { id: 'alice', name: 'Alice', picture: null };
@@ -297,5 +297,55 @@ describe('categoryBreakdown', () => {
       'housing',
       'travel',
     ]);
+  });
+});
+
+describe('breakdownFromTotals', () => {
+  it('drops empty categories and orders the rest largest first', () => {
+    const result = breakdownFromTotals(
+      new Map<TransactionCategory, number>([
+        ['travel', 100],
+        ['groceries', 0],
+        ['housing', 300],
+      ]),
+    );
+
+    expect(result).toEqual({
+      totalCents: 400,
+      slices: [
+        { category: 'housing', amountCents: 300, percent: 75 },
+        { category: 'travel', amountCents: 100, percent: 25 },
+      ],
+    });
+  });
+
+  it('is empty for no totals', () => {
+    expect(breakdownFromTotals(new Map())).toEqual({ totalCents: 0, slices: [] });
+  });
+});
+
+describe('groupStatisticsQuerySchema', () => {
+  const id = '6f1c2a4e-8b3d-4f5a-9c7e-1d2b3a4c5e6f';
+  const other = '0a9b8c7d-6e5f-4a3b-8c1d-2e3f4a5b6c7d';
+
+  it('reads comma-separated ids, the empty string as none, and leaves an omitted list out', () => {
+    expect(
+      groupStatisticsQuerySchema.parse({
+        type: 'spending',
+        participantIds: `${id},${other}`,
+        subgroupIds: '',
+      }),
+    ).toEqual({ type: 'spending', participantIds: [id, other], subgroupIds: [] });
+    expect(groupStatisticsQuerySchema.parse({ type: 'income' })).toEqual({ type: 'income' });
+  });
+
+  it('refuses an unknown type, a malformed id or a malformed date', () => {
+    expect(groupStatisticsQuerySchema.safeParse({ type: 'transfer' }).success).toBe(false);
+    expect(
+      groupStatisticsQuerySchema.safeParse({ type: 'spending', participantIds: 'nope' }).success,
+    ).toBe(false);
+    expect(
+      groupStatisticsQuerySchema.safeParse({ type: 'spending', from: '2026-13-01' }).success,
+    ).toBe(false);
   });
 });

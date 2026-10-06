@@ -1,13 +1,20 @@
-import { DEFAULT_TRANSACTION_CATEGORY, splitByShares, splitSumsTo } from '@ardoise/shared';
+import {
+  breakdownFromTotals,
+  statisticsKinds,
+  DEFAULT_TRANSACTION_CATEGORY,
+  splitByShares,
+  splitSumsTo,
+} from '@ardoise/shared';
 import type {
   Balance,
   CreateTransactionRequest,
   FriendSummary,
+  GroupStatisticsQuery,
+  GroupStatisticsResponse,
   PartyId,
   RecentTransaction,
   SplitMode,
   Transaction,
-  TransactionsListScope,
   UpdateTransactionRequest,
 } from '@ardoise/shared';
 
@@ -18,29 +25,39 @@ import { toUserSummary } from '../users/repository.js';
 
 import { groupParticipantsByTransaction } from './balances.js';
 import { TransactionError } from './errors.js';
-import type { ParticipantInput, TransactionFields, TransactionsRepository } from './repository.js';
+import type {
+  ParticipantInput,
+  TransactionCursor,
+  TransactionFields,
+  TransactionsRepository,
+} from './repository.js';
 
 export interface TransactionsListResult {
   transactions: Transaction[];
-  /** Always `0` for `scope: 'group'`. See `docs/specs/group-statistics.md`. */
-  excludedSubgroupCount: number;
+  /** Where the next page starts; `null` on the last. */
+  next: TransactionCursor | null;
 }
 
 export interface TransactionsService {
   /**
-   * A group's transactions. `scope: 'subtree'` adds those of every
-   * descendant the caller belongs to (`docs/specs/group-statistics.md`);
-   * `'group'` (the default call site, the plain transaction list) is
-   * unaffected by sub-groups entirely. `subgroupIds`, only meaningful with
-   * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
-   * branches — see `GroupsService.subtreeScope`.
+   * One page of a group's own transactions, most recent first, starting
+   * after `after` (`docs/specs/transactions.md`). Sub-groups' never appear.
    */
   list(
     userId: string,
     groupId: string,
-    scope?: TransactionsListScope,
-    subgroupIds?: readonly string[],
+    page: { limit: number; after?: TransactionCursor | undefined },
   ): Promise<TransactionsListResult>;
+  /**
+   * How the group's money splits across categories — with the branches of
+   * the direct sub-groups named in `query`, every one when omitted, keeping
+   * only the descendants the caller belongs to (`docs/specs/group-statistics.md`).
+   */
+  statistics(
+    userId: string,
+    groupId: string,
+    query: GroupStatisticsQuery,
+  ): Promise<GroupStatisticsResponse>;
   get(userId: string, groupId: string, transactionId: string): Promise<Transaction>;
   create(userId: string, groupId: string, input: CreateTransactionRequest): Promise<Transaction>;
   update(
@@ -243,6 +260,17 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     return new Map(rows.map((user) => [user.id, toUserSummary(user)]));
   }
 
+  /** The rows as the API shows them, their participants and people read in one go. */
+  async function toTransactions(rows: readonly TransactionRow[]): Promise<Transaction[]> {
+    const participants = await repository.listParticipants(rows.map((row) => row.id));
+    const byTransaction = groupParticipantsByTransaction(participants);
+    const userMap = await buildUserMap([
+      ...rows.map((row) => row.payerId),
+      ...participants.map((participant) => participant.userId),
+    ]);
+    return rows.map((row) => toTransaction(row, byTransaction.get(row.id) ?? [], userMap));
+  }
+
   async function toDetail(
     row: TransactionRow,
     participants: readonly TransactionParticipantRow[],
@@ -252,33 +280,26 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
   }
 
   return {
-    async list(userId, groupId, scope = 'group', subgroupIds) {
+    async list(userId, groupId, { limit, after }) {
       await requireMembership(userId, groupId);
+      const { rows, next } = await repository.listPage(groupId, limit, after);
+      return { transactions: await toTransactions(rows), next };
+    },
 
-      let excludedSubgroupCount = 0;
-      let rows: TransactionRow[];
-      if (scope === 'subtree') {
-        const { memberDescendantIds, excludedCount } = await groups.subtreeScope(
-          userId,
-          groupId,
-          subgroupIds,
-        );
-        excludedSubgroupCount = excludedCount;
-        rows = await repository.listByGroups([groupId, ...memberDescendantIds]);
-      } else {
-        rows = await repository.listByGroup(groupId);
-      }
-
-      const participants = await repository.listParticipants(rows.map((row) => row.id));
-      const byTransaction = groupParticipantsByTransaction(participants);
-      const userMap = await buildUserMap([
-        ...rows.map((row) => row.payerId),
-        ...participants.map((participant) => participant.userId),
-      ]);
-      return {
-        transactions: rows.map((row) => toTransaction(row, byTransaction.get(row.id) ?? [], userMap)),
-        excludedSubgroupCount,
-      };
+    async statistics(userId, groupId, query) {
+      // Checks the caller's membership of `groupId` first.
+      const { memberDescendantIds, excludedCount } = await groups.subtreeScope(
+        userId,
+        groupId,
+        query.subgroupIds,
+      );
+      const totals = await repository.categoryTotals([groupId, ...memberDescendantIds], {
+        kind: statisticsKinds[query.type],
+        participantIds: query.participantIds ?? null,
+        from: query.from,
+        to: query.to,
+      });
+      return { ...breakdownFromTotals(totals), excludedSubgroupCount: excludedCount };
     },
 
     async recent(userId, limit) {
@@ -291,21 +312,16 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
         return [];
       }
 
-      const [participants, labels] = await Promise.all([
-        repository.listParticipants(rows.map((row) => row.id)),
+      const [transactions, labels] = await Promise.all([
+        toTransactions(rows),
         groups.labels(
           userId,
           rows.map((row) => row.groupId),
         ),
       ]);
-      const byTransaction = groupParticipantsByTransaction(participants);
-      const userMap = await buildUserMap([
-        ...rows.map((row) => row.payerId),
-        ...participants.map((participant) => participant.userId),
-      ]);
 
-      return rows.flatMap((row) => {
-        const label = labels.get(row.groupId);
+      return transactions.flatMap((transaction) => {
+        const label = labels.get(transaction.groupId);
         // Unreachable through the query above, which only returns rows from
         // groups the caller belongs to — dropped rather than guessed at if a
         // membership disappears between the two reads.
@@ -314,8 +330,8 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
         }
         return [
           {
-            transaction: toTransaction(row, byTransaction.get(row.id) ?? [], userMap),
-            group: { id: row.groupId, ...label },
+            transaction,
+            group: { id: transaction.groupId, ...label },
           },
         ];
       });

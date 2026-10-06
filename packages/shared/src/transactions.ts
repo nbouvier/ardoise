@@ -168,25 +168,29 @@ export const transactionSchema = z.object({
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
-/**
- * `GET /groups/:groupId/transactions?scope=`. `group` (the default) is the
- * group's own transactions only. `subtree` adds those of every descendant
- * the caller belongs to, for the group-statistics "including sub-groups"
- * view (`docs/specs/group-statistics.md`) — a sub-group the caller has not
- * joined never contributes, whether or not it is visible to them.
- */
-export const transactionsListScopeSchema = z.enum(['group', 'subtree']);
-export type TransactionsListScope = z.infer<typeof transactionsListScopeSchema>;
+/** How many transactions a page of a group's list holds, and the most a caller may ask for. */
+export const TRANSACTIONS_PAGE_SIZE = 30;
+export const MAX_TRANSACTIONS_PAGE_SIZE = 100;
 
 /**
- * `excludedSubgroupCount` is only ever non-zero for `scope=subtree`: how
- * many of the group's descendants were left out because the caller does not
- * belong to them, so the view can say so rather than presenting a partial
- * sum as the whole tree's.
+ * `GET /groups/:groupId/transactions?limit=&cursor=`. `cursor` is the
+ * `nextCursor` of the previous page, opaque to the client; omitted, the list
+ * starts at the most recent transaction (`docs/specs/transactions.md`).
  */
+export const transactionsPageQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_TRANSACTIONS_PAGE_SIZE)
+    .default(TRANSACTIONS_PAGE_SIZE),
+  cursor: z.string().min(1).optional(),
+});
+
+/** One page of a group's transactions, most recent first. `nextCursor` is `null` on the last. */
 export const transactionsListResponseSchema = z.object({
   transactions: z.array(transactionSchema),
-  excludedSubgroupCount: z.number().int().nonnegative(),
+  nextCursor: z.string().nullable(),
 });
 export type TransactionsListResponse = z.infer<typeof transactionsListResponseSchema>;
 

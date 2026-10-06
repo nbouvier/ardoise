@@ -1,5 +1,5 @@
 import type { SplitMode, TransactionCategory, TransactionKind } from '@ardoise/shared';
-import { and, desc, eq, exists, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, gte, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import {
@@ -68,17 +68,51 @@ export interface CreatedTransaction {
   participants: TransactionParticipantRow[];
 }
 
+/**
+ * Where a page of a group's list starts: strictly after this position in the
+ * list's total order. `createdAt` keeps the database's microseconds — a
+ * JavaScript `Date` would round them to milliseconds and skip a row recorded
+ * in the same millisecond.
+ */
+export interface TransactionCursor {
+  occurredOn: string;
+  createdAt: string;
+  id: string;
+}
+
+export interface TransactionsPage {
+  rows: TransactionRow[];
+  /** Where the next page starts; `null` when this one is the last. */
+  next: TransactionCursor | null;
+}
+
+/** What a statistics breakdown counts (`docs/specs/group-statistics.md`). */
+export interface CategoryTotalsFilter {
+  kind: TransactionKind;
+  /** Whose shares count; `null` is every member's. Others' never do. */
+  participantIds: readonly string[] | null;
+  /** Inclusive `YYYY-MM-DD` bounds. */
+  from?: string | undefined;
+  to?: string | undefined;
+}
+
 export interface TransactionsRepository {
   findById(transactionId: string): Promise<TransactionRow | undefined>;
-  /** A group's transactions, most recent first (by date, then by creation). */
-  listByGroup(groupId: string): Promise<TransactionRow[]>;
   /**
-   * The transactions of several groups at once, most recent first — the
-   * `scope=subtree` statistics view (`docs/specs/group-statistics.md`), which
-   * reads a group's own transactions together with those of its
-   * member-visible descendants in one call rather than one per group.
+   * Up to `limit` of a group's transactions, most recent first — by date,
+   * then by creation, then by id, so the order is total and a page never
+   * repeats or skips a row (`docs/specs/transactions.md`).
    */
-  listByGroups(groupIds: readonly string[]): Promise<TransactionRow[]>;
+  listPage(groupId: string, limit: number, after?: TransactionCursor): Promise<TransactionsPage>;
+  /**
+   * Each category's total over the transactions of `groupIds` matching
+   * `filter` — the rule `categoryBreakdown` states, aggregated in SQL so a
+   * breakdown never loads the history. A category with nothing in it is absent.
+   */
+  categoryTotals(
+    groupIds: readonly string[],
+    filter: CategoryTotalsFilter,
+  ): Promise<Map<TransactionCategory, number>>;
   /**
    * The `limit` most recent transactions that **involve** `userId` — they
    * paid, or they are one of the people it concerns — across every group and
@@ -147,23 +181,78 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       return row;
     },
 
-    async listByGroup(groupId) {
-      return db
-        .select()
+    async listPage(groupId, limit, after) {
+      const rows = await db
+        .select({
+          transaction: transactions,
+          // The position the next page starts after, at full precision.
+          createdAtKey: sql<string>`to_char(${transactions.createdAt} at time zone 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        })
         .from(transactions)
-        .where(eq(transactions.groupId, groupId))
-        .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+        .where(
+          and(
+            eq(transactions.groupId, groupId),
+            after
+              ? sql`(${transactions.occurredOn}, ${transactions.createdAt}, ${transactions.id})
+                  < (${after.occurredOn}::date, ${after.createdAt}::timestamptz, ${after.id}::uuid)`
+              : undefined,
+          ),
+        )
+        .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt), desc(transactions.id))
+        // One more than asked: whether it exists says whether there is a next page.
+        .limit(limit + 1);
+
+      const page = rows.slice(0, limit);
+      const last = page.at(-1);
+      return {
+        rows: page.map((row) => row.transaction),
+        next:
+          rows.length > limit && last
+            ? {
+                occurredOn: last.transaction.occurredOn,
+                createdAt: last.createdAtKey,
+                id: last.transaction.id,
+              }
+            : null,
+      };
     },
 
-    async listByGroups(groupIds) {
-      if (groupIds.length === 0) {
-        return [];
+    async categoryTotals(groupIds, { kind, participantIds, from, to }) {
+      if (groupIds.length === 0 || participantIds?.length === 0) {
+        return new Map();
       }
-      return db
-        .select()
+      // What the members were concerned by — their shares, whoever paid —
+      // never Others' (`NULL`), which is not the group's money. Shares are
+      // never negative, so a category is empty exactly when every
+      // transaction in it contributes nothing, as `categoryBreakdown` drops them.
+      const rows = await db
+        .select({
+          category: transactions.category,
+          amountCents: sql<string>`sum(${transactionParticipants.shareCents})::bigint`,
+        })
         .from(transactions)
-        .where(inArray(transactions.groupId, [...groupIds]))
-        .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt));
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            inArray(transactions.groupId, [...groupIds]),
+            eq(transactions.kind, kind),
+            isNotNull(transactionParticipants.userId),
+            participantIds ? inArray(transactionParticipants.userId, [...participantIds]) : undefined,
+            from ? gte(transactions.occurredOn, from) : undefined,
+            to ? lte(transactions.occurredOn, to) : undefined,
+          ),
+        )
+        .groupBy(transactions.category);
+
+      return new Map(
+        rows
+          .map((row) => [row.category, Number(row.amountCents)] as const)
+          .filter(([, amountCents]) => amountCents > 0),
+      );
     },
 
     async listRecentForUser(userId, limit) {

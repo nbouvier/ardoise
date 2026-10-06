@@ -2,6 +2,7 @@ import type {
   Balance,
   FriendSummary,
   GroupDetail,
+  GroupStatisticsResponse,
   Invite,
   PlaceholdersResponse,
   SubgroupSummary,
@@ -96,7 +97,8 @@ const balances: Balance[] = [
 ];
 
 const mockFetchGroup = jest.fn<() => Promise<GroupDetail>>();
-const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
+const mockFetchTransactions = jest.fn<(...args: unknown[]) => Promise<TransactionsListResponse>>();
+const mockFetchStatistics = jest.fn<() => Promise<GroupStatisticsResponse>>();
 const mockFetchBalances = jest.fn<() => Promise<Balance[]>>();
 const mockCreateTransaction = jest.fn<(...args: unknown[]) => Promise<Transaction>>();
 const mockFriendList: unknown[] = [];
@@ -138,7 +140,8 @@ jest.mock('@/lib/api/groups', () => ({
 }));
 
 jest.mock('@/lib/api/transactions', () => ({
-  fetchTransactions: () => mockFetchTransactions(),
+  fetchTransactions: (...args: unknown[]) => mockFetchTransactions(...args),
+  fetchStatistics: () => mockFetchStatistics(),
   fetchBalances: () => mockFetchBalances(),
   createTransaction: (...args: unknown[]) => mockCreateTransaction(...args),
   updateTransaction: jest.fn(),
@@ -158,9 +161,14 @@ beforeEach(() => {
   mockFetchGroup.mockReset().mockResolvedValue(trip);
   mockFetchTransactions.mockReset().mockResolvedValue({
     transactions: [],
-    excludedSubgroupCount: 0,
+    nextCursor: null,
   });
   mockFetchBalances.mockReset().mockResolvedValue([]);
+  mockFetchStatistics.mockReset().mockResolvedValue({
+    totalCents: 0,
+    slices: [],
+    excludedSubgroupCount: 0,
+  });
   mockCreateTransaction.mockReset().mockResolvedValue(groceries);
   mockJoinGroup.mockReset().mockResolvedValue(trip);
   mockFetchGroupInvite.mockReset().mockResolvedValue({
@@ -188,7 +196,7 @@ describe('GroupScreen', () => {
   it('shows the group name and its transactions', async () => {
     mockFetchTransactions.mockResolvedValue({
       transactions: [groceries],
-      excludedSubgroupCount: 0,
+      nextCursor: null,
     });
 
     await render(<GroupScreen groupId={trip.id} />);
@@ -289,6 +297,87 @@ describe('GroupScreen', () => {
     expect(screen.queryByText('Sub-groups')).toBeNull();
   });
 
+  describe('a list longer than one page', () => {
+    const olderDinner: Transaction = {
+      ...groceries,
+      id: '77777777-7777-4777-8777-777777777777',
+      title: 'Dinner',
+      category: 'restaurant',
+      occurredOn: '2026-09-01',
+      createdAt: '2026-09-01T12:00:00.000Z',
+      updatedAt: '2026-09-01T12:00:00.000Z',
+    };
+
+    /** The first page answers at once; the next one when the test says so. */
+    function secondPageOnHold() {
+      let answer!: (outcome: { page?: TransactionsListResponse; error?: Error }) => void;
+      mockFetchTransactions
+        .mockResolvedValueOnce({ transactions: [groceries], nextCursor: 'page-2' })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              answer = ({ page, error }) => (error ? reject(error) : resolve(page!));
+            }),
+        );
+      return (outcome: { page?: TransactionsListResponse; error?: Error }) =>
+        act(async () => answer(outcome));
+    }
+
+    const reachEnd = () => fireEvent(screen.getByTestId('transactions-list'), 'onEndReached');
+
+    it('asks for the next page near the end, with a spinner under the last row meanwhile', async () => {
+      const answerSecondPage = secondPageOnHold();
+
+      await render(<GroupScreen groupId={trip.id} />);
+      expect(await screen.findByText('Groceries')).toBeTruthy();
+      expect(screen.queryByTestId('transactions-loading-more')).toBeNull();
+
+      await reachEnd();
+
+      expect(mockFetchTransactions).toHaveBeenLastCalledWith(expect.anything(), trip.id, 'page-2');
+      expect(await screen.findByTestId('transactions-loading-more')).toBeTruthy();
+      expect(screen.getByText('Groceries')).toBeTruthy();
+
+      await answerSecondPage({ page: { transactions: [olderDinner], nextCursor: null } });
+
+      expect(await screen.findByText('Dinner')).toBeTruthy();
+      expect(screen.getByText('Groceries')).toBeTruthy();
+      expect(screen.queryByTestId('transactions-loading-more')).toBeNull();
+    });
+
+    it('asks for nothing more once the last page is in', async () => {
+      mockFetchTransactions.mockResolvedValue({ transactions: [groceries], nextCursor: null });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Groceries');
+      await reachEnd();
+
+      expect(mockFetchTransactions).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('transactions-loading-more')).toBeNull();
+    });
+
+    it('keeps the rows when a further page fails, and tries again from the bottom', async () => {
+      const answerSecondPage = secondPageOnHold();
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Groceries');
+      await reachEnd();
+      await answerSecondPage({ error: new Error('offline') });
+
+      expect(await screen.findByText('We couldn’t load more transactions.')).toBeTruthy();
+      expect(screen.getByText('Groceries')).toBeTruthy();
+      // Scrolling on does not hammer a failing server: only the button asks again.
+      await reachEnd();
+      expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
+
+      mockFetchTransactions.mockResolvedValueOnce({ transactions: [olderDinner], nextCursor: null });
+      await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+
+      expect(await screen.findByText('Dinner')).toBeTruthy();
+      expect(screen.queryByText('We couldn’t load more transactions.')).toBeNull();
+    });
+  });
+
   it('shows an empty state and an "Add a transaction" action', async () => {
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
@@ -309,11 +398,6 @@ describe('GroupScreen', () => {
   });
 
   it('opens the statistics, which fetch their own data', async () => {
-    mockFetchTransactions.mockResolvedValue({
-      transactions: [groceries],
-      excludedSubgroupCount: 0,
-    });
-
     await render(<GroupScreen groupId={trip.id} />);
     await screen.findByText('Corsica 2026');
 
@@ -322,10 +406,9 @@ describe('GroupScreen', () => {
     expect(await screen.findByTestId('statistics-centre-label')).toHaveTextContent(
       'Total spending',
     );
-    // The statistics view defaults to including sub-groups — a scope the
-    // plain transaction list never requests — so it fetches on its own
-    // rather than reusing the list's call (docs/specs/group-statistics.md).
-    expect(mockFetchTransactions).toHaveBeenCalledTimes(2);
+    // Computed by the server, never from the pages of the list.
+    expect(mockFetchStatistics).toHaveBeenCalledTimes(1);
+    expect(mockFetchTransactions).toHaveBeenCalledTimes(1);
   });
 
   it('shows the reimbursement plan and everyone’s balance on the Balances tab', async () => {
@@ -406,7 +489,7 @@ describe('GroupScreen', () => {
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
     await screen.findByText('Corsica 2026');
     // What the server answers from then on: the list re-read after saving.
-    mockFetchTransactions.mockResolvedValue({ transactions: [groceries], excludedSubgroupCount: 0 });
+    mockFetchTransactions.mockResolvedValue({ transactions: [groceries], nextCursor: null });
 
     await fireEvent.press(screen.getByRole('button', { name: /add a transaction/i }));
     await fireEvent.changeText(await screen.findByLabelText('Title'), 'Groceries');
@@ -997,7 +1080,7 @@ describe('GroupScreen', () => {
     it('closes the edit form of an existing transaction too', async () => {
       mockFetchTransactions.mockResolvedValue({
         transactions: [groceries],
-        excludedSubgroupCount: 0,
+        nextCursor: null,
       });
       const pressBack = mockBackButton();
       await render(<GroupScreen groupId={trip.id} />);

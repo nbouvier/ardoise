@@ -1,5 +1,7 @@
+import { z } from 'zod';
+
 import type { TransactionCategory } from './categories.js';
-import { TRANSACTION_CATEGORIES } from './categories.js';
+import { TRANSACTION_CATEGORIES, transactionCategorySchema } from './categories.js';
 import { memberSharesCents, type Transaction } from './transactions.js';
 
 /**
@@ -11,14 +13,16 @@ import { memberSharesCents, type Transaction } from './transactions.js';
  * Transfers belong to neither — a member reimbursing another moves money
  * inside the group without the group spending or receiving anything.
  */
-export type StatisticsType = 'spending' | 'income';
+export const statisticsTypeSchema = z.enum(['spending', 'income']);
+export type StatisticsType = z.infer<typeof statisticsTypeSchema>;
 
-export interface CategoryBreakdownSlice {
-  category: TransactionCategory;
-  amountCents: number;
+export const categoryBreakdownSliceSchema = z.object({
+  category: transactionCategorySchema,
+  amountCents: z.number().int().positive(),
   /** Whole-number share of the total. The slices always sum to exactly 100. */
-  percent: number;
-}
+  percent: z.number().int().min(0).max(100),
+});
+export type CategoryBreakdownSlice = z.infer<typeof categoryBreakdownSliceSchema>;
 
 export interface CategoryBreakdown {
   /** The sum of every slice — what the donut's centre shows. */
@@ -26,6 +30,38 @@ export interface CategoryBreakdown {
   /** Largest first; a category with nothing in it is absent, not a zero slice. */
   slices: CategoryBreakdownSlice[];
 }
+
+/** A comma-separated list of ids in a query string; the empty string is the empty list. */
+const idListSchema = z
+  .string()
+  .transform((value) => (value.length === 0 ? [] : value.split(',')))
+  .pipe(z.array(z.uuid()));
+
+/**
+ * `GET /groups/:groupId/statistics` (`docs/specs/group-statistics.md`).
+ * `participantIds` omitted is everyone; `subgroupIds` omitted is every direct
+ * sub-group's branch, empty is none. `from` and `to` are inclusive.
+ */
+export const groupStatisticsQuerySchema = z.object({
+  type: statisticsTypeSchema,
+  participantIds: idListSchema.optional(),
+  subgroupIds: idListSchema.optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
+export type GroupStatisticsQuery = z.infer<typeof groupStatisticsQuerySchema>;
+
+/**
+ * One breakdown. `excludedSubgroupCount` is how many sub-groups in the
+ * selected branches were left out because the caller is not in them, so the
+ * view can say so rather than presenting a partial sum as the whole tree's.
+ */
+export const groupStatisticsResponseSchema = z.object({
+  totalCents: z.number().int().nonnegative(),
+  slices: z.array(categoryBreakdownSliceSchema),
+  excludedSubgroupCount: z.number().int().nonnegative(),
+});
+export type GroupStatisticsResponse = z.infer<typeof groupStatisticsResponseSchema>;
 
 export interface CategoryBreakdownOptions {
   type: StatisticsType;
@@ -39,7 +75,8 @@ export interface CategoryBreakdownOptions {
   participantIds?: readonly string[] | null;
 }
 
-const kindByType = { spending: 'expense', income: 'income' } as const;
+/** The transaction kind each type of breakdown counts. */
+export const statisticsKinds = { spending: 'expense', income: 'income' } as const;
 
 /** Preset display order, for a stable tie-break between equal amounts. */
 const categoryOrder = new Map<TransactionCategory, number>(
@@ -106,20 +143,40 @@ function withPercents(
 }
 
 /**
+ * A breakdown from each category's total: the empty ones dropped, the rest
+ * largest first, with their percentages. The server aggregates the totals in
+ * SQL and finishes here, so the ordering and the rounding keep one definition.
+ */
+export function breakdownFromTotals(
+  centsByCategory: ReadonlyMap<TransactionCategory, number>,
+): CategoryBreakdown {
+  const sorted = [...centsByCategory.entries()]
+    .filter(([, amountCents]) => amountCents > 0)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) {
+        return b[1] - a[1];
+      }
+      return (categoryOrder.get(a[0]) ?? 0) - (categoryOrder.get(b[0]) ?? 0);
+    })
+    .map(([category, amountCents]) => ({ category, amountCents }));
+  const totalCents = sorted.reduce((sum, slice) => sum + slice.amountCents, 0);
+
+  return { totalCents, slices: withPercents(sorted, totalCents) };
+}
+
+/**
  * How a group's money splits across categories, for one type and one scope.
  *
- * Pure and dependency-free so the rule for what counts has a single
- * definition: the client derives it from the transactions it already holds,
- * and a server endpoint could reuse it unchanged if the list is ever
- * paginated (see `docs/specs/group-statistics.md`).
+ * The readable statement of the rule for what counts: the server computes the
+ * same thing in SQL (`GET /groups/:groupId/statistics`), and is tested against
+ * this (`docs/specs/group-statistics.md`).
  */
 export function categoryBreakdown(
   transactions: readonly Transaction[],
   options: CategoryBreakdownOptions,
 ): CategoryBreakdown {
-  const wantedKind = kindByType[options.type];
+  const wantedKind = statisticsKinds[options.type];
   const centsByCategory = new Map<TransactionCategory, number>();
-  let totalCents = 0;
 
   for (const transaction of transactions) {
     if (transaction.kind !== wantedKind) {
@@ -133,17 +190,7 @@ export function categoryBreakdown(
       transaction.category,
       (centsByCategory.get(transaction.category) ?? 0) + amountCents,
     );
-    totalCents += amountCents;
   }
 
-  const sorted = [...centsByCategory.entries()]
-    .sort((a, b) => {
-      if (b[1] !== a[1]) {
-        return b[1] - a[1];
-      }
-      return (categoryOrder.get(a[0]) ?? 0) - (categoryOrder.get(b[0]) ?? 0);
-    })
-    .map(([category, amountCents]) => ({ category, amountCents }));
-
-  return { totalCents, slices: withPercents(sorted, totalCents) };
+  return breakdownFromTotals(centsByCategory);
 }

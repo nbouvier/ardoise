@@ -1,5 +1,5 @@
-import type { Transaction, TransactionsListScope } from '@ardoise/shared';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Transaction, TransactionsListResponse } from '@ardoise/shared';
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
@@ -9,11 +9,21 @@ import { queryKeys } from '@/lib/query/keys';
 
 export type TransactionsStatus = ReadStatus;
 
+/** Where loading the page after the last one stands. */
+export type MoreStatus = 'idle' | 'loading' | 'error';
+
 export interface UseTransactionsResult {
+  /** The first page's; a further page failing leaves it `ready`. */
   status: TransactionsStatus;
+  /** Every page loaded so far, most recent first. */
   transactions: Transaction[];
-  /** Sub-groups left out of `scope: 'subtree'` because the viewer isn't in them; `0` otherwise. */
-  excludedSubgroupCount: number;
+  /** Whether there are older transactions than the ones loaded. */
+  hasMore: boolean;
+  moreStatus: MoreStatus;
+  /** Ask for the next page — nothing if there is none, one is on its way, or the last attempt failed. */
+  loadMore: () => void;
+  /** Ask again for the next page after it failed. */
+  retryMore: () => void;
   refresh: () => void;
   /** Apply a transaction the caller just recorded or edited, without a round trip. */
   upsert: (transaction: Transaction) => void;
@@ -21,55 +31,80 @@ export interface UseTransactionsResult {
   remove: (transactionId: string) => void;
 }
 
-type TransactionsPage = Awaited<ReturnType<typeof fetchTransactions>>;
+export type TransactionPages = InfiniteData<TransactionsListResponse, string | null>;
 
-/** Most-recent-first, matching the server's own ordering: by date, then by recording order. */
+/**
+ * Most-recent-first, matching the server's own total order: by date, then by
+ * recording order, then by id.
+ */
 function byMostRecent(a: Transaction, b: Transaction): number {
   if (a.occurredOn !== b.occurredOn) {
     return a.occurredOn < b.occurredOn ? 1 : -1;
   }
-  return a.createdAt < b.createdAt ? 1 : -1;
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt < b.createdAt ? 1 : -1;
+  }
+  return a.id < b.id ? 1 : -1;
 }
 
 /**
- * A group's transactions, most recent first — the server does the ordering.
- * `scope: 'subtree'` (statistics only, `docs/specs/group-statistics.md`) adds
- * every sub-group the viewer belongs to; the default, `'group'`, is what the
- * plain transaction list always uses. `subgroupIds`, only meaningful with
- * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
- * branches. Changing `scope` or `subgroupIds` keeps the last-known data
- * visible (rather than going back to `'loading'`) until the new answer lands.
+ * `transaction` placed in the page it belongs to — the first whose last row
+ * is older — or the last page once there is nothing more to load. Belonging
+ * past what is loaded, it is left out: it comes with its own page.
  */
-export function useTransactions(
-  groupId: string,
-  scope: TransactionsListScope = 'group',
-  subgroupIds?: readonly string[],
-): UseTransactionsResult {
+export function upsertInto(data: TransactionPages, transaction: Transaction, hasMore: boolean): TransactionPages {
+  const pages = data.pages.map((page) => ({
+    ...page,
+    transactions: page.transactions.filter((t) => t.id !== transaction.id),
+  }));
+  let target = pages.findIndex((page) => {
+    const last = page.transactions.at(-1);
+    return last !== undefined && byMostRecent(transaction, last) < 0;
+  });
+  if (target === -1 && !hasMore) {
+    target = pages.length - 1;
+  }
+  const page = pages[target];
+  if (page) {
+    pages[target] = { ...page, transactions: [...page.transactions, transaction].sort(byMostRecent) };
+  }
+  return { ...data, pages };
+}
+
+/**
+ * A group's own transactions, most recent first, a page at a time
+ * (`docs/specs/transactions.md`) — the server does the ordering and the page
+ * size. A refetch reads every page loaded so far again.
+ */
+export function useTransactions(groupId: string): UseTransactionsResult {
   const { authorizedFetch } = useAuth();
   const queryClient = useQueryClient();
-  // Arrays are a new reference every render; the join is what actually
-  // identifies the selection.
-  const subgroupIdsKey = subgroupIds?.join(',');
-  const queryKey = useMemo(
-    () => queryKeys.transactions(groupId, scope, subgroupIdsKey),
-    [groupId, scope, subgroupIdsKey],
-  );
-  const query = useQuery({
+  const queryKey = useMemo(() => queryKeys.transactions(groupId), [groupId]);
+  const query = useInfiniteQuery({
     queryKey,
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       loggedRead('transactions.load.failed', () =>
-        fetchTransactions(authorizedFetch, groupId, scope, subgroupIds),
+        fetchTransactions(authorizedFetch, groupId, pageParam ?? undefined),
       ),
-    placeholderData: keepPreviousData,
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.nextCursor,
   });
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = query;
 
-  const update = useCallback(
-    (change: (transactions: Transaction[]) => Transaction[]) =>
-      queryClient.setQueryData<TransactionsPage>(queryKey, (page) =>
-        page ? { ...page, transactions: change(page.transactions) } : page,
-      ),
-    [queryKey, queryClient],
+  const transactions = useMemo(
+    () => query.data?.pages.flatMap((page) => page.transactions) ?? [],
+    [query.data],
   );
+
+  const loadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
+      void fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
+
+  const retryMore = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
 
   const refresh = useCallback(() => {
     void queryClient.refetchQueries({ queryKey });
@@ -77,21 +112,36 @@ export function useTransactions(
 
   const upsert = useCallback(
     (transaction: Transaction) =>
-      update((current) =>
-        [transaction, ...current.filter((t) => t.id !== transaction.id)].sort(byMostRecent),
+      queryClient.setQueryData<TransactionPages>(queryKey, (data) =>
+        data ? upsertInto(data, transaction, hasNextPage) : data,
       ),
-    [update],
+    [queryKey, queryClient, hasNextPage],
   );
 
   const remove = useCallback(
-    (transactionId: string) => update((current) => current.filter((t) => t.id !== transactionId)),
-    [update],
+    (transactionId: string) =>
+      queryClient.setQueryData<TransactionPages>(queryKey, (data) =>
+        data
+          ? {
+              ...data,
+              pages: data.pages.map((page) => ({
+                ...page,
+                transactions: page.transactions.filter((t) => t.id !== transactionId),
+              })),
+            }
+          : data,
+      ),
+    [queryKey, queryClient],
   );
 
   return {
-    status: readStatus(query),
-    transactions: query.data?.transactions ?? [],
-    excludedSubgroupCount: query.data?.excludedSubgroupCount ?? 0,
+    // A further page failing is the footer's to say: the rows above stay.
+    status: isFetchNextPageError ? 'ready' : readStatus(query),
+    transactions,
+    hasMore: hasNextPage,
+    moreStatus: isFetchingNextPage ? 'loading' : isFetchNextPageError ? 'error' : 'idle',
+    loadMore,
+    retryMore,
     refresh,
     upsert,
     remove,

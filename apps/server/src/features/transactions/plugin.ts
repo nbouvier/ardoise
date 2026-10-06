@@ -1,7 +1,8 @@
 import {
   createTransactionRequestSchema,
+  groupStatisticsQuerySchema,
   recentTransactionsQuerySchema,
-  transactionsListScopeSchema,
+  transactionsPageQuerySchema,
   updateTransactionRequestSchema,
   DEFAULT_RECENT_TRANSACTIONS,
 } from '@ardoise/shared';
@@ -13,7 +14,7 @@ import { createGroupRoutes } from '../groups/http.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { TransactionError, type TransactionErrorReason } from './errors.js';
-import { createTransactionsRepository } from './repository.js';
+import { createTransactionsRepository, type TransactionCursor } from './repository.js';
 import { createTransactionsService, type TransactionsService } from './service.js';
 
 declare module 'fastify' {
@@ -31,15 +32,21 @@ const groupParamsSchema = z.object({ groupId: z.uuid() });
 const transactionParamsSchema = groupParamsSchema.extend({ transactionId: z.uuid() });
 
 /**
- * `subgroupIds` on `GET .../transactions?scope=subtree` — comma-separated
- * uuids naming which direct sub-groups' branches to include, or the empty
- * string for none. Malformed input is dropped, the same tolerance `scope`
- * itself gets: it narrows the answer, it never changes its shape.
+ * A page's `nextCursor` as the client carries it: opaque, the base64url of
+ * the position the next page starts after. One that does not decode is
+ * refused rather than read as "from the start", which would repeat rows.
  */
-const subgroupIdsQuerySchema = z
+function encodeCursor({ occurredOn, createdAt, id }: TransactionCursor): string {
+  return Buffer.from(`${occurredOn}|${createdAt}|${id}`).toString('base64url');
+}
+
+const cursorSchema = z
   .string()
-  .transform((value) => (value.length === 0 ? [] : value.split(',')))
-  .pipe(z.array(z.uuid()));
+  .transform((value) => Buffer.from(value, 'base64url').toString('utf8').split('|'))
+  .pipe(z.tuple([z.iso.date(), z.iso.datetime(), z.uuid()]))
+  .transform(([occurredOn, createdAt, id]): TransactionCursor => ({ occurredOn, createdAt, id }));
+
+const pageQuerySchema = transactionsPageQuerySchema.extend({ cursor: cursorSchema.optional() });
 
 /**
  * HTTP mapping of a refused transaction operation, once the caller's group
@@ -96,21 +103,27 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
       '/groups/:groupId/transactions',
       authenticated,
       route(groupParamsSchema, async ({ params, userId, reply, query }) => {
-        // An unrecognised scope falls back to the default rather than a 400
-        // — nothing about it changes the shape of the answer, only its
-        // completeness, so failing softly is kinder than failing loudly.
-        const rawQuery = query as Record<string, unknown> | undefined;
-        const scope = transactionsListScopeSchema.safeParse(rawQuery?.scope);
-        const subgroupIds = subgroupIdsQuerySchema.safeParse(rawQuery?.subgroupIds);
-        return reply.send(
-          await transactions.list(
+        const { limit, cursor } = parseRequest(pageQuerySchema, query ?? {});
+        const page = await transactions.list(userId, params.groupId, { limit, after: cursor });
+        return reply.send({
+          transactions: page.transactions,
+          nextCursor: page.next ? encodeCursor(page.next) : null,
+        });
+      }),
+    );
+
+    app.get(
+      '/groups/:groupId/statistics',
+      authenticated,
+      route(groupParamsSchema, async ({ params, userId, reply, query }) =>
+        reply.send(
+          await transactions.statistics(
             userId,
             params.groupId,
-            scope.success ? scope.data : undefined,
-            subgroupIds.success ? subgroupIds.data : undefined,
+            parseRequest(groupStatisticsQuerySchema, query ?? {}),
           ),
-        );
-      }),
+        ),
+      ),
     );
 
     app.get(

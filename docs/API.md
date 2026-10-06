@@ -672,26 +672,50 @@ member's name) and `ancestors` is empty for a root group.
 
 ### `GET /groups/:groupId/transactions`
 
-The group's transactions, most recent first (by date, then by recording order for
-same-day entries). Response
-`200 { "transactions": ["<Transaction>"], "excludedSubgroupCount": 0 }`.
+One page of the group's own transactions — never a sub-group's — most recent first: by
+date, then by recording order for same-day entries, then by id, so the order is total.
+Response `200 { "transactions": ["<Transaction>"], "nextCursor": "<string>" | null }`.
 
-`?scope=` (`group`, the default, or `subtree`) controls whether sub-groups are included
-(`docs/specs/group-statistics.md`). With `scope=subtree`, the response also contains every
-transaction of the group's descendants **the caller currently belongs to**, at any depth —
-a sub-group the caller has not joined contributes nothing, whether or not it is visible to
-them. `excludedSubgroupCount` is then the number of descendants left out for that reason;
-it is always `0` for `scope=group` and for a group with no sub-groups. An unrecognised
-`scope` value falls back to `group` rather than `400` — the client just gets a smaller
-answer, not a broken one. The plain transaction list itself always uses the default
-`scope=group` and is unaffected by any of this.
+`?limit=` is the page size, 1 to 100, 30 when omitted (`TRANSACTIONS_PAGE_SIZE`).
+`?cursor=` is the previous page's `nextCursor`, opaque to the client; omitted, the list
+starts at the most recent transaction. Each page starts strictly after the previous page's
+last row, so a transaction recorded or deleted meanwhile never makes a page repeat or skip
+one. `nextCursor` is `null` on the last page. A `limit` out of range or a cursor that does
+not decode is `400 invalid_request` (a malformed cursor read as "from the start" would
+repeat rows).
 
-`?subgroupIds=` (only meaningful with `scope=subtree`), a comma-separated list of direct
-sub-group ids, narrows the descendants added to only those branches — each named
-sub-group plus everything nested under it. The empty string means no branch, equivalent to
-`scope=group`; omitting the parameter entirely means every branch, the same answer as
-before this parameter existed. An id that is not actually one of the group's descendants is
-silently dropped rather than causing a `400`.
+### `GET /groups/:groupId/statistics`
+
+How the group's money splits across categories (`docs/specs/group-statistics.md`),
+aggregated by the server. Query:
+
+- `type` (required): `spending` (expenses) or `income`. Transfers count in neither.
+- `participantIds`: comma-separated user ids whose shares count; omitted means every
+  member, the empty string nobody. An id that is not a member matches nothing. Others' share
+  never counts.
+- `subgroupIds`: comma-separated direct sub-group ids whose branches (each with everything
+  nested under it) count alongside the group's own transactions; omitted means every
+  branch, the empty string none. Only descendants the caller **currently belongs to**
+  count, at any depth; an id that is not one of the group's descendants is dropped.
+- `from`, `to`: inclusive `YYYY-MM-DD` bounds on the transaction date, each optional.
+
+Response:
+
+```json
+{
+  "totalCents": 4250,
+  "slices": [
+    { "category": "groceries", "amountCents": 3000, "percent": 71 },
+    { "category": "travel", "amountCents": 1250, "percent": 29 }
+  ],
+  "excludedSubgroupCount": 1
+}
+```
+
+`slices` are largest first, the empty categories left out; the percentages are whole and
+sum to exactly 100. `excludedSubgroupCount` is how many sub-groups in the selected branches
+were left out because the caller is not in them. A malformed query is
+`400 invalid_request`; a non-member gets `404 group_not_found`.
 
 ### `POST /groups/:groupId/transactions`
 

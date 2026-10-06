@@ -228,7 +228,18 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     (paid by the caller, concerning the caller — and, the one that must **not** appear, a
     transaction between two other members of the caller's group), the membership
     boundary (a group the caller has left serves nothing, even where they are still a
-    participant), and the cap with same-day ties in recording order.
+    participant), and the cap with same-day ties in recording order;
+  - the paginated list (`docs/specs/transactions.md`): pages that neither repeat nor skip
+    a row, with a transaction recorded between two of them too, 30 to a page by default,
+    rows recorded within the same millisecond kept apart by the cursor (their
+    `created_at` set by hand, a microsecond apart), sub-groups' transactions left out, a
+    malformed cursor or page size refused;
+  - `GET /groups/:groupId/statistics` (`docs/specs/group-statistics.md`): ordering and
+    percentages, spending / income / transfers apart and Others never counted, the
+    participant selection (one, several, nobody), inclusive date bounds, the sub-group
+    branches (every one by default, named ones with their nested sub-groups, none, an
+    unjoined one left out and counted, a foreign id dropped), and the SQL aggregate
+    cross-checked against `categoryBreakdown` under six filters on a generated ledger.
 - **Legal pages** (`src/features/legal/`, `src/http/language.ts`,
   `docs/specs/legal-pages.md`): the language choice (`?lang` over `Accept-Language`, weights
   and order, `q=0`, unsupported languages, no header); each page public, locked down by
@@ -296,7 +307,8 @@ What each suite covers, by workspace and feature. Paths are relative to the work
 - **Group requests** (`groups.test.ts`): placeholder names are trimmed, never empty and
   never the same twice whatever the case; adding members takes friends, new placeholders
   or both, and refuses a request that adds nobody.
-- **Statistics** (`categoryBreakdown`): kind filtering (transfers never count), a
+- **Statistics** (`categoryBreakdown`, `breakdownFromTotals`, the route's query schema):
+  kind filtering (transfers never count), a
   selected subset of participants counted by their own shares rather than what they paid
   (one member, several summed, an empty selection), ordering, and the two sum invariants —
   amounts to the total, percentages to exactly 100 — across many generated shapes. Others'
@@ -384,6 +396,11 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     Others);
   - the category picker: selection, every category reachable, none with a "clear"
     behaviour;
+  - the paginated list: `upsertInto` placing a recorded or edited transaction in the page
+    it belongs to (or leaving it for a page not loaded yet), and on the group screen the
+    next page asked for at the end with a spinner under the last row, nothing asked once
+    the last page is in, and a failed page keeping the rows with a "Try again" that is the
+    only thing asking again;
   - `transaction-request.ts` (rebuilding a split for the form), the row's "my share"
     calculation (the spec's 60 € example reads +20 for the payer, an Others payer reads
     "Others" and "—") and category emoji, the date field's local-date conversion (no time-zone
@@ -394,6 +411,9 @@ What each suite covers, by workspace and feature. Paths are relative to the work
   per-member selection, the "select at least one" empty state, selecting and deselecting a
   slice, each empty state saying *which* view is empty; a transaction partly or wholly for
   Others counting members' shares only, and Others never in the participant checklist.
+  The server is faked by `categoryBreakdown` over fixture transactions, so the figures are
+  real ones; the tests also check the filter each change asks for (everybody and every
+  branch sent as "omitted", a hand-picked selection as ids, the date bounds).
 - **Reimbursements** (`src/features/reimbursements/`): a chain of debts shown as one
   payment; each payment worded from the viewer's point of view, their own first;
   recording one by tapping it; the explained (not silent) refusal on an archived group or

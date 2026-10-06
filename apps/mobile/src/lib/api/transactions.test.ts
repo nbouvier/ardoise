@@ -7,6 +7,7 @@ import {
   deleteTransaction,
   fetchBalances,
   fetchRecentTransactions,
+  fetchStatistics,
   fetchTransaction,
   fetchTransactions,
   updateTransaction,
@@ -39,28 +40,64 @@ describe('fetchRecentTransactions', () => {
 });
 
 describe('fetchTransactions', () => {
-  it('parses the list', async () => {
+  it('asks for the first page and parses it', async () => {
     const fetcher = fakeAuthorizedFetch(
-      response({ jsonBody: { transactions: [transaction], excludedSubgroupCount: 0 } }),
+      response({ jsonBody: { transactions: [transaction], nextCursor: 'next-page' } }),
     );
 
     await expect(fetchTransactions(fetcher, transaction.groupId)).resolves.toEqual({
       transactions: [transaction],
-      excludedSubgroupCount: 0,
+      nextCursor: 'next-page',
     });
     expect(fetcher).toHaveBeenCalledWith(`/groups/${transaction.groupId}/transactions`);
   });
 
-  it('asks for the sub-group scope, and surfaces the excluded count', async () => {
+  it('asks for the page after a cursor', async () => {
     const fetcher = fakeAuthorizedFetch(
-      response({ jsonBody: { transactions: [transaction], excludedSubgroupCount: 2 } }),
+      response({ jsonBody: { transactions: [], nextCursor: null } }),
     );
 
-    await expect(
-      fetchTransactions(fetcher, transaction.groupId, 'subtree'),
-    ).resolves.toEqual({ transactions: [transaction], excludedSubgroupCount: 2 });
+    await fetchTransactions(fetcher, transaction.groupId, 'abc_-12');
     expect(fetcher).toHaveBeenCalledWith(
-      `/groups/${transaction.groupId}/transactions?scope=subtree`,
+      `/groups/${transaction.groupId}/transactions?cursor=abc_-12`,
+    );
+  });
+});
+
+describe('fetchStatistics', () => {
+  const breakdown = {
+    totalCents: 900,
+    slices: [{ category: 'groceries', amountCents: 900, percent: 100 }],
+    excludedSubgroupCount: 1,
+  };
+
+  it('asks for everyone and every branch by leaving both out', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: breakdown }));
+
+    await expect(
+      fetchStatistics(fetcher, 'g1', {
+        type: 'spending',
+        participantIds: null,
+        subgroupIds: null,
+        from: null,
+        to: null,
+      }),
+    ).resolves.toEqual(breakdown);
+    expect(fetcher).toHaveBeenCalledWith('/groups/g1/statistics?type=spending');
+  });
+
+  it('spells out a selection, an empty one included, and the date bounds', async () => {
+    const fetcher = fakeAuthorizedFetch(response({ jsonBody: breakdown }));
+
+    await fetchStatistics(fetcher, 'g1', {
+      type: 'income',
+      participantIds: ['u1', 'u2'],
+      subgroupIds: [],
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/groups/g1/statistics?type=income&participantIds=u1%2Cu2&subgroupIds=&from=2026-09-01&to=2026-09-30',
     );
   });
 });

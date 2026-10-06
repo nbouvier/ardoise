@@ -1,15 +1,17 @@
 import {
   balancesResponseSchema,
+  groupStatisticsResponseSchema,
   recentTransactionsResponseSchema,
   transactionResponseSchema,
   transactionsListResponseSchema,
   DEFAULT_RECENT_TRANSACTIONS,
   type Balance,
   type CreateTransactionRequest,
+  type GroupStatisticsResponse,
   type RecentTransaction,
+  type StatisticsType,
   type Transaction,
   type TransactionsListResponse,
-  type TransactionsListScope,
   type UpdateTransactionRequest,
 } from '@ardoise/shared';
 
@@ -20,29 +22,52 @@ const transactionPath = (groupId: string, transactionId: string) =>
   `${transactionsPath(groupId)}/${encodeURIComponent(transactionId)}`;
 
 /**
- * A group's transactions, most recent first — the server does the ordering.
- * `scope: 'subtree'` adds those of every sub-group the caller belongs to
- * (`docs/specs/group-statistics.md`); the default, `'group'`, is what the
- * plain transaction list always uses. `subgroupIds`, only meaningful with
- * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
- * branches; omitted, every branch counts.
+ * One page of a group's own transactions, most recent first — the server does
+ * the ordering and the page size. `cursor` is the previous page's
+ * `nextCursor`; omitted, the first page (`docs/specs/transactions.md`).
  */
 export async function fetchTransactions(
   fetcher: AuthorizedFetch,
   groupId: string,
-  scope: TransactionsListScope = 'group',
-  subgroupIds?: readonly string[],
+  cursor?: string,
 ): Promise<TransactionsListResponse> {
-  const params = new URLSearchParams();
-  if (scope === 'subtree') {
-    params.set('scope', 'subtree');
-    if (subgroupIds) {
-      params.set('subgroupIds', subgroupIds.join(','));
-    }
-  }
-  const query = params.toString();
-  const response = await fetcher(`${transactionsPath(groupId)}${query ? `?${query}` : ''}`);
+  const query = cursor ? `?${new URLSearchParams({ cursor }).toString()}` : '';
+  const response = await fetcher(`${transactionsPath(groupId)}${query}`);
   return parsedJson(response, transactionsListResponseSchema);
+}
+
+export interface StatisticsFilter {
+  type: StatisticsType;
+  /** `null` is everyone. */
+  participantIds: readonly string[] | null;
+  /** Direct sub-groups whose branches count; `null` is every one. */
+  subgroupIds: readonly string[] | null;
+  /** Inclusive `YYYY-MM-DD` bounds; `null` is unbounded. */
+  from: string | null;
+  to: string | null;
+}
+
+/** One category breakdown, computed by the server (`docs/specs/group-statistics.md`). */
+export async function fetchStatistics(
+  fetcher: AuthorizedFetch,
+  groupId: string,
+  filter: StatisticsFilter,
+): Promise<GroupStatisticsResponse> {
+  const params = new URLSearchParams({ type: filter.type });
+  if (filter.participantIds) {
+    params.set('participantIds', filter.participantIds.join(','));
+  }
+  if (filter.subgroupIds) {
+    params.set('subgroupIds', filter.subgroupIds.join(','));
+  }
+  if (filter.from) {
+    params.set('from', filter.from);
+  }
+  if (filter.to) {
+    params.set('to', filter.to);
+  }
+  const response = await fetcher(`/groups/${encodeURIComponent(groupId)}/statistics?${params.toString()}`);
+  return parsedJson(response, groupStatisticsResponseSchema);
 }
 
 /**

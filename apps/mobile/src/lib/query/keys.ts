@@ -1,4 +1,4 @@
-import type { TransactionsListScope } from '@ardoise/shared';
+import type { StatisticsFilter } from '@/lib/api/transactions';
 
 /**
  * Every cached read, by key. Grouped under three roots so a change can
@@ -13,8 +13,11 @@ export const queryKeys = {
   group: (groupId: string) => ['groups', 'detail', groupId] as const,
 
   ledger: ['ledger'] as const,
-  transactions: (groupId: string, scope: TransactionsListScope, subgroupIdsKey?: string) =>
-    ['ledger', 'transactions', groupId, scope, subgroupIdsKey ?? null] as const,
+  transactions: (groupId: string) => ['ledger', 'transactions', groupId] as const,
+  /** Every breakdown: they also move with the groups in scope, not only with the ledger. */
+  allStatistics: ['ledger', 'statistics'] as const,
+  statistics: (groupId: string, filter: StatisticsFilter) =>
+    ['ledger', 'statistics', groupId, filter] as const,
   balances: (groupId: string) => ['ledger', 'balances', groupId] as const,
   recentTransactions: ['ledger', 'recent'] as const,
 

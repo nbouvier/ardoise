@@ -1,11 +1,9 @@
 import {
-  categoryBreakdown,
   categoryDefinition,
   type GroupMember,
   type StatisticsType,
   type SubgroupSummary,
   type TransactionCategory,
-  type TransactionsListScope,
 } from '@ardoise/shared';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
@@ -26,13 +24,14 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { centsToText } from '@/features/transactions/amount-input';
 import { DateRangeField } from '@/features/transactions/date-range-field';
-import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
+import type { StatisticsFilter } from '@/lib/api/transactions';
 import { toggleInSet } from '@/lib/sets';
 
 import { DonutChart } from './donut-chart';
 import { MultiSelectField } from './multi-select-field';
 import { useFollowAllSelection } from './use-follow-all-selection';
+import { useGroupStatistics } from './use-group-statistics';
 
 export interface StatisticsScreenProps {
   groupId: string;
@@ -104,18 +103,6 @@ export function StatisticsScreen({
     subgroups.map((subgroup) => subgroup.id),
   );
   const allSubgroupsSelected = selectedSubgroupIds.size === subgroups.length;
-  const scope: TransactionsListScope =
-    hasSubgroups && selectedSubgroupIds.size > 0 ? 'subtree' : 'group';
-  // Omitting the id list when every branch is selected keeps the request the
-  // same one the feature started with, rather than always spelling out every
-  // id.
-  const subgroupIds =
-    scope === 'subtree' && !allSubgroupsSelected ? [...selectedSubgroupIds] : undefined;
-  const { status, transactions, excludedSubgroupCount, refresh } = useTransactions(
-    groupId,
-    scope,
-    subgroupIds,
-  );
   // Everyone is selected by default — this is what makes the group's total
   // match "the group" scope the feature started with.
   // Follows members who join or leave while this tab stays mounted.
@@ -123,9 +110,7 @@ export function StatisticsScreen({
     members.map((member) => member.id),
   );
   const [selected, setSelected] = useState<TransactionCategory | null>(null);
-  // `null` means "no bound" — the breakdown covers every date, same as before
-  // this existed. `occurredOn` is `YYYY-MM-DD`, so a plain string comparison
-  // is a correct date comparison too.
+  // `null` means "no bound" — the breakdown covers every date.
   const [fromDate, setFromDate] = useState<string | null>(null);
   const [toDate, setToDate] = useState<string | null>(null);
   // Collapsed by default — participants, sub-groups and the date range are
@@ -137,27 +122,32 @@ export function StatisticsScreen({
   const everyoneSelected = selectedMemberIds.size === members.length;
   const dateRangeActive = fromDate !== null || toDate !== null;
 
-  const dateFilteredTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (transaction) =>
-          (fromDate === null || transaction.occurredOn >= fromDate) &&
-          (toDate === null || transaction.occurredOn <= toDate),
-      ),
-    [transactions, fromDate, toDate],
+  const filter = useMemo<StatisticsFilter>(
+    () => ({
+      type,
+      // `null` for "everyone" rather than every member id lets the server
+      // apply its own rule — the members' shares, never Others' — instead of
+      // summing whichever ids happen to be listed. Sorted, so the same
+      // selection is the same cached read whatever order it was ticked in.
+      participantIds: everyoneSelected ? null : [...selectedMemberIds].sort(),
+      // Likewise `null` for every branch, sub-groups created since included.
+      subgroupIds: allSubgroupsSelected ? null : [...selectedSubgroupIds].sort(),
+      from: fromDate,
+      to: toDate,
+    }),
+    [
+      type,
+      everyoneSelected,
+      selectedMemberIds,
+      allSubgroupsSelected,
+      selectedSubgroupIds,
+      fromDate,
+      toDate,
+    ],
   );
-
-  const breakdown = useMemo(
-    () =>
-      categoryBreakdown(dateFilteredTransactions, {
-        type,
-        // Passing `null` for "everyone" rather than every member id lets
-        // `categoryBreakdown` apply its own rule — the members' shares, never
-        // Others' — instead of summing whichever ids happen to be listed.
-        // Others is not a member, so it is not in this list at all.
-        participantIds: everyoneSelected ? null : [...selectedMemberIds],
-      }),
-    [dateFilteredTransactions, type, everyoneSelected, selectedMemberIds],
+  const { status, breakdown, excludedSubgroupCount, refresh } = useGroupStatistics(
+    groupId,
+    filter,
   );
 
   /** Switching what is measured makes any selected slice meaningless. */
@@ -295,7 +285,7 @@ export function StatisticsScreen({
       <AsyncState
         status={status}
         loadingTestID="statistics-loading"
-        failure="We couldn’t load this group’s transactions. Check your connection and try again."
+        failure="We couldn’t load this group’s statistics. Check your connection and try again."
         onRetry={refresh}>
         {selectedMemberIds.size === 0 ? (
           <View style={styles.centeredBody}>
