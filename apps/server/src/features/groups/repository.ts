@@ -151,7 +151,6 @@ export interface GroupsRepository {
    * is reported as "already there" rather than guessed.
    */
   addMembers(groupId: string, userIds: readonly string[]): Promise<string[]>;
-  removeMember(groupId: string, userId: string): Promise<void>;
   /**
    * Remove `userId` from `groupId` and from every one of its descendants —
    * nobody can remain in a sub-group of a group they are no longer part of
@@ -756,12 +755,6 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       return inserted
         .filter((row) => row.groupId === groupId)
         .map((row) => row.userId);
-    },
-
-    async removeMember(groupId, userId) {
-      await db
-        .delete(groupMembers)
-        .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
     },
 
     async removeMemberWithDescendants(groupId, userId) {

@@ -5,7 +5,6 @@ import type { AuthSession } from '@ardoise/shared';
 import {
   apiRequest,
   authenticateWithGoogle,
-  fetchMe,
   refreshSession,
   REQUEST_TIMEOUT_MS,
   revokeSession,
@@ -117,17 +116,5 @@ describe('revokeSession', () => {
   it('throws on a server error', async () => {
     mockFetch({ ok: false, status: 500 });
     await expect(revokeSession(BASE_URL, 'refresh-1')).rejects.toBeInstanceOf(ApiError);
-  });
-});
-
-describe('fetchMe', () => {
-  it('sends the bearer token and parses the profile', async () => {
-    const fetchMock = mockFetch({ jsonBody: { user: session.user } });
-
-    await expect(fetchMe(BASE_URL, 'access-1')).resolves.toEqual({ user: session.user });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.test/auth/me',
-      expect.objectContaining({ headers: { authorization: 'Bearer access-1' } }),
-    );
   });
 });

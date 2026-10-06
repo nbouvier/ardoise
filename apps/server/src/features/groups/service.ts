@@ -252,14 +252,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const pairTrees = createPairTreeSettlement(repository, ledger);
 
   /**
-   * A group's ancestors as a breadcrumb reads them, root first. Named the
-   * same way the group itself is: a pair group can be an ancestor too — a
-   * friendship may have sub-groups (`docs/specs/groups.md`) — and it carries
-   * no name of its own, so it is named after the other member, exactly as
-   * `nameFor` names it everywhere else. Its member list is the only extra
-   * read, and only for a pair-rooted tree.
-   */
-  /**
    * A group as somewhere other than its own page presents it. Costs a read
    * only for what it cannot know from the row itself: a pair group's members
    * (it stores no name) and a sub-group's ancestors. A favorited root group,
@@ -277,6 +269,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     return { name, ancestors };
   }
 
+  /**
+   * A group's ancestors as a breadcrumb reads them, root first. Named the
+   * same way the group itself is: a pair group can be an ancestor too — a
+   * friendship may have sub-groups (`docs/specs/groups.md`) — and it carries
+   * no name of its own, so it is named after the other member, exactly as
+   * `nameFor` names it everywhere else. Its member list is the only extra
+   * read, and only for a pair-rooted tree.
+   */
   function nameAncestors(
     rows: readonly GroupRow[],
     viewerId: string,
@@ -291,7 +291,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       })),
     );
   }
-
 
   function summaryOf(
     group: GroupRow,

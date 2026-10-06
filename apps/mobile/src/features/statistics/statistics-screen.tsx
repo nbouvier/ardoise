@@ -591,7 +591,6 @@ function subgroupsLabel(
     .join(', ');
 }
 
-
 type SelectionPreset = 'all' | 'onlyMe' | 'none' | null;
 
 function selectionPreset(
