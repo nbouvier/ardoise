@@ -1,5 +1,5 @@
 import type { GroupRole } from '@ardoise/shared';
-import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql, type SQL } from 'drizzle-orm';
 
 import type { Database, DatabaseTransaction } from '../../db/client.js';
 import {
@@ -385,6 +385,36 @@ async function withSubgroupCounts(
   }));
 }
 
+/**
+ * The groups `userId` belongs to that match `filter`, each with its member
+ * and sub-group counts and the caller's own membership details. Joined twice:
+ * once to find the caller's own rows, once to count everyone in each group.
+ */
+async function listMemberGroups(
+  db: Database,
+  userId: string,
+  filter: SQL | undefined,
+  order: readonly SQL[],
+): Promise<ListedGroupSummary[]> {
+  const everyone = aliasedTable(groupMembers, 'everyone');
+
+  const own = await db
+    .select({
+      group: groups,
+      memberCount: sql<number>`count(${everyone.id})`,
+      favoritedAt: groupMembers.favoritedAt,
+      role: groupMembers.role,
+    })
+    .from(groupMembers)
+    .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+    .innerJoin(everyone, eq(everyone.groupId, groups.id))
+    .where(and(eq(groupMembers.userId, userId), filter))
+    .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role)
+    .orderBy(...order);
+
+  return withSubgroupCounts(db, own);
+}
+
 export function createGroupsRepository(db: Database): GroupsRepository {
   return {
     async findGroupById(groupId) {
@@ -401,63 +431,30 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listGroupsForUser(userId) {
-      // Joined twice: once to find the caller's root groups, once to count
-      // everyone in them.
-      const everyone = aliasedTable(groupMembers, 'everyone');
-
-      const own = await db
-        .select({
-          group: groups,
-          memberCount: sql<number>`count(${everyone.id})`,
-          favoritedAt: groupMembers.favoritedAt,
-          role: groupMembers.role,
-        })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-        .innerJoin(everyone, eq(everyone.groupId, groups.id))
-        .where(
-          and(
-            eq(groupMembers.userId, userId),
-            ne(groups.kind, 'pair'),
-            // Only root groups: a group that is itself a sub-group is reached
-            // by opening its parent, never listed at the top level.
-            isNull(groups.parentId),
-          ),
-        )
-        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role)
+      return listMemberGroups(
+        db,
+        userId,
+        and(
+          ne(groups.kind, 'pair'),
+          // Only root groups: a group that is itself a sub-group is reached
+          // by opening its parent, never listed at the top level.
+          isNull(groups.parentId),
+        ),
         // Active groups first, then archived ones; favorited groups first
         // within each of those (`docs/specs/favorites.md`); alphabetical
         // within what's left.
-        .orderBy(
+        [
           sql`${groups.archivedAt} is not null`,
           sql`${groupMembers.favoritedAt} is null`,
           asc(groups.name),
-        );
-
-      return withSubgroupCounts(db, own);
+        ],
+      );
     },
 
     async listFavoriteGroupsForUser(userId) {
-      const everyone = aliasedTable(groupMembers, 'everyone');
-
-      const own = await db
-        .select({
-          group: groups,
-          memberCount: sql<number>`count(${everyone.id})`,
-          favoritedAt: groupMembers.favoritedAt,
-          role: groupMembers.role,
-        })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-        .innerJoin(everyone, eq(everyone.groupId, groups.id))
-        // No kind or depth filter, unlike `listGroupsForUser`: a favorite is
-        // gathered wherever it lives (`docs/specs/home.md`).
-        .where(
-          and(eq(groupMembers.userId, userId), sql`${groupMembers.favoritedAt} is not null`),
-        )
-        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role);
-
-      return withSubgroupCounts(db, own);
+      // No kind or depth filter, unlike `listGroupsForUser`: a favorite is
+      // gathered wherever it lives (`docs/specs/home.md`).
+      return listMemberGroups(db, userId, sql`${groupMembers.favoritedAt} is not null`, []);
     },
 
     async listMembers(groupId) {
