@@ -160,6 +160,22 @@ old binary that lacks the native module and crash it. (The `fingerprint` policy 
 this automatically from the native inputs; it is the upgrade path if that rule proves too
 easy to forget.) An update to the `staging` channel never reaches a `production` build.
 
+### Keeping dependencies up to date
+
+- **Within an SDK**, `npx expo install --check` (from `apps/mobile`) lists the patch versions
+  the installed SDK expects. `--fix` installs them, but on Windows it fails to spawn npm:
+  run `npm install --workspace @ardoise/mobile <pkg>@<range> …` with the listed versions
+  instead. Most `expo-*` packages carry native code, so this is a native change: bump
+  `version` and build.
+- **A new SDK** goes through Expo's upgrade guide (`npx expo install expo@^<sdk> --fix`) and
+  a device test of both variants.
+- **`npm audit`**: run `npm audit fix`, never `--force` — its "fix" for the Expo tooling is a
+  years-old Expo major. What remains after that is build and test tooling whose versions
+  the SDK pins (jest, metro, the Expo CLI's own dependencies) or advisories with no fixed
+  release. Check what each remaining advisory reaches with `npm ls <package>`: tooling never
+  ships, but a runtime chain does (`decode-uri-component` through `expo-router`, a denial
+  of service on a malformed link, is fixed only in SDK 58). Re-check after each SDK upgrade.
+
 ### Releasing
 
 Actions tab → **Mobile release** (`.github/workflows/mobile-release.yml`), choosing the
