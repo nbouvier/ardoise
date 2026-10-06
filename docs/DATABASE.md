@@ -247,6 +247,10 @@ redisplayable ("copy my link again"), and it only grants a narrow, expiring, rev
 capability — becoming someone's friend or joining one group, subject to the recipient's
 own acceptance.
 
+The server deletes, every hour (`invites.purge`), the invitations revoked or expired more
+than 30 days ago. Until then an old link still answers "expired" or "no longer valid"
+rather than "not found".
+
 ### `transactions`
 
 An expense, income or transfer recorded in a group.

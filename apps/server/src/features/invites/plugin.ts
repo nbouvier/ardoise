@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { env } from '../../config/env.js';
 import { contentSecurityPolicyFor } from '../../http/html.js';
+import { schedulePeriodicTask } from '../../periodic-task.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { InviteError, type InviteErrorReason } from './codes.js';
@@ -69,6 +70,12 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
       appStoreUrl: env.APP_STORE_URL,
       playStoreUrl: env.PLAY_STORE_URL,
     };
+
+    schedulePeriodicTask(app, {
+      name: 'invites.purge',
+      intervalMs: 60 * 60 * 1000,
+      run: () => invites.purgeStale(),
+    });
 
     app.decorate('invites', invites);
 

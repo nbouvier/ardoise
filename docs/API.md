@@ -27,7 +27,8 @@ route is added, changed or removed.
   may carry a constraint name or a fragment of data — is logged, never sent. Failures
   raised by Fastify before a handler runs (malformed JSON, body over the limit, wrong
   content type) keep their 4xx status with `invalid_request` (`400`),
-  `payload_too_large` (`413`) or `unsupported_media_type` (`415`).
+  `payload_too_large` (`413`) or `unsupported_media_type` (`415`). A route that does not
+  exist answers `404 { "error": "route_not_found" }`.
 
 ## Base URL
 
