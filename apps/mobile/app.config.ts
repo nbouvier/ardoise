@@ -7,6 +7,28 @@ const APP_ID_FORMAT = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const PLACEHOLDER_APP_ID = /^com\.anonymous(\.|$)/;
 
 /**
+ * Builds installed next to the production app, chosen by `APP_VARIANT` (set by the
+ * `staging` EAS profile and the staging updates): their own application id and name, so
+ * that installing one never replaces the other and the two are told apart on the phone.
+ */
+const VARIANTS = {
+  staging: { idSuffix: '.staging', nameSuffix: ' (staging)' },
+} as const;
+
+type Variant = (typeof VARIANTS)[keyof typeof VARIANTS];
+
+function resolveVariant(): Variant | null {
+  const variant = process.env.APP_VARIANT;
+  if (!variant) return null;
+  if (!Object.hasOwn(VARIANTS, variant)) {
+    throw new Error(
+      `APP_VARIANT "${variant}" is unknown (expected one of: ${Object.keys(VARIANTS).join(', ')})`,
+    );
+  }
+  return VARIANTS[variant as keyof typeof VARIANTS];
+}
+
+/**
  * The application id (Android package, iOS bundle identifier): what `app.json` says,
  * unless `APP_ID` overrides it (a fork publishing its own build). It is permanent once
  * an app is published, so it is one value applied to both platforms. An EAS
@@ -14,7 +36,7 @@ const PLACEHOLDER_APP_ID = /^com\.anonymous(\.|$)/;
  * out under an id that cannot be kept.
  */
 function resolveAppId(config: Partial<ExpoConfig>): string {
-  const appId = process.env.APP_ID ?? config.android?.package ?? 'app.ardoise';
+  const appId = process.env.APP_ID ?? config.android?.package ?? 'app.nbouvier.ardoise';
 
   if (!APP_ID_FORMAT.test(appId)) {
     throw new Error(`APP_ID "${appId}" is not a valid application id (for example com.example.app)`);
@@ -44,12 +66,16 @@ function sentryPlugin(): [string, Record<string, string>] {
 
 /**
  * Layers environment-driven values onto the static config in `app.json`:
- * the application id, the API base URL, the Google OAuth client IDs (not secret),
+ * the application id and name (with the build's variant), the API base URL, the Google OAuth client IDs (not secret),
  * the iOS URL scheme the Google SDK needs and the Sentry DSN (not secret either: it
  * only lets a client send reports). See `docs/MOBILE.md`.
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const appId = resolveAppId(config);
+  const variant = resolveVariant();
+  const baseAppId = resolveAppId(config);
+  const appId = baseAppId + (variant?.idSuffix ?? '');
+  const iosBundleId =
+    (process.env.APP_ID ?? config.ios?.bundleIdentifier ?? baseAppId) + (variant?.idSuffix ?? '');
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? null;
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? null;
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
@@ -75,7 +101,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...(easProjectId
       ? { updates: { ...config.updates, url: `https://u.expo.dev/${easProjectId}` } }
       : {}),
-    name: config.name ?? 'Ardoise',
+    name: (config.name ?? 'Ardoise') + (variant?.nameSuffix ?? ''),
     slug: config.slug ?? 'ardoise',
     android: {
       ...config.android,
@@ -83,7 +109,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     ios: {
       ...config.ios,
-      bundleIdentifier: process.env.APP_ID ?? config.ios?.bundleIdentifier ?? appId,
+      bundleIdentifier: iosBundleId,
     },
     plugins: [
       ...basePlugins,

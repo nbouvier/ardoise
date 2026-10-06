@@ -15,7 +15,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "app.ardoise"
+      "package": "app.nbouvier.ardoise"
     },
     "web": {
       "output": "static",
@@ -43,6 +43,12 @@
     },
     "updates": {
       "fallbackToCacheTimeout": 0
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bdc9d81c-36f9-4fc0-b507-8c2294cdd7eb"
+      }
+    },
+    "owner": "nelb"
   }
 }
