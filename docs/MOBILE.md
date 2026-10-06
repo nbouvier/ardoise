@@ -378,14 +378,36 @@ Read at runtime via `Constants.expoConfig.extra` (`src/lib/api/config.ts`,
 
 ## Deep links
 
-The app registers the `ardoise` URL scheme (`scheme` in `app.json`; the server's landing
-page and `pending-invite.ts` repeat it and must match). Invitations use it: the link a user
-shares points at the API (`/i/<code>`), and that page tries to open
-`ardoise://invite/<code>`.
+The link a user shares points at the API (`https://<API host>/i/<code>`). An invitation
+code is a capability, so it must reach Ardoise and no other app:
+
+- **Android App Links.** The app declares it opens `https://<API host>/i/…`, with
+  `autoVerify` (`app.config.ts`, host taken from the build's `EXPO_PUBLIC_API_BASE_URL`;
+  a local `http` API gets no filter). Android checks the host's
+  `/.well-known/assetlinks.json`, which the server publishes from `ANDROID_APP_ID` and
+  `ANDROID_CERT_FINGERPRINTS` (`docs/OPERATIONS.md`). Verified, the link opens the app
+  straight away, without the page — and only this app: production and staging each
+  verify on their own server, so there is no chooser between them either.
+- **The landing page**, shown when the app is missing or the link was opened somewhere
+  that ignores App Links. On Android its button is an `intent://` naming the app
+  (`ANDROID_APP_ID`), which no other app can receive, and that comes back to the page when
+  the app is not installed; it does not open the app on load (that would loop). Elsewhere,
+  or without `ANDROID_APP_ID`, it opens `ardoise://invite/<code>` on load as before.
+- **The `ardoise` scheme** (`scheme` in `app.json`; the landing page and
+  `pending-invite.ts` repeat it and must match) stays for development builds and other
+  platforms. Any app can claim a scheme: it is the weak path, no longer the main one.
 
 The code is captured by `InviteLinkHandler`, which sits **above** the auth gate — someone
 following a link may not have an account yet — and parked in `pendingInvite` until a
-session exists.
+session exists. `src/app/+native-intent.tsx` sends both link forms to the home screen, so
+expo-router does not show "Unmatched route" for them.
+
+The signing certificates App Links vouch for: `eas credentials -p android`, one keystore
+per application id (production, staging), "SHA256 Fingerprint". Once on Google Play, add
+Play's app signing key (Play Console → Test and release → App integrity) to production's
+list. **A verification happens at install**: after changing `assetlinks.json`, reinstall
+the app, or re-run it with `adb shell pm verify-app-links --re-verify <application id>`.
+Check the state with `adb shell pm get-app-links <application id>` (`verified`).
 
 Testing a deep link without the web page:
 
@@ -393,13 +415,9 @@ Testing a deep link without the web page:
 npx uri-scheme open ardoise://invite/<code> --android
 ```
 
-(`--ios` on macOS.) The landing-page URL form is recognised too, so
-`https://<host>/i/<code>` works once App Links / Universal Links are configured.
-
-Universal Links / App Links (real `https://` links opening the app natively) need a domain,
-`apple-app-site-association` + `assetlinks.json`, and a store presence. Not set up yet: the
-landing page shows the code for manual entry in the meantime, since there is no deferred
-deep linking.
+(`--ios` on macOS.) iOS Universal Links (`apple-app-site-association`) are not set up:
+there is no iOS build yet. There is no deferred deep linking either: someone who installs
+the app from the page types the code shown there.
 
 For local testing, `PUBLIC_BASE_URL` on the server must be an address the device can reach
 — with a USB device, keep `http://localhost:3000` and run `adb reverse tcp:3000 tcp:3000`.

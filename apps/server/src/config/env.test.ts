@@ -173,6 +173,53 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('Android App Links', () => {
+    const fingerprint = (byte: string) => Array.from({ length: 32 }, () => byte).join(':');
+
+    it('are optional', () => {
+      const env = loadEnv(production);
+
+      expect(env.ANDROID_APP_ID).toBeUndefined();
+      expect(env.ANDROID_CERT_FINGERPRINTS).toBeUndefined();
+    });
+
+    it('reads a comma-separated list of fingerprints, uppercased', () => {
+      const env = loadEnv({
+        ...production,
+        ANDROID_APP_ID: 'app.example.ardoise',
+        ANDROID_CERT_FINGERPRINTS: ` ${fingerprint('ab')} , ${fingerprint('CD')}`,
+      });
+
+      expect(env.ANDROID_CERT_FINGERPRINTS).toEqual([fingerprint('AB'), fingerprint('CD')]);
+    });
+
+    it.each([
+      ['a truncated fingerprint', fingerprint('AB').slice(0, -3)],
+      ['a SHA-1 fingerprint', Array.from({ length: 20 }, () => 'AB').join(':')],
+      ['bare hex', 'AB'.repeat(32)],
+    ])('refuses %s', (_label, value) => {
+      expect(() =>
+        loadEnv({
+          ...production,
+          ANDROID_APP_ID: 'app.example.ardoise',
+          ANDROID_CERT_FINGERPRINTS: value,
+        }),
+      ).toThrow(/ANDROID_CERT_FINGERPRINTS/);
+    });
+
+    it('refuses fingerprints without the app they vouch for', () => {
+      expect(() =>
+        loadEnv({ ...production, ANDROID_CERT_FINGERPRINTS: fingerprint('AB') }),
+      ).toThrow('ANDROID_APP_ID: is required when ANDROID_CERT_FINGERPRINTS is set');
+    });
+
+    it('refuses an application id Android would not accept', () => {
+      expect(() => loadEnv({ ...production, ANDROID_APP_ID: 'ardoise' })).toThrow(
+        /ANDROID_APP_ID/,
+      );
+    });
+  });
+
   it('rejects a TRUST_PROXY that is not understood, in any environment', () => {
     expect(() => loadEnv({ ...base, NODE_ENV: 'development', TRUST_PROXY: 'yes' })).toThrow(
       /TRUST_PROXY: must be true, false/,

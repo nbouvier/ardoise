@@ -139,6 +139,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-09-09 | Session = short JWT access token + rotating DB refresh token | Persistent sign-in + real server-side sign-out / revocation |
 | 2026-09-10 | Invitation links hosted by the API (`GET /i/:code`) + the app's own URL scheme (`ardoise://` since 2026-10-04) | No domain or store presence yet; Universal/App Links slot in later without changing the contract |
 | 2026-09-10 | No deferred deep linking: the landing page shows a code to type in | A third-party attribution SDK (Branch, AppsFlyer) is not worth it before the app is in stores |
+| 2026-10-06 | Android App Links on the API host (`/.well-known/assetlinks.json` from env, intent filter from the build's API URL) + an `intent://` naming the app on the landing page | Any app can claim the `ardoise://` scheme and receive invitation codes; the host and the fingerprints are per deployment, so they stay out of the repository |
 | 2026-09-10 | Friendships stored once per pair, in a canonical order | The unique constraint alone rules out duplicates, including under concurrent acceptance |
 | 2026-09-10 | `FriendSummary` (no email) is how another user is exposed | A public invitation preview must not leak the inviter's email address |
 | 2026-09-11 | One `invites` table and one code space for every kind of invitation | The client captures a code before it can know what it leads to; one link format, one landing page, one preview route |

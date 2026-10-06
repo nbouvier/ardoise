@@ -8,6 +8,7 @@ import { contentSecurityPolicyFor } from '../../http/html.js';
 import { schedulePeriodicTask } from '../../periodic-task.js';
 import { createUsersRepository } from '../users/repository.js';
 
+import { assetLinks, isAndroid, type AndroidApp } from './app-links.js';
 import { InviteError, type InviteErrorReason } from './codes.js';
 import { renderExpiredPage, renderInvitePage, type LandingLinks } from './landing.js';
 import { createInvitesRepository } from './repository.js';
@@ -28,6 +29,8 @@ export interface InvitesPluginOptions {
   publicBaseUrl?: string | undefined;
   /** Override the store links shown on the landing page (tests). */
   storeLinks?: LandingLinks | undefined;
+  /** Override the Android app invitation links open (tests). */
+  androidApp?: AndroidApp | undefined;
 }
 
 const codeParamsSchema = z.object({ code: inviteCodeSchema });
@@ -71,6 +74,11 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
       playStoreUrl: env.PLAY_STORE_URL,
     };
 
+    const androidApp: AndroidApp = opts.androidApp ?? {
+      appId: env.ANDROID_APP_ID,
+      certFingerprints: env.ANDROID_CERT_FINGERPRINTS,
+    };
+    const publicBaseUrl = opts.publicBaseUrl ?? env.PUBLIC_BASE_URL;
     schedulePeriodicTask(app, {
       name: 'invites.purge',
       intervalMs: 60 * 60 * 1000,
@@ -78,6 +86,15 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
     });
 
     app.decorate('invites', invites);
+
+    // Android fetches it when the app is installed, to check that this host lets the
+    // app open its links (`app-links.ts`). Not registered without an app to vouch for.
+    const statements = assetLinks(androidApp);
+    if (statements) {
+      app.get('/.well-known/assetlinks.json', async (_request, reply) =>
+        reply.header('cache-control', 'public, max-age=3600').send(statements),
+      );
+    }
 
     // The public page an invitation link points to. HTML, not JSON: it is what
     // the recipient's browser opens before the app is involved.
@@ -95,8 +112,15 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
       if (params.success) {
         try {
           const preview = await invites.preview(params.data.code);
+          const android =
+            androidApp.appId && isAndroid(request.headers['user-agent'])
+              ? {
+                  appId: androidApp.appId,
+                  pageUrl: `${publicBaseUrl.replace(/\/+$/, '')}/i/${params.data.code}`,
+                }
+              : undefined;
           return sendPage(
-            renderInvitePage({ preview, code: params.data.code, ...storeLinks }),
+            renderInvitePage({ preview, code: params.data.code, android, ...storeLinks }),
           );
         } catch (error) {
           if (!(error instanceof InviteError)) {

@@ -218,6 +218,126 @@ describe('GET /i/:code', () => {
   });
 });
 
+const ANDROID_UA =
+  'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36';
+const IPHONE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
+/** A made-up certificate fingerprint in the format Android tooling prints. */
+const FINGERPRINT = Array.from({ length: 32 }, () => 'AB').join(':');
+
+describe('Android App Links', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await createTestApp({
+      auth: { googleVerifier: google },
+      invites: {
+        publicBaseUrl: 'https://ardoise.test',
+        storeLinks: {},
+        androidApp: { appId: 'app.example.ardoise', certFingerprints: [FINGERPRINT] },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function inviteCode(): Promise<string> {
+    const ada = await signInAs(app, 'ada');
+    return (
+      await app.inject({ method: 'POST', url: '/friends/invite', headers: ada.headers })
+    ).json().invite.code as string;
+  }
+
+  it('vouches for the app in /.well-known/assetlinks.json', async () => {
+    const response = await app.inject({ method: 'GET', url: '/.well-known/assetlinks.json' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toEqual([
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'app.example.ardoise',
+          sha256_cert_fingerprints: [FINGERPRINT],
+        },
+      },
+    ]);
+  });
+
+  it('opens the app through an intent naming it on Android, never the bare scheme', async () => {
+    const code = await inviteCode();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/i/${code}`,
+      headers: { 'user-agent': ANDROID_UA },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Any app may claim the `ardoise://` scheme; an intent with a package reaches only ours.
+    expect(response.body).toContain(
+      `href="intent://invite/${code}#Intent;scheme=ardoise;package=app.example.ardoise;` +
+        `S.browser_fallback_url=${encodeURIComponent(`https://ardoise.test/i/${code}`)};end"`,
+    );
+    expect(response.body).not.toContain(`ardoise://invite/${code}`);
+    // The intent comes back to this page when the app is missing: opening it on load would loop.
+    expect(response.body).not.toContain('<script>');
+    expect(response.headers['content-security-policy']).not.toContain('script-src');
+  });
+
+  it('keeps the scheme elsewhere', async () => {
+    const code = await inviteCode();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/i/${code}`,
+      headers: { 'user-agent': IPHONE_UA },
+    });
+
+    expect(response.body).toContain(`ardoise://invite/${code}`);
+    expect(response.body).not.toContain('intent://');
+  });
+});
+
+describe('Android App Links, not configured', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    app = await createTestApp({
+      auth: { googleVerifier: google },
+      invites: { storeLinks: {}, androidApp: {} },
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('serves no assetlinks.json', async () => {
+    const response = await app.inject({ method: 'GET', url: '/.well-known/assetlinks.json' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('falls back to the scheme on Android, which is all it has', async () => {
+    const ada = await signInAs(app, 'ada');
+    const code = (
+      await app.inject({ method: 'POST', url: '/friends/invite', headers: ada.headers })
+    ).json().invite.code as string;
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/i/${code}`,
+      headers: { 'user-agent': ANDROID_UA },
+    });
+
+    expect(response.body).toContain(`ardoise://invite/${code}`);
+    expect(response.body).not.toContain('intent://');
+  });
+});
+
 describe('GET /invites/:code', () => {
   let app: FastifyInstance;
 

@@ -87,6 +87,8 @@ services:
       PLAY_STORE_URL:
       APP_STORE_URL:
       SENTRY_DSN:
+      ANDROID_APP_ID:
+      ANDROID_CERT_FINGERPRINTS:
     depends_on:
       db:
         condition: service_healthy

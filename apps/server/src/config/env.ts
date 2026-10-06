@@ -43,6 +43,12 @@ export function parseTrustProxy(raw: string): TrustProxy | undefined {
   return entries.every(isProxyAddress) ? entries : undefined;
 }
 
+/** An Android application id: dot-separated segments of letters, digits, underscores. */
+const ANDROID_APP_ID = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
+
+/** A SHA-256 certificate fingerprint as Android tooling prints it: 32 bytes, `AB:CD:…`. */
+const CERT_FINGERPRINT = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
+
 const envSchema = z.object({
   /**
    * Defaults to `production`, not `development`: a deployment that forgets to
@@ -166,6 +172,37 @@ const envSchema = z.object({
   /** Play Store listing, shown on the invitation landing page. Unset until published. */
   PLAY_STORE_URL: z.url().optional(),
   /**
+   * The Android application this deployment's invitation links open: the production
+   * app's id, or the staging variant's on the staging server. The landing page then
+   * opens the app through an intent naming it, which no other app can intercept,
+   * instead of the `ardoise://` scheme, which any app can claim.
+   */
+  ANDROID_APP_ID: z.string().regex(ANDROID_APP_ID).optional(),
+  /**
+   * SHA-256 fingerprints of the certificates that app is signed with, comma-separated
+   * (`eas credentials`; Google Play's app signing key joins them once published).
+   * With `ANDROID_APP_ID`, they publish `/.well-known/assetlinks.json`, which lets
+   * Android open `https://…/i/<code>` links straight in the app (App Links). Not
+   * secrets — every copy of the app carries them — but they belong to the deployment.
+   */
+  ANDROID_CERT_FINGERPRINTS: z
+    .string()
+    .transform((raw, ctx) => {
+      const fingerprints = raw
+        .split(',')
+        .map((entry) => entry.trim().toUpperCase())
+        .filter(Boolean);
+      if (!fingerprints.every((entry) => CERT_FINGERPRINT.test(entry))) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'must be comma-separated SHA-256 fingerprints (32 hex bytes, AB:CD:…)',
+        });
+        return z.NEVER;
+      }
+      return fingerprints;
+    })
+    .optional(),
+  /**
    * The publisher's contact address, shown on every public page: legal notice,
    * privacy requests, account deletion without the app
    * (`docs/specs/legal-pages.md`). Required when `NODE_ENV=production`.
@@ -199,6 +236,14 @@ const LEGAL_VARIABLES = [
  */
 const envChecked = envSchema
   .superRefine((value, ctx) => {
+    // Fingerprints vouch for an application: without its id they publish nothing.
+    if (value.ANDROID_CERT_FINGERPRINTS?.length && !value.ANDROID_APP_ID) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANDROID_APP_ID'],
+        message: 'is required when ANDROID_CERT_FINGERPRINTS is set',
+      });
+    }
     if (value.NODE_ENV !== 'production') {
       return;
     }
