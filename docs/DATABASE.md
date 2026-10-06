@@ -102,6 +102,12 @@ One row per issued refresh token. Rotation revokes the old row and inserts a new
 
 Index: `sessions_user_id_idx` on `user_id`.
 
+Rotation is one transaction: `UPDATE … WHERE revoked_at IS NULL AND expires_at > now
+RETURNING user_id` claims the old row (a concurrent rotation of the same token matches
+nothing), then the new row is inserted. The server deletes **expired** rows every hour
+(`auth.sessions.purge`); revoked rows stay until they expire, since a revoked token coming
+back is what reveals a stolen one.
+
 ### `friendships`
 
 A symmetric friendship, stored once per pair.
@@ -121,6 +127,9 @@ acceptance, where the insert uses `ON CONFLICT DO NOTHING`. A check constraint
 
 Index: `friendships_user_b_id_idx` on `user_b_id` (the `user_a_id` side is covered by the
 unique constraint's index).
+
+A friendship and its pair group are created in one transaction: the friend list joins
+through the pair group, so a friendship without one would exist yet be invisible.
 
 ### `groups`
 
@@ -234,7 +243,10 @@ Indexes: `invites_inviter_id_idx`, `invites_group_id_idx`.
 "One active invitation" is scoped differently per kind and enforced by the service rather
 than a constraint: a **friend** invitation is one per inviter (the link *is* "add me"), a
 **group** invitation is one per group whoever created it (the link belongs to the group,
-and keeps working after that person leaves).
+and keeps working after that person leaves). Creating and rotating run in a transaction
+holding a per-target advisory lock (`pg_advisory_xact_lock`), so two concurrent requests
+cannot leave two usable links. A unique index cannot express it: an expired invitation is
+never revoked, it just stops being usable.
 
 Unlike `sessions.refresh_token_hash`, the code is stored **in clear**. It has to be
 redisplayable ("copy my link again"), and it only grants a narrow, expiring, revocable

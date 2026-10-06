@@ -77,8 +77,12 @@ const envSchema = z.object({
         .filter((id) => id.length > 0),
     )
     .pipe(z.array(z.string().min(1)).min(1)),
-  /** Secret used to sign Ardoise access tokens (JWT HS256). Server-only. */
-  AUTH_JWT_SECRET: z.string().min(16),
+  /**
+   * Secret used to sign Ardoise access tokens (JWT HS256). Server-only. At
+   * least 32 characters: HS256 wants a key as long as its 256-bit output
+   * (`openssl rand -base64 48` gives 64).
+   */
+  AUTH_JWT_SECRET: z.string().min(32),
   /** Access-token lifetime in seconds. */
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   /** Refresh-token lifetime in seconds. */

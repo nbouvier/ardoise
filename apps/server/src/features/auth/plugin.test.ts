@@ -79,6 +79,25 @@ describe('auth routes', () => {
       expect(reuse.statusCode).toBe(401);
     });
 
+    it('signs the user out everywhere when an old refresh token comes back', async () => {
+      const { refreshToken } = (await signIn('ada')).json();
+      const rotated = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken },
+      });
+
+      await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken } });
+
+      const afterReuse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: rotated.json().refreshToken },
+      });
+      expect(afterReuse.statusCode).toBe(401);
+      expect(afterReuse.json()).toEqual({ error: 'invalid_refresh_token' });
+    });
+
     it('rejects an unknown refresh token', async () => {
       const response = await app.inject({
         method: 'POST',

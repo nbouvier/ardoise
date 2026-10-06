@@ -37,7 +37,8 @@ without managing another password**.
 
 - Sign-in exchanges a Google ID token for an Ardoise session: a short-lived **access
   token** (~15 minutes) and a longer-lived **refresh token** (~60 days).
-- The refresh token is **rotated** on every use: the previous one becomes invalid.
+- The refresh token is **rotated** on every use: the previous one becomes invalid. Two
+  concurrent refreshes with the same token yield at most one new session.
 - Sign-out revokes the current refresh token server-side.
 - Only a hash of the refresh token is stored server-side.
 
@@ -69,8 +70,10 @@ without managing another password**.
   rejected; the app moves to the signed-out state and shows the sign-in screen.
 - **Access token expires mid-session**: the next API call transparently refreshes and
   retries once; the user notices nothing.
-- **Refresh token reuse** (a already-rotated token is presented again): the request is
-  rejected as unauthorized and the event is logged as a possible token theft signal.
+- **Refresh token reuse** (an already-rotated or revoked token is presented again): the
+  request is rejected as unauthorized, **every session of the user is revoked** (the
+  legitimate device and the thief both have to sign in again, since which is which cannot
+  be known) and the event is logged as a possible token theft signal.
 - **Concurrent API calls hit 401 together**: only one refresh is performed; the others
   wait for its result.
 - **Returning user** (same Google account signs in again): the existing user record is
@@ -98,7 +101,8 @@ without managing another password**.
 - [ ] Signing in again with the same Google account does not create a second user record.
 - [ ] When the access token is expired, an API call to a protected endpoint still
       succeeds via a single transparent refresh.
-- [ ] Presenting an already-rotated refresh token is rejected (server responds 401).
+- [ ] Presenting an already-rotated refresh token is rejected (server responds 401) and
+      revokes every other session of that user.
 - [ ] On the web target, the sign-in screen renders and the Google action is disabled
       with a "coming soon" indication (no crash).
 
@@ -122,7 +126,8 @@ New endpoints (see `docs/API.md` for the authoritative surface):
   accessTokenExpiresAt, user }`. Verifies the Google ID token, upserts the user, issues a
   session. `401` if verification fails.
 - `POST /auth/refresh` — body `{ refreshToken }` → new session pair (rotation). `401` if
-  the token is unknown, expired, revoked or already rotated.
+  the token is unknown, expired, revoked or already rotated; a revoked or rotated one also
+  revokes every session of its user.
 - `POST /auth/logout` — body `{ refreshToken }` → `204`. Idempotent. Revokes the session.
 - `GET /auth/me` — `Authorization: Bearer <accessToken>` → `{ user }`. `401` if missing
   or invalid.

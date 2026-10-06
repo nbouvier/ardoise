@@ -62,6 +62,10 @@ viewer switches between:
   participants field is — "All" when every direct sub-group is selected, "None" when the
   breakdown is narrowed to this group alone, otherwise the selected sub-groups' own
   names — and changed from the same kind of checklist.
+- **Both selections follow the group** while the screen stays open: with everyone (or
+  every sub-group) selected, a member who joins or a sub-group just created is selected
+  too, so "Everybody" and "All" stay true. A hand-picked selection keeps its picks: the
+  newcomer shows unticked. Someone who leaves, or a sub-group that is deleted, drops out.
 - **Date range** — an optional **from** and an optional **to** bound, both unset by
   default (the breakdown covers every date). A transaction counts when its own date falls
   on or after `from` (when set) and on or before `to` (when set) — both bounds are

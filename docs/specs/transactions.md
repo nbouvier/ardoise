@@ -203,8 +203,10 @@ feature establishes, which that spec builds on.
 - **A split whose only participant is Others**: accepted; it moves no balance.
 - **A member who has since left the group** still appears, by name, on transactions
   recorded while they were a member — the record does not rewrite history. They cannot be
-  selected as payer or participant on a new or edited transaction. If they left with an
-  unsettled balance, it still appears among the group's balances.
+  selected as payer or participant on a new transaction, nor added to one that did not
+  name them. Editing a transaction that names them keeps them: the form shows them where
+  they were (payer, recipient, split), and they can be removed or kept on save. If they
+  left with an unsettled balance, it still appears among the group's balances.
 - **Recording, editing or deleting on an archived group**: refused.
 - **Recording, editing or deleting on a group the caller does not belong to**: answered
   as "not found", like every other group route.

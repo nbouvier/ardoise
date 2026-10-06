@@ -17,8 +17,10 @@ current setup and state.
 | ------------------------------ | ----- | ------------- | ---------------------------------------------- |
 | `auth.session.issued`          | info  | `userId`      | Sign-in succeeded, a session was created       |
 | `auth.google.verify.failed`    | warn  | `reason`      | Google rejected the ID token (categorised)     |
-| `auth.session.refresh.reused`  | warn  | —             | A revoked refresh token was presented (possible theft) |
+| `auth.session.refresh.reused`  | warn  | `userId`      | A revoked refresh token was presented (possible theft); every session of the user was revoked |
 | `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
+| `auth.sessions.purge.done`     | info  | `count`       | The hourly clean-up deleted expired sessions (logged only when there were some) |
+| `auth.sessions.purge.failed`   | error | `error`       | The hourly clean-up failed (also reported); the next run tries again |
 
 Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
