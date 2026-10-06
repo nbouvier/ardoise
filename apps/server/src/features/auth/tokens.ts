@@ -53,6 +53,8 @@ export function createAccessTokenService(
     async verify(token) {
       try {
         const { payload } = await jwtVerify(token, key, {
+          // The one algorithm `issue` signs with; a token claiming another is refused.
+          algorithms: ['HS256'],
           issuer: ISSUER,
           audience: AUDIENCE,
         });

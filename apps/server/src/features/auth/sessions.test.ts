@@ -51,10 +51,61 @@ describe('session service', () => {
 
     expect(rotated.userId).toBe(userId);
     expect(rotated.refreshToken).not.toBe(first.refreshToken);
-    await expect(service.rotate(first.refreshToken)).rejects.toMatchObject({
+    expect(
+      (await repository.findSessionByHash(hashRefreshToken(first.refreshToken)))?.revokedAt,
+    ).not.toBeNull();
+    await expect(service.rotate(rotated.refreshToken)).resolves.toBeDefined();
+  });
+
+  it('lets only one of two concurrent rotations of the same token succeed', async () => {
+    const service = createSessionService(repository);
+    const { refreshToken } = await service.create(userId);
+
+    const results = await Promise.allSettled([
+      service.rotate(refreshToken),
+      service.rotate(refreshToken),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { reason: 'revoked' },
+    });
+  });
+
+  it('revokes every session of the user when a rotated token is used again', async () => {
+    const service = createSessionService(repository);
+    const stolen = await service.create(userId);
+    const otherDevice = await service.create(userId);
+    const rotated = await service.rotate(stolen.refreshToken);
+
+    await expect(service.rotate(stolen.refreshToken)).rejects.toMatchObject({
       reason: 'revoked',
     });
-    await expect(service.rotate(rotated.refreshToken)).resolves.toBeDefined();
+
+    await expect(service.rotate(rotated.refreshToken)).rejects.toMatchObject({
+      reason: 'revoked',
+    });
+    await expect(service.rotate(otherDevice.refreshToken)).rejects.toMatchObject({
+      reason: 'revoked',
+    });
+  });
+
+  it('purges expired sessions only', async () => {
+    let now = new Date('2026-01-01T00:00:00Z');
+    const service = createSessionService(repository, 60, () => now);
+    const expired = await service.create(userId);
+    now = new Date('2026-01-01T00:00:30Z');
+    const revoked = await service.create(userId);
+    await service.revoke(revoked.refreshToken);
+    const live = await service.create(userId);
+    now = new Date('2026-01-01T00:01:10Z');
+
+    await expect(service.purgeExpired()).resolves.toBe(1);
+
+    expect(await repository.findSessionByHash(hashRefreshToken(expired.refreshToken))).toBeUndefined();
+    // Kept until it expires: using it again is what reveals a stolen token.
+    expect(await repository.findSessionByHash(hashRefreshToken(revoked.refreshToken))).toBeDefined();
+    expect(await repository.findSessionByHash(hashRefreshToken(live.refreshToken))).toBeDefined();
   });
 
   it('rejects an unknown refresh token', async () => {
