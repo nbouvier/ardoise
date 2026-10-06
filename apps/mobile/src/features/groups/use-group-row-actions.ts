@@ -45,7 +45,7 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
   const { authorizedFetch, state: authState } = useAuth();
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { dialog, confirm, inform } = useDialog();
+  const { dialog, confirm, inform, informFailure } = useDialog();
   const invalidation = useInvalidation();
 
   function run(group: ActionableGroup, what: string, action: () => Promise<unknown>) {
@@ -58,7 +58,7 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
           // Deleting a pair group is removing the friend it is named after.
           inform(UNSETTLED_REMOVAL_TITLE, unsettledRemovalMessage(group.name));
         } else {
-          inform('That didn’t work', 'Check your connection and try again.');
+          informFailure();
         }
       })
       .finally(() => setBusyId(null));

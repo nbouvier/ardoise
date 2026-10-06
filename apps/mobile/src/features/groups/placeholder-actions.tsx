@@ -66,7 +66,7 @@ export function usePlaceholderActions({
   const { authorizedFetch } = useAuth();
   const invalidation = useInvalidation();
   const theme = useTheme();
-  const { dialog, confirm, inform } = useDialog();
+  const { dialog, confirm, inform, informFailure } = useDialog();
   const [menuFor, setMenuFor] = useState<GroupMember | null>(null);
   const [renaming, setRenaming] = useState<GroupMember | null>(null);
 
@@ -93,7 +93,7 @@ export function usePlaceholderActions({
     } else if (code === 'placeholder_name_taken') {
       inform('That name is taken', 'Someone in this group already has it.');
     } else {
-      inform('That didn’t work', 'Check your connection and try again.');
+      informFailure();
     }
   }
 

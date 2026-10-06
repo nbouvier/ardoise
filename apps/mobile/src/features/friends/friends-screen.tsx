@@ -1,11 +1,11 @@
 import type { FriendEntry } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AsyncState, EmptyState } from '@/components/async-state';
 import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ListDivider } from '@/components/list-divider';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
@@ -19,7 +19,6 @@ import { useDialog } from '@/components/use-dialog';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
-import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 import { useInvalidation } from '@/lib/query/use-invalidation';
 
@@ -102,7 +101,6 @@ export function FriendsScreen() {
     favoriteBusyId,
   } = useFriends();
   const router = useRouter();
-  const theme = useTheme();
   const [adding, setAdding] = useState(false);
   const { dialog, confirm, inform } = useDialog();
   const invalidation = useInvalidation();
@@ -175,36 +173,27 @@ export function FriendsScreen() {
         </View>
 
         <View style={styles.body}>
-          {status === 'loading' ? (
-            <View style={styles.centered}>
-              <ActivityIndicator testID="friends-loading" color={theme.primary} />
-            </View>
-          ) : status === 'error' ? (
-            <View style={styles.centered}>
-              <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-                We couldn’t load your friends. Check your connection and try again.
-              </ThemedText>
-              <Button label="Try again" variant="secondary" onPress={refresh} />
-            </View>
-          ) : friends.length === 0 ? (
-            <View style={styles.centered}>
-              <Card tone="brand" style={styles.empty}>
-                <ThemedText style={styles.emptyGlyph}>🤝</ThemedText>
-                <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-                  No friends yet. Invite someone with a link and they’ll show up here.
-                </ThemedText>
-              </Card>
-            </View>
-          ) : (
-            <RefreshableScrollView
-              contentContainerStyle={styles.list}
-              refreshing={refreshing}
-              onRefresh={pullRefresh}>
-              {favorites.map(row)}
-              {favorites.length > 0 && others.length > 0 ? <ListDivider /> : null}
-              {others.map(row)}
-            </RefreshableScrollView>
-          )}
+          <AsyncState
+            status={status}
+            loadingTestID="friends-loading"
+            failure="We couldn’t load your friends. Check your connection and try again."
+            onRetry={refresh}>
+            {friends.length === 0 ? (
+              <EmptyState
+                glyph="🤝"
+                message="No friends yet. Invite someone with a link and they’ll show up here."
+              />
+            ) : (
+              <RefreshableScrollView
+                contentContainerStyle={styles.list}
+                refreshing={refreshing}
+                onRefresh={pullRefresh}>
+                {favorites.map(row)}
+                {favorites.length > 0 && others.length > 0 ? <ListDivider /> : null}
+                {others.map(row)}
+              </RefreshableScrollView>
+            )}
+          </AsyncState>
         </View>
       </SafeAreaView>
 
@@ -230,24 +219,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     paddingBottom: Spacing.three,
     gap: Spacing.three,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.three,
-  },
-  centeredText: {
-    textAlign: 'center',
-  },
-  empty: {
-    alignItems: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.five,
-  },
-  emptyGlyph: {
-    fontSize: 40,
-    lineHeight: 48,
   },
   list: {
     gap: Spacing.two,

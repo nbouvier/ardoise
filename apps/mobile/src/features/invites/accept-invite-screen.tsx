@@ -127,7 +127,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
   const [reloadToken, setReloadToken] = useState(0);
   const [accepting, setAccepting] = useState(false);
   const [claiming, setClaiming] = useState(false);
-  const { dialog, confirm, inform } = useDialog();
+  const { dialog, confirm, inform, informFailure } = useDialog();
   const invalidation = useInvalidation();
 
   useEffect(() => {
@@ -223,7 +223,7 @@ export function AcceptInviteScreen({ code, onClose, onAccepted }: AcceptInviteSc
                 'Someone may have claimed or removed them.',
               );
             } else {
-              inform('That didn’t work', 'Check your connection and try again.');
+              informFailure();
             }
           })
           .finally(() => setClaiming(false));

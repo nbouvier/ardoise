@@ -17,6 +17,8 @@ export interface UseDialogResult {
   confirm: (options: ConfirmOptions) => void;
   /** Tell them something, with a single "OK". */
   inform: (title: string, message: string) => void;
+  /** The plain "that didn't work" — a failed action with nothing more specific to say. */
+  informFailure: () => void;
 }
 
 /**
@@ -48,10 +50,13 @@ export function useDialog(): UseDialogResult {
     />
   ) : null;
 
+  const inform = (title: string, message: string) =>
+    open({ title, message, confirmLabel: 'OK', onConfirm: () => undefined, confirmOnly: true });
+
   return {
     dialog,
     confirm: (confirmOptions) => open({ ...confirmOptions, confirmOnly: false }),
-    inform: (title, message) =>
-      open({ title, message, confirmLabel: 'OK', onConfirm: () => undefined, confirmOnly: true }),
+    inform,
+    informFailure: () => inform('That didn’t work', 'Check your connection and try again.'),
   };
 }

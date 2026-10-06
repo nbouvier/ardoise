@@ -1077,6 +1077,17 @@ describe('GroupScreen', () => {
       archivedAt: null,
     };
 
+    it('scrolls the sub-groups away with the transactions, as the list’s own header', async () => {
+      mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
+
+      await render(<GroupScreen groupId={trip.id} />);
+      await screen.findByText('Ajaccio weekend');
+
+      const list = screen.getByTestId('transactions-list');
+      expect(within(list).getByText('Ajaccio weekend')).toBeTruthy();
+      expect(within(list).getByRole('button', { name: 'Add a transaction' })).toBeTruthy();
+    });
+
     it('shows a joined sub-group and opens it directly', async () => {
       mockFetchGroup.mockResolvedValue({ ...trip, subgroups: [joinedSub], subgroupCount: 1 });
 

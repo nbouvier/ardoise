@@ -5,7 +5,7 @@ import type {
   TransactionsListResponse,
 } from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
 import { render } from '@/test-utils/render';
@@ -514,7 +514,10 @@ describe('StatisticsScreen', () => {
       await openMoreOptions();
       await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
       await fireEvent.press(screen.getByRole('button', { name: 'None' }));
-      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('5.00');
+      // The previous figure stays up until the narrower read lands.
+      await waitFor(() =>
+        expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('5.00'),
+      );
       expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');
       expect(screen.getByRole('button', { name: 'Subgroups: None' })).toBeTruthy();
     });

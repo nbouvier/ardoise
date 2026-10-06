@@ -181,8 +181,17 @@ or box**; a screen that styles its own is a bug in this document.
   through it — no OS `Alert` is left. Screens use the **`useDialog()`** hook
   (`components/use-dialog.tsx`): `confirm({ title, message, confirmLabel, destructive,
   onConfirm })` asks, `inform(title, message)` tells with a single "OK" (`confirmOnly`,
-  no Cancel), and the screen renders the hook's `dialog` once. `useGroupRowActions`
-  exposes its own `dialog` for the screens that use it.
+  no Cancel), `informFailure()` is the plain "That didn't work — check your connection",
+  and the screen renders the hook's `dialog` once. `useGroupRowActions` exposes its own
+  `dialog` for the screens that use it.
+- **`AsyncState`** / **`EmptyState`** (`components/async-state.tsx`) — what a screen
+  reading server data shows before it has anything: a centred spinner (its test id passed
+  in), or the failure in secondary text with a secondary **Try again**; its children once
+  loaded. `EmptyState` is the brand-tinted card with a large glyph and a centred line, for
+  a list with nothing in it yet.
+- **`Checkbox`** (`components/checkbox.tsx`) — the round tick a multi-select row ends
+  with; the row carries the checkbox role. The statistics' participant and sub-group
+  pickers share one `MultiSelectField` (`features/statistics/multi-select-field.tsx`).
 - **`PromptDialog`** (`components/prompt-dialog.tsx`) — the same card with a text field
   between the title and the buttons, for asking one short value (renaming a placeholder
   member): ghost Cancel, primary confirm, disabled while the field is blank. Mounted per
@@ -481,7 +490,10 @@ opened; the group's balances and transactions are read once by the screen. A row
 
 **Transactions tab** — the sub-groups section, then a "Transactions" section of the same
 shape (overline title, "+ Add" text action at the end — absent when effectively archived)
-over the transaction list (`TransactionRow` cards). "+ Add", or tapping a row, **swaps the
+over the transaction list (`TransactionRow` cards). Both sections are the list's own header
+(`TransactionList`), so they scroll away with the rows: however many sub-groups a group has,
+the transactions get the whole screen once scrolled to. Loading, failure and the empty
+state sit in the space below that header. "+ Add", or tapping a row, **swaps the
 tab's own content for the add/edit form** — the same in-place pattern as "+ Invite" on the
 Manage tab, not a sheet sliding up over it: the banner and tabs stay, and picking another
 tab leaves it. A suggested reimbursement from the Balances tab opens the same form the same
