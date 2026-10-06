@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 
 import type { Database, DatabaseTransaction } from '../../db/client.js';
 import { invites, type InviteRow } from '../../db/schema.js';
@@ -33,6 +33,8 @@ export interface InvitesRepository {
    */
   replaceActive(input: InsertInviteInput, at: Date): Promise<InviteRow>;
   revokeActive(target: InviteTarget, at: Date): Promise<void>;
+  /** Delete the invitations revoked, or expired, before `before`; returns how many. */
+  deleteStale(before: Date): Promise<number>;
 }
 
 /** The columns identifying the invitations of one target. */
@@ -106,6 +108,14 @@ export function createInvitesRepository(db: Database): InvitesRepository {
         .update(invites)
         .set({ revokedAt: at })
         .where(and(matchesTarget(target), isNull(invites.revokedAt)));
+    },
+
+    async deleteStale(before) {
+      const deleted = await db
+        .delete(invites)
+        .where(or(lt(invites.revokedAt, before), lt(invites.expiresAt, before)))
+        .returning({ id: invites.id });
+      return deleted.length;
     },
   };
 }

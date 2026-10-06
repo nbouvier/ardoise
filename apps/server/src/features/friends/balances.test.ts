@@ -1,3 +1,4 @@
+import { MAX_TRANSACTION_AMOUNT_CENTS } from '@ardoise/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -147,6 +148,25 @@ describe('friend balances', () => {
     await befriend(ada, grace);
 
     expect(await balanceOf(ada, grace.userId)).toBe(0);
+  });
+
+  it('adds up beyond the 32-bit integer range (over 21 million euros)', async () => {
+    const ada = await signIn('ada');
+    const grace = await signIn('grace');
+    await befriend(ada, grace);
+    const group = await createdGroup(ada, 'Big spenders', [grace.userId]);
+    const count = 22;
+    for (let i = 0; i < count; i += 1) {
+      await createdTx(ada, group.id, equalExpense(ada, MAX_TRANSACTION_AMOUNT_CENTS, [grace.userId]));
+    }
+    const total = count * MAX_TRANSACTION_AMOUNT_CENTS;
+    expect(total).toBeGreaterThan(2 ** 31);
+
+    expect(await balanceOf(ada, grace.userId)).toBe(total);
+    const groups = (
+      await app.inject({ method: 'GET', url: '/groups', headers: ada.headers })
+    ).json().groups as { id: string; viewerBalanceCents: number }[];
+    expect(groups.find((entry) => entry.id === group.id)?.viewerBalanceCents).toBe(total);
   });
 
   it('has each side owing the other the exact opposite', async () => {

@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import type { AuthSession } from '@ardoise/shared';
 
 import {
+  apiRequest,
   authenticateWithGoogle,
   fetchMe,
   refreshSession,
+  REQUEST_TIMEOUT_MS,
   revokeSession,
 } from './endpoints';
 import { ApiError, NetworkError } from './errors';
@@ -68,6 +70,31 @@ describe('authenticateWithGoogle', () => {
       .mockRejectedValue(new TypeError('Network request failed'));
 
     await expect(authenticateWithGoogle(BASE_URL, 'x')).rejects.toBeInstanceOf(NetworkError);
+  });
+});
+
+describe('apiRequest', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('gives up with NetworkError when the server does not answer in time', async () => {
+    jest.useFakeTimers();
+    // A server that never answers: the request only ends when it is aborted.
+    globalThis.fetch = jest.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+        }),
+    );
+
+    const request = apiRequest(BASE_URL, { method: 'GET', path: '/health' });
+    const outcome = expect(request).rejects.toBeInstanceOf(NetworkError);
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS - 1);
+    expect(jest.mocked(globalThis.fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+    jest.advanceTimersByTime(1);
+
+    await outcome;
   });
 });
 

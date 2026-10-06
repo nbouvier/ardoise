@@ -263,6 +263,9 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       // (`transactions_payer_id_idx`, `transaction_participants_user_id_idx`)
       // and merging two small maps is cheaper to read than a subquery.
       //
+      // The sums are `bigint` (sent as strings, hence `Number`): an `int`
+      // overflows past 2^31 cents, about 21 million euros in total.
+      //
       // Others (a `NULL` payer or participant) is never a counterparty: what
       // concerns people outside the group is settled outside the app. The
       // `<>` comparisons below would already drop a `NULL`, but by accident
@@ -275,7 +278,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       const owedToCaller = await db
         .select({
           counterpartyId: transactionParticipants.userId,
-          deltaCents: sql<number>`sum(${signedShare})::int`,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
         })
         .from(transactions)
         .innerJoin(
@@ -296,7 +299,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       const owedByCaller = await db
         .select({
           counterpartyId: transactions.payerId,
-          deltaCents: sql<number>`sum(${signedShare})::int`,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
         })
         .from(transactions)
         .innerJoin(
@@ -346,7 +349,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       const paid = await db
         .select({
           groupId: transactions.groupId,
-          deltaCents: sql<number>`sum(${signedShare})::int`,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
         })
         .from(transactions)
         .innerJoin(
@@ -370,7 +373,7 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       const owed = await db
         .select({
           groupId: transactions.groupId,
-          deltaCents: sql<number>`sum(${signedShare})::int`,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
         })
         .from(transactions)
         .innerJoin(

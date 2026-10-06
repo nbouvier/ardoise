@@ -47,7 +47,18 @@ export interface InvitesService {
   /** What the code leads to. Unauthenticated; throws `InviteError` when unusable. */
   preview(code: string): Promise<InvitePreview>;
   accept(code: string, userId: string): Promise<AcceptInviteResult>;
+  /**
+   * Delete the invitations dead for over `STALE_INVITE_RETENTION_DAYS`;
+   * returns how many. Until then, an old link still says it expired.
+   */
+  purgeStale(): Promise<number>;
 }
+
+/**
+ * How long a revoked or expired invitation is kept: its link still answers
+ * "expired" (or "no longer valid") rather than "not found" for that long.
+ */
+export const STALE_INVITE_RETENTION_DAYS = 30;
 
 export interface InvitesServiceDeps {
   repository: InvitesRepository;
@@ -131,6 +142,11 @@ export function createInvitesService(deps: InvitesServiceDeps): InvitesService {
     async accept(code, userId) {
       const { handler, ...context } = await resolve(code);
       return handler.accept(context, userId);
+    },
+
+    purgeStale() {
+      const retentionMs = STALE_INVITE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+      return repository.deleteStale(new Date(now().getTime() - retentionMs));
     },
   };
 }

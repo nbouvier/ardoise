@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { env, type TrustProxy } from './config/env.js';
 import { dbPlugin, type DbPluginOptions } from './db/plugin.js';
+import { redactUrl } from './error-reporting.js';
 import { accountPlugin, type AccountPluginOptions } from './features/account/plugin.js';
 import { authPlugin, type AuthPluginOptions } from './features/auth/plugin.js';
 import { friendsPlugin } from './features/friends/plugin.js';
@@ -67,10 +68,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       serializers: {
         // Fastify's default also logs the client's address and port: the logs
         // keep no IP address (`docs/specs/legal-pages.md`). Rate limiting still
-        // keys on it, in memory only.
+        // keys on it, in memory only. An invitation code in the URL is a bearer
+        // secret (anyone holding it can join): it is masked, as for Sentry.
         req: (request: { method: string; url: string }) => ({
           method: request.method,
-          url: request.url,
+          url: redactUrl(request.url),
         }),
       },
     },
