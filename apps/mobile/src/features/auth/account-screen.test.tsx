@@ -39,6 +39,11 @@ jest.mock('expo-web-browser', () => ({
   WebBrowserPresentationStyle: { AUTOMATIC: 'automatic' },
 }));
 
+// Its wording has its own tests; here only that the Account page shows it.
+jest.mock('@/lib/app-version', () => ({
+  appVersionLabel: () => 'Version 1.0.0 · staging · update 0123abcd',
+}));
+
 beforeEach(() => {
   mockOpenBrowser.mockReset().mockResolvedValue({ type: 'dismiss' });
   mockSignOut.mockReset();
@@ -131,5 +136,11 @@ describe('AccountScreen', () => {
 
     // No `?lang`: the server answers in the browser's language.
     expect(mockOpenBrowser).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^https?://[^/]+${path}$`)));
+  });
+
+  it('says which version and update the app is running', async () => {
+    await render(<AccountScreen />);
+
+    expect(screen.getByText('Version 1.0.0 · staging · update 0123abcd')).toBeTruthy();
   });
 });

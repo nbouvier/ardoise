@@ -375,6 +375,11 @@ Then a **Legal** section: an `overline` and three `MenuRow`s in the ink colour �
 **Privacy policy**, `document` **Terms of use**, `info` **Legal notice** — each opening the
 server's page in the in-app browser, in the device's language (French or English).
 
+Last, a centred `small` line in the secondary colour saying what the app runs: "Version
+1.0.0 · staging · update 0123abcd" (`built-in` before any over-the-air update,
+`development` for a local build), from `src/lib/app-version.ts`. It is how a tester tells
+whether an update reached the phone.
+
 ### Delete account (`src/features/auth/delete-account-screen.tsx`)
 
 A `DismissiblePage` like "New friend": `ScreenHeader` "Delete account" with `wash` and the

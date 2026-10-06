@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { appVersionLabel } from '@/lib/app-version';
 import { errorFields, logger } from '@/lib/logger';
 
 import { DeleteAccountScreen } from './delete-account-screen';
@@ -105,6 +106,10 @@ export function AccountScreen() {
             />
           ))}
         </View>
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
+          {appVersionLabel()}
+        </ThemedText>
       </SafeAreaView>
 
       <SheetModal visible={deleting} onClose={() => setDeleting(false)}>
@@ -172,5 +177,8 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
+  },
+  version: {
+    textAlign: 'center',
   },
 });

@@ -232,6 +232,11 @@ release is a separate, manual process (see "Distribution notes").
    build's page on expo.dev, sign in. Then an `update` / `staging` with a visible change, to
    see it arrive after an app restart.
 
+The bottom of the Account screen says what a phone runs: version, channel, and `built-in`
+or the start of the update's id (as listed in expo.dev → Updates). An update is downloaded
+when the app starts and applied at the **next** start: close the app completely and open it
+twice.
+
 ### Distribution notes
 
 - **Play Store**: one-time registration fee (US$25). A *personal* developer account created
