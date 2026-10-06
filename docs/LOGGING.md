@@ -31,7 +31,7 @@ Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 | Event                   | Level | Fields                       | Meaning |
 | ----------------------- | ----- | ---------------------------- | ------- |
 | `http.request.failed`   | error | `error` (`type`, `message`, `code`, `stack`) | A request ended in an unhandled error; the client got `{ "error": "internal_error" }`. Also reported to Sentry; the log line and the issue are the only places the cause is visible. |
-| `http.request.rejected` | info  | `status`, `code`             | A request was refused before or outside a route's own handling: malformed JSON, body too large, unsupported content type, or `429` for rate limiting (`status: 429`). A burst of 429s on `/auth/*` is how abuse shows up. |
+| `http.request.rejected` | info  | `status`, `code`             | A request was refused before or outside a route's own handling: malformed JSON, body too large, unsupported content type, a body or parameter its schema refuses (`code: invalid_request`), or `429` for rate limiting (`status: 429`). A burst of 429s on `/auth/*` is how abuse shows up. |
 
 Request lines (`incoming request` / `request completed`) carry `req: { method, url }`
 only: Fastify's default serializer, which also logs the client's address and port, is

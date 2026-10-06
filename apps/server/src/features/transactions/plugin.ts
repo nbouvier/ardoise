@@ -5,11 +5,11 @@ import {
   updateTransactionRequestSchema,
   DEFAULT_RECENT_TRANSACTIONS,
 } from '@ardoise/shared';
-import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
-import { translateGroupAccessError } from '../groups/http.js';
+import { parseRequest } from '../../http/validation.js';
+import { createGroupRoutes } from '../groups/http.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { TransactionError, type TransactionErrorReason } from './errors.js';
@@ -64,64 +64,18 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
 
     app.decorate('transactions', transactions);
 
-    /**
-     * Turn a refusal into its HTTP answer. Shared with `groups`' own mapping
-     * for the membership/archived cases, so a non-member or an archived group
-     * refuses a transaction route exactly the way it refuses any other.
-     */
-    function replyRefused(
-      reply: FastifyReply,
-      error: unknown,
-      userId: string | undefined,
-      groupId: string,
-    ): FastifyReply {
-      const groupFailure = translateGroupAccessError(error);
-      if (groupFailure) {
-        app.log.info(
-          { userId, groupId, reason: groupFailure.reason },
-          'groups.access.refused',
-        );
-        return reply.code(groupFailure.status).send({ error: groupFailure.error });
-      }
-      if (error instanceof TransactionError) {
-        const { status, error: code } = transactionFailures[error.reason];
-        app.log.info(
-          { userId, groupId, reason: error.reason },
-          'transactions.access.refused',
-        );
-        return reply.code(status).send({ error: code });
-      }
-      throw error;
-    }
-
-    function route<Params extends { groupId: string }>(
-      schema: z.ZodType<Params>,
-      handler: (args: {
-        params: Params;
-        userId: string;
-        reply: FastifyReply;
-        body: unknown;
-        query: unknown;
-      }) => Promise<unknown>,
-    ) {
-      return async (request: FastifyRequest, reply: FastifyReply) => {
-        const params = schema.safeParse(request.params);
-        if (!params.success) {
-          return reply.code(404).send({ error: 'group_not_found' });
-        }
-        try {
-          return await handler({
-            params: params.data,
-            userId: request.userId!,
-            reply,
-            body: request.body,
-            query: request.query,
-          });
-        } catch (error) {
-          return replyRefused(reply, error, request.userId, params.data.groupId);
-        }
-      };
-    }
+    // Group refusals are shared with `groups`' own mapping, so a non-member or
+    // an archived group refuses a transaction route exactly the way it
+    // refuses any other.
+    const { route } = createGroupRoutes(app.log, (error) =>
+      error instanceof TransactionError
+        ? {
+            ...transactionFailures[error.reason],
+            reason: error.reason,
+            event: 'transactions.access.refused',
+          }
+        : undefined,
+    );
 
     const authenticated = { preHandler: app.authenticate };
 
@@ -171,11 +125,8 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
       '/groups/:groupId/transactions',
       authenticated,
       route(groupParamsSchema, async ({ params, userId, reply, body }) => {
-        const parsed = createTransactionRequestSchema.safeParse(body);
-        if (!parsed.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
-        const transaction = await transactions.create(userId, params.groupId, parsed.data);
+        const input = parseRequest(createTransactionRequestSchema, body);
+        const transaction = await transactions.create(userId, params.groupId, input);
         app.log.info(
           {
             userId,
@@ -205,15 +156,11 @@ export const transactionsPlugin = fp<TransactionsPluginOptions>(
       '/groups/:groupId/transactions/:transactionId',
       authenticated,
       route(transactionParamsSchema, async ({ params, userId, reply, body }) => {
-        const parsed = updateTransactionRequestSchema.safeParse(body);
-        if (!parsed.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
         const transaction = await transactions.update(
           userId,
           params.groupId,
           params.transactionId,
-          parsed.data,
+          parseRequest(updateTransactionRequestSchema, body),
         );
         app.log.info(
           { userId, groupId: params.groupId, transactionId: transaction.id },

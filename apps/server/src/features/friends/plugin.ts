@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { parseRequest } from '../../http/validation.js';
 import { createGroupsRepository, ensurePairGroup } from '../groups/repository.js';
 import { createPairTreeSettlement } from '../groups/settlement.js';
 import { createTransactionsRepository } from '../transactions/repository.js';
@@ -77,12 +78,9 @@ export const friendsPlugin = fp(
       '/friends/:friendId',
       { preHandler: app.authenticate },
       async (request, reply) => {
-        const params = friendParamsSchema.safeParse(request.params);
-        if (!params.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
+        const { friendId } = parseRequest(friendParamsSchema, request.params);
         try {
-          await friends.removeFriend(request.userId!, params.data.friendId);
+          await friends.removeFriend(request.userId!, friendId);
         } catch (error) {
           if (error instanceof FriendRemovalError) {
             app.log.info({ userId: request.userId, reason: error.reason }, 'friends.remove.refused');

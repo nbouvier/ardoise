@@ -1,3 +1,6 @@
+import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify';
+import type { z } from 'zod';
+
 import { GroupAccessError, type GroupAccessReason } from './membership.js';
 
 /**
@@ -42,4 +45,76 @@ export function translateGroupAccessError(error: unknown): GroupAccessFailure | 
     return undefined;
   }
   return { ...groupAccessFailures[error.reason], reason: error.reason };
+}
+
+/** A feature's own refusal, answered like a group one and logged as `event`. */
+export interface FeatureFailure {
+  status: number;
+  error: string;
+  reason: string;
+  event: string;
+}
+
+export interface GroupRouteArgs<Params> {
+  params: Params;
+  userId: string;
+  reply: FastifyReply;
+  body: unknown;
+  query: unknown;
+}
+
+/**
+ * What every group-scoped route shares: validate the params, act, and
+ * translate a refusal — group ones always, and the feature's own through
+ * `translateOwn`. Factored so no route can forget the translation and leak a
+ * 500 — or, worse, answer a non-member with a 403. Refusals are logged with
+ * their reason: a spike means either a bug or someone probing.
+ */
+export function createGroupRoutes(
+  log: FastifyBaseLogger,
+  translateOwn: (error: unknown) => FeatureFailure | undefined = () => undefined,
+) {
+  function replyRefused(
+    reply: FastifyReply,
+    error: unknown,
+    context: { userId: string | undefined; groupId?: string },
+  ): FastifyReply {
+    const groupFailure = translateGroupAccessError(error);
+    const failure = groupFailure
+      ? { ...groupFailure, event: 'groups.access.refused' }
+      : translateOwn(error);
+    if (!failure) {
+      throw error;
+    }
+    log.info({ ...context, reason: failure.reason }, failure.event);
+    return reply.code(failure.status).send({ error: failure.error });
+  }
+
+  function route<Params extends { groupId: string }>(
+    schema: z.ZodType<Params>,
+    handler: (args: GroupRouteArgs<Params>) => Promise<unknown>,
+  ) {
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+      const params = schema.safeParse(request.params);
+      if (!params.success) {
+        return reply.code(404).send({ error: 'group_not_found' });
+      }
+      try {
+        return await handler({
+          params: params.data,
+          userId: request.userId!,
+          reply,
+          body: request.body,
+          query: request.query,
+        });
+      } catch (error) {
+        return replyRefused(reply, error, {
+          userId: request.userId,
+          groupId: params.data.groupId,
+        });
+      }
+    };
+  }
+
+  return { route, replyRefused };
 }
