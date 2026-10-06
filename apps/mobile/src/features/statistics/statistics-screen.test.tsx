@@ -221,6 +221,63 @@ describe('StatisticsScreen', () => {
     expect(screen.getByRole('button', { name: 'Participants: Ada' })).toBeTruthy();
   });
 
+  describe('when the group changes while the screen stays mounted', () => {
+    const alan = { id: 'alan', name: 'Alan Turing', picture: null, role: 'member' as const };
+
+    it('keeps “Everybody” meaning everybody when a member joins', async () => {
+      const { rerender } = await renderScreen([
+        transaction({ category: 'restaurant', amountCents: 3000, shares: { ada: 1000, grace: 2000 } }),
+      ]);
+      await screen.findByTestId('statistics-centre-amount');
+
+      await rerender(
+        <StatisticsScreen groupId="group-1" subgroups={[]} members={[...members, alan]} viewerId={ada.id} />,
+      );
+
+      await openMoreOptions();
+      expect(screen.getByRole('button', { name: 'Participants: Everybody' })).toBeTruthy();
+      await fireEvent.press(screen.getByRole('button', { name: 'Participants: Everybody' }));
+      expect(screen.getByRole('checkbox', { name: 'Alan Turing' }).props.accessibilityState).toMatchObject({
+        checked: true,
+      });
+    });
+
+    it('leaves a newly joined member out of a hand-picked selection', async () => {
+      const { rerender } = await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
+      await screen.findByTestId('statistics-centre-amount');
+      await openMoreOptions();
+      await fireEvent.press(screen.getByRole('button', { name: 'Participants: Everybody' }));
+      await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
+
+      await rerender(
+        <StatisticsScreen groupId="group-1" subgroups={[]} members={[...members, alan]} viewerId={ada.id} />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'Alan Turing' }).props.accessibilityState).toMatchObject({
+        checked: false,
+      });
+      expect(screen.getByRole('button', { name: 'Participants: Ada' })).toBeTruthy();
+    });
+
+    it('includes a sub-group created after the screen opened, while all are selected', async () => {
+      mockFetchTransactions.mockResolvedValue({
+        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
+        excludedSubgroupCount: 0,
+      });
+      const { rerender } = await render(
+        <StatisticsScreen groupId="group-1" subgroups={[subOne]} members={members} viewerId={ada.id} />,
+      );
+      await screen.findByTestId('statistics-centre-amount');
+
+      await rerender(
+        <StatisticsScreen groupId="group-1" subgroups={[subOne, subTwo]} members={members} viewerId={ada.id} />,
+      );
+
+      await openMoreOptions();
+      expect(screen.getByRole('button', { name: 'Subgroups: All' })).toBeTruthy();
+    });
+  });
+
   it('opens the participants as a dropdown over the chart, which stays open while ticking', async () => {
     await renderScreen([transaction({ category: 'groceries', amountCents: 3000 })]);
     await screen.findByTestId('statistics-centre-amount');
