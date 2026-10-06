@@ -9,7 +9,7 @@ import {
   type TransactionCategory,
   type TransactionKind,
 } from '@ardoise/shared';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -29,7 +29,7 @@ import { CategoryPicker } from './category-picker';
 import { DatePickerField } from './date-picker-field';
 import { MemberDropdownField, type PartyChoice } from './member-dropdown-field';
 import { SplitEditor } from './split-editor';
-import { splitFrom } from './transaction-request';
+import { formParties, splitFrom } from './transaction-request';
 
 /**
  * A new transaction's starting values, for a caller that already knows what
@@ -89,7 +89,9 @@ export function TransactionFormScreen({
 }: TransactionFormScreenProps) {
   const { authorizedFetch } = useAuth();
   const theme = useTheme();
-  const members = group.members;
+  // Includes anyone the edited transaction names who has left the group
+  // since: hidden, they would still be sent, and the edit refused.
+  const members = useMemo(() => formParties(group.members, initial), [group.members, initial]);
   // Editing wins over a pre-fill: an existing transaction's own values are
   // the only sensible starting point for it.
   const start = initial ? undefined : prefill;
