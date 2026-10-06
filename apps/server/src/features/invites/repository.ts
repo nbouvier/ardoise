@@ -1,6 +1,6 @@
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 
-import type { Database } from '../../db/client.js';
+import type { Database, DatabaseTransaction } from '../../db/client.js';
 import { invites, type InviteRow } from '../../db/schema.js';
 
 /**
@@ -20,10 +20,18 @@ export interface InsertInviteInput {
 }
 
 export interface InvitesRepository {
-  /** The target's usable invitation (not revoked, not expired), if any. */
-  findActive(target: InviteTarget, now: Date): Promise<InviteRow | undefined>;
+  /**
+   * The target's usable invitation (not revoked, not expired), inserting
+   * `input` when there is none. Concurrent calls for one target all get the
+   * same invitation.
+   */
+  findOrInsertActive(input: InsertInviteInput, now: Date): Promise<InviteRow>;
   findByCode(code: string): Promise<InviteRow | undefined>;
-  insert(input: InsertInviteInput): Promise<InviteRow>;
+  /**
+   * Revoke the target's invitations and insert `input`. Concurrent calls for
+   * one target leave exactly one usable invitation.
+   */
+  replaceActive(input: InsertInviteInput, at: Date): Promise<InviteRow>;
   revokeActive(target: InviteTarget, at: Date): Promise<void>;
 }
 
@@ -34,20 +42,47 @@ function matchesTarget(target: InviteTarget) {
     : and(eq(invites.kind, 'group'), eq(invites.groupId, target.groupId));
 }
 
+/**
+ * Serialise the writes to one target's invitations until `tx` ends: without
+ * it, two concurrent requests both find no active invitation (or both revoke
+ * the same one) and each inserts its own, leaving two usable links.
+ */
+async function lockTarget(tx: DatabaseTransaction, target: InviteTarget): Promise<void> {
+  const key = target.kind === 'friend' ? target.inviterId : target.groupId;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invite:${target.kind}:${key}`}))`);
+}
+
+async function insertInvite(tx: DatabaseTransaction, input: InsertInviteInput): Promise<InviteRow> {
+  const [row] = await tx
+    .insert(invites)
+    .values({
+      kind: input.target.kind,
+      inviterId: input.inviterId,
+      groupId: input.target.kind === 'group' ? input.target.groupId : null,
+      code: input.code,
+      expiresAt: input.expiresAt,
+    })
+    .returning();
+  return row!;
+}
+
 export function createInvitesRepository(db: Database): InvitesRepository {
   return {
-    async findActive(target, now) {
-      const [row] = await db
-        .select()
-        .from(invites)
-        .where(
-          and(
-            matchesTarget(target),
-            isNull(invites.revokedAt),
-            gt(invites.expiresAt, now),
-          ),
-        );
-      return row;
+    async findOrInsertActive(input, now) {
+      return db.transaction(async (tx) => {
+        await lockTarget(tx, input.target);
+        const [active] = await tx
+          .select()
+          .from(invites)
+          .where(
+            and(
+              matchesTarget(input.target),
+              isNull(invites.revokedAt),
+              gt(invites.expiresAt, now),
+            ),
+          );
+        return active ?? insertInvite(tx, input);
+      });
     },
 
     async findByCode(code) {
@@ -55,18 +90,15 @@ export function createInvitesRepository(db: Database): InvitesRepository {
       return row;
     },
 
-    async insert(input) {
-      const [row] = await db
-        .insert(invites)
-        .values({
-          kind: input.target.kind,
-          inviterId: input.inviterId,
-          groupId: input.target.kind === 'group' ? input.target.groupId : null,
-          code: input.code,
-          expiresAt: input.expiresAt,
-        })
-        .returning();
-      return row!;
+    async replaceActive(input, at) {
+      return db.transaction(async (tx) => {
+        await lockTarget(tx, input.target);
+        await tx
+          .update(invites)
+          .set({ revokedAt: at })
+          .where(and(matchesTarget(input.target), isNull(invites.revokedAt)));
+        return insertInvite(tx, input);
+      });
     },
 
     async revokeActive(target, at) {

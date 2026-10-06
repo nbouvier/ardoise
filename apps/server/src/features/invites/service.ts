@@ -12,7 +12,7 @@ import type { UsersRepository } from '../users/repository.js';
 import { toUserSummary } from '../users/repository.js';
 
 import { assertInviteUsable, generateInviteCode, InviteError } from './codes.js';
-import type { InvitesRepository, InviteTarget } from './repository.js';
+import type { InsertInviteInput, InvitesRepository, InviteTarget } from './repository.js';
 
 /** A usable invitation together with the person who issued it. */
 export interface InviteContext {
@@ -77,14 +77,13 @@ export function createInvitesService(deps: InvitesServiceDeps): InvitesService {
     };
   }
 
-  async function create(target: InviteTarget, inviterId: string): Promise<Invite> {
-    const row = await repository.insert({
+  function newInvite(target: InviteTarget, inviterId: string): InsertInviteInput {
+    return {
       target,
       inviterId,
       code: generateInviteCode(),
       expiresAt: new Date(now().getTime() + ttlSeconds * 1000),
-    });
-    return toInvite(row);
+    };
   }
 
   /** Resolve a code into a usable invitation, its inviter, and its handler. */
@@ -113,13 +112,11 @@ export function createInvitesService(deps: InvitesServiceDeps): InvitesService {
     },
 
     async getOrCreate(target, inviterId) {
-      const existing = await repository.findActive(target, now());
-      return existing ? toInvite(existing) : create(target, inviterId);
+      return toInvite(await repository.findOrInsertActive(newInvite(target, inviterId), now()));
     },
 
     async rotate(target, inviterId) {
-      await repository.revokeActive(target, now());
-      return create(target, inviterId);
+      return toInvite(await repository.replaceActive(newInvite(target, inviterId), now()));
     },
 
     async revoke(target) {

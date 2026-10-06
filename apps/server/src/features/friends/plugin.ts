@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
-import { createGroupsRepository } from '../groups/repository.js';
+import { ensurePairGroup } from '../groups/repository.js';
 import { createTransactionsRepository } from '../transactions/repository.js';
 
 import { createFriendsRepository } from './repository.js';
@@ -37,12 +37,7 @@ export const friendsPlugin = fp(
     // Materialising the pair group is a repository-level concern (it already
     // knows how to do this idempotently, under a race), not a reason to
     // depend on the whole `groups` service.
-    const groupsRepository = createGroupsRepository(app.db);
-    const pairGroups: PairGroups = {
-      async ensure(friendshipId, pair) {
-        await groupsRepository.createPairGroup(friendshipId, pair);
-      },
-    };
+    const pairGroups: PairGroups = { ensure: ensurePairGroup };
 
     app.decorate('friends', friends);
     app.invites.register('friend', createFriendInviteHandler(repository, pairGroups));

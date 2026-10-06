@@ -10,11 +10,8 @@ import {
   type SQL,
 } from 'drizzle-orm';
 
-import type { Database } from '../../db/client.js';
+import type { DatabaseTransaction } from '../../db/client.js';
 import { transactionParticipants, transactions } from '../../db/schema.js';
-
-/** A database transaction, as `Database.transaction` hands it to its callback. */
-export type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export interface ReplacedParty {
   /** Transactions that named `from` and now name `to` instead. */

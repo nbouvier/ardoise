@@ -1,5 +1,6 @@
 import type { FriendEntry, Invite } from '@ardoise/shared';
 
+import type { DatabaseTransaction } from '../../db/client.js';
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
 import { toUserSummary } from '../users/repository.js';
@@ -79,7 +80,8 @@ export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
  * `CounterpartyBalances` above already uses.
  */
 export interface PairGroups {
-  ensure(friendshipId: string, pair: FriendshipPair): Promise<void>;
+  /** Runs in the transaction creating the friendship. */
+  ensure(tx: DatabaseTransaction, friendshipId: string, pair: FriendshipPair): Promise<void>;
 }
 
 /**
@@ -103,8 +105,11 @@ export function createFriendInviteHandler(
       }
 
       const pair = orderPair(invite.inviterId, userId);
-      const { row, created } = await repository.upsertFriendship(pair);
-      await pairGroups.ensure(row.id, pair);
+      // One transaction: a friendship without its pair group would be
+      // invisible (the friend list joins through the group) yet still exist.
+      const { created } = await repository.upsertFriendship(pair, (tx, row) =>
+        pairGroups.ensure(tx, row.id, pair),
+      );
 
       return { kind: 'friend', friend: inviter, alreadyFriends: !created };
     },
