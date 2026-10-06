@@ -38,6 +38,8 @@ export interface FriendsRepository {
   ): Promise<{ row: FriendshipRow; created: boolean }>;
   listFriends(userId: string): Promise<FriendRow[]>;
   deleteFriendship(pair: FriendshipPair): Promise<void>;
+  /** The pair group of the two, if they are friends. */
+  findPairGroupId(pair: FriendshipPair): Promise<string | undefined>;
 }
 
 /** Match the single row holding a pair, which is always stored canonically. */
@@ -94,6 +96,15 @@ export function createFriendsRepository(db: Database): FriendsRepository {
 
     async deleteFriendship(pair) {
       await db.delete(friendships).where(matchesPair(pair));
+    },
+
+    async findPairGroupId(pair) {
+      const [row] = await db
+        .select({ id: groups.id })
+        .from(friendships)
+        .innerJoin(groups, eq(groups.friendshipId, friendships.id))
+        .where(matchesPair(pair));
+      return row?.id;
     },
   };
 }

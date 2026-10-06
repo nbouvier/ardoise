@@ -61,4 +61,9 @@ export function registerErrorHandler(app: FastifyInstance): void {
       return reply.code(status >= 500 ? status : 500).send({ error: 'internal_error' });
     },
   );
+
+  // Fastify's default logs "Route GET:<url> not found" with the raw URL, which
+  // can carry an invitation code; the request log line already has the
+  // (redacted) URL and the 404.
+  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'route_not_found' }));
 }

@@ -1,13 +1,15 @@
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
-import { ensurePairGroup } from '../groups/repository.js';
+import { createGroupsRepository, ensurePairGroup } from '../groups/repository.js';
+import { createPairTreeSettlement } from '../groups/settlement.js';
 import { createTransactionsRepository } from '../transactions/repository.js';
 
 import { createFriendsRepository } from './repository.js';
 import {
   createFriendInviteHandler,
   createFriendsService,
+  FriendRemovalError,
   type FriendsService,
   type PairGroups,
 } from './service.js';
@@ -23,6 +25,8 @@ const friendParamsSchema = z.object({ friendId: z.uuid() });
 export const friendsPlugin = fp(
   async (app) => {
     const repository = createFriendsRepository(app.db);
+    const ledger = createTransactionsRepository(app.db);
+    const groupsRepository = createGroupsRepository(app.db);
     // A friend list is a list of balances as much as a list of people, so it
     // reads the ledger `transactions` owns — the same way `groups` reads
     // `friendships` directly. A repository, not the transactions service:
@@ -31,7 +35,8 @@ export const friendsPlugin = fp(
     const friends = createFriendsService({
       repository,
       invites: app.invites,
-      ledger: createTransactionsRepository(app.db),
+      ledger,
+      pairTrees: createPairTreeSettlement(groupsRepository, ledger),
     });
 
     // Materialising the pair group is a repository-level concern (it already
@@ -76,7 +81,15 @@ export const friendsPlugin = fp(
         if (!params.success) {
           return reply.code(400).send({ error: 'invalid_request' });
         }
-        await friends.removeFriend(request.userId!, params.data.friendId);
+        try {
+          await friends.removeFriend(request.userId!, params.data.friendId);
+        } catch (error) {
+          if (error instanceof FriendRemovalError) {
+            app.log.info({ userId: request.userId, reason: error.reason }, 'friends.remove.refused');
+            return reply.code(409).send({ error: error.reason });
+          }
+          throw error;
+        }
         // Destructive beyond the relationship: the pair's group goes with it.
         app.log.info({ userId: request.userId }, 'friends.removed');
         return reply.code(204).send();

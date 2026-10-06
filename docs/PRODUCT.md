@@ -33,7 +33,8 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 - **Friends and invitations** — each user keeps a friend list, built by sharing an
   invitation link (copy or OS share sheet: SMS, mail, WhatsApp…). The link opens the app,
   prompts for Google sign-in if needed, and connects both people after an explicit
-  confirmation. See `docs/specs/friends-and-invitations.md`.
+  confirmation. Removing a friend deletes the group the two share, so it waits until
+  nothing is owed there. See `docs/specs/friends-and-invitations.md`.
 - **Groups** — named spaces that people belong to, and where transactions live. A user
   creates a group, adds friends to it, or shares an invitation link for anyone else.
   Groups can be archived (reversible, hidden behind a toggle in the list) or deleted

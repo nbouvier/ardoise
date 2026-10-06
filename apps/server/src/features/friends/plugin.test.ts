@@ -390,6 +390,90 @@ describe('friends routes', () => {
       expect((await listFriends(grace.headers)).json()).toEqual({ friends: [] });
     });
 
+    describe('while the two still owe each other', () => {
+      async function friendsWithPairGroup() {
+        const ada = await signIn('ada');
+        const grace = await signIn('grace');
+        const { invite } = (await createInvite(ada.headers)).json();
+        await accept(invite.code, grace.headers);
+        const pairGroupId = (await listFriends(ada.headers)).json().friends[0].groupId as string;
+        return { ada, grace, pairGroupId };
+      }
+
+      const transfer = (
+        headers: Record<string, string>,
+        groupId: string,
+        payerId: string,
+        toUserId: string,
+        amount: number,
+      ) =>
+        app.inject({
+          method: 'POST',
+          url: `/groups/${groupId}/transactions`,
+          headers,
+          payload: { kind: 'transfer', title: 'Lunch', amount, occurredOn: '2026-09-11', payerId, toUserId },
+        });
+
+      const removeFriend = (headers: Record<string, string>, friendId: string) =>
+        app.inject({ method: 'DELETE', url: `/friends/${friendId}`, headers });
+
+      it('refuses, and keeps both the friendship and the pair group', async () => {
+        const { ada, grace, pairGroupId } = await friendsWithPairGroup();
+        expect((await transfer(ada.headers, pairGroupId, ada.userId, grace.userId, 1500)).statusCode).toBe(201);
+
+        for (const [who, friendId] of [
+          [grace, ada.userId],
+          [ada, grace.userId],
+        ] as const) {
+          const response = await removeFriend(who.headers, friendId);
+          expect(response.statusCode).toBe(409);
+          expect(response.json()).toEqual({ error: 'balance_not_settled' });
+        }
+        expect((await listFriends(ada.headers)).json().friends).toHaveLength(1);
+      });
+
+      it('refuses for a balance in a sub-group of the pair group too', async () => {
+        const { ada, grace, pairGroupId } = await friendsWithPairGroup();
+        const sub = (
+          await app.inject({
+            method: 'POST',
+            url: '/groups',
+            headers: ada.headers,
+            payload: { name: 'Holidays', parentId: pairGroupId, memberIds: [grace.userId] },
+          })
+        ).json().group as { id: string };
+        expect((await transfer(ada.headers, sub.id, ada.userId, grace.userId, 700)).statusCode).toBe(201);
+
+        expect((await removeFriend(ada.headers, grace.userId)).json()).toEqual({
+          error: 'balance_not_settled',
+        });
+      });
+
+      it('allows it again once settled', async () => {
+        const { ada, grace, pairGroupId } = await friendsWithPairGroup();
+        await transfer(ada.headers, pairGroupId, ada.userId, grace.userId, 1500);
+        await transfer(grace.headers, pairGroupId, grace.userId, ada.userId, 1500);
+
+        expect((await removeFriend(ada.headers, grace.userId)).statusCode).toBe(204);
+        expect((await listFriends(ada.headers)).json()).toEqual({ friends: [] });
+      });
+
+      it('also refuses deleting the pair group directly', async () => {
+        const { ada, grace, pairGroupId } = await friendsWithPairGroup();
+        await transfer(ada.headers, pairGroupId, ada.userId, grace.userId, 1500);
+
+        const response = await app.inject({
+          method: 'DELETE',
+          url: `/groups/${pairGroupId}`,
+          headers: grace.headers,
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toEqual({ error: 'balance_not_settled' });
+        expect((await listFriends(ada.headers)).json().friends).toHaveLength(1);
+      });
+    });
+
     it('rejects a malformed friend id', async () => {
       const ada = await signIn('ada');
       const response = await app.inject({

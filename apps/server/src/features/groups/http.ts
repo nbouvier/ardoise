@@ -22,6 +22,7 @@ const groupAccessFailures: Record<GroupAccessReason, { status: number; error: st
   placeholder_not_found: { status: 404, error: 'placeholder_not_found' },
   placeholder_name_taken: { status: 409, error: 'placeholder_name_taken' },
   already_claimed: { status: 409, error: 'already_claimed' },
+  balance_not_settled: { status: 409, error: 'balance_not_settled' },
 };
 
 export interface GroupAccessFailure {

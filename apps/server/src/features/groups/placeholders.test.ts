@@ -571,5 +571,21 @@ describe('placeholder members', () => {
       const [kept] = await listTx(ada, corsica.id);
       expect(kept!.participants.some((share) => share.user?.id === alex)).toBe(true);
     });
+
+    it('can be removed by any member, not only the owner: it deletes no group', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const trip = await created(ada, { name: 'Trip', memberIds: [grace.userId], placeholderNames: ['Alex'] });
+      const alex = placeholderId(trip, 'Alex');
+      const corsica = await created(ada, {
+        name: 'Corsica',
+        parentId: trip.id,
+        memberIds: [grace.userId, alex],
+      });
+
+      expect((await removeMember(grace, corsica.id, alex)).statusCode).toBe(204);
+      expect((await removeMember(grace, trip.id, alex)).statusCode).toBe(204);
+    });
   });
 });

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { env } from '../../config/env.js';
 import { contentSecurityPolicyFor } from '../../http/html.js';
+import { schedulePeriodicTask } from '../../periodic-task.js';
 import { createUsersRepository } from '../users/repository.js';
 
 import { assetLinks, isAndroid, type AndroidApp } from './app-links.js';
@@ -78,6 +79,11 @@ export const invitesPlugin = fp<InvitesPluginOptions>(
       certFingerprints: env.ANDROID_CERT_FINGERPRINTS,
     };
     const publicBaseUrl = opts.publicBaseUrl ?? env.PUBLIC_BASE_URL;
+    schedulePeriodicTask(app, {
+      name: 'invites.purge',
+      intervalMs: 60 * 60 * 1000,
+      run: () => invites.purgeStale(),
+    });
 
     app.decorate('invites', invites);
 

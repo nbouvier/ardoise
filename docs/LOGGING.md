@@ -21,6 +21,8 @@ current setup and state.
 | `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
 | `auth.sessions.purge.done`     | info  | `count`       | The hourly clean-up deleted expired sessions (logged only when there were some) |
 | `auth.sessions.purge.failed`   | error | `error`       | The hourly clean-up failed (also reported); the next run tries again |
+| `invites.purge.done`           | info  | `count`       | The hourly clean-up deleted invitations dead for over 30 days (logged only when there were some) |
+| `invites.purge.failed`         | error | `error`       | The hourly invitation clean-up failed (also reported); the next run tries again |
 
 Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 
@@ -34,7 +36,11 @@ Never log tokens, ID tokens, authorization headers or the refresh-token hash.
 Request lines (`incoming request` / `request completed`) carry `req: { method, url }`
 only: Fastify's default serializer, which also logs the client's address and port, is
 replaced in `app.ts`. The logs keep no IP address — the privacy policy says so
-(`docs/specs/legal-pages.md`); rate limiting still keys on it, in memory.
+(`docs/specs/legal-pages.md`); rate limiting still keys on it, in memory. An invitation
+code in the URL is a bearer secret: `/invites/<code>` and `/i/<code>` are logged as
+`…/[code]` (the same `redactUrl` as for Sentry). An unknown route answers
+`404 { "error": "route_not_found" }` without Fastify's default "Route … not found" line,
+which quoted the raw URL.
 
 The error is logged as a plain `error` object rather than under pino's `err` key: that
 serializer copies every property, and a Postgres error's `detail` holds the offending
@@ -76,6 +82,7 @@ release, outside the server process, and logs JSON on stdout like the server doe
 | `transactions.access.refused` | info  | `userId`, `groupId`, `reason`                               | A transaction-specific refusal: `not_group_member` (payer/participant not in the group) or `invalid_split`. |
 | `transactions.created`        | info  | `userId`, `groupId`, `transactionId`, `kind`, `splitMode`, `participantCount` | A transaction was recorded. |
 | `transactions.updated`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was edited. |
+| `friends.remove.refused`      | info  | `userId`, `reason`                                          | Removing a friend was refused: `balance_not_settled` (something is still owed in the pair group or its sub-groups). |
 | `transactions.deleted`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was deleted. |
 | `groups.placeholder.claimed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsRewritten`, `transfersDeleted`, `membershipsGained` | A member said "This is me": the placeholder's transactions became theirs (`docs/specs/placeholder-members.md`). |
 | `groups.placeholder.removed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsAnonymised`, `transfersDeleted` | A placeholder was taken out of its tree; its part became Others. |
