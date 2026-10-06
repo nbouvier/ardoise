@@ -74,6 +74,11 @@ either Friends list, the group behind their row already exists.
   relationship disappears for both.
 - Removal is **destructive**: the group the two shared goes with the friendship, along
   with everything in it. The confirmation says so (`docs/specs/groups.md`).
+- So it is **refused while anything is still owed** in that group or any of its
+  sub-groups: every balance there must be zero. The app then says to settle up first
+  ("You and Ada still owe each other money in the group you share…"). Balances in other
+  groups the two share do not count: removal does not touch them. Deleting the pair group
+  directly is the same action and is refused the same way.
 - A removed friend may be re-added later with a new (or the same still-valid) link — but
   the shared group starts empty again.
 - Tapping a friend opens the group shared with them directly, by its already-known id
@@ -142,6 +147,8 @@ either Friends list, the group behind their row already exists.
 - [ ] Opening the link without the app shows a web page containing the invitation code that
       can be entered manually in the app to reach the same confirmation screen.
 - [ ] Removing a friend removes the relationship for both users.
+- [ ] Removing a friend, or deleting the pair group, is refused while any balance in the
+      pair group or its sub-groups is not zero, and the app asks to settle up first.
 - [ ] The public invitation preview never exposes the inviter's email address.
 - [ ] The implicit pair group exists as soon as the friendship does, on both sides, without
       either of them opening it first.

@@ -7,6 +7,7 @@ import {
   assertCanLeave,
   assertNotPairGroup,
   assertOwner,
+  assertCanRemoveOthers,
   assertRemovable,
   GroupAccessError,
 } from './membership.js';
@@ -82,6 +83,18 @@ describe('assertCanLeave', () => {
 
   it('lets the last member leave, which deletes the group', () => {
     expect(() => assertCanLeave('owner', 1)).not.toThrow();
+  });
+});
+
+describe('assertCanRemoveOthers', () => {
+  it('lets the owner remove someone else', () => {
+    expect(() => assertCanRemoveOthers('owner')).not.toThrow();
+  });
+
+  it('refuses a member', () => {
+    expect(() => assertCanRemoveOthers('member')).toThrow(
+      expect.objectContaining({ reason: 'not_owner' }),
+    );
   });
 });
 

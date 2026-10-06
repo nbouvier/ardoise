@@ -24,6 +24,11 @@ import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
 import { NewFriendScreen } from './new-friend-screen';
+import {
+  isUnsettledRemoval,
+  UNSETTLED_REMOVAL_TITLE,
+  unsettledRemovalMessage,
+} from './unsettled-removal';
 import { useFriends } from './use-friends';
 
 function FriendRow({
@@ -126,7 +131,11 @@ export function FriendsScreen() {
           .then(() => groupsChanged.notify())
           .catch((error: unknown) => {
             logger.warn('friends.remove.failed', errorFields(error));
-            inform('Could not remove', 'Please try again.');
+            if (isUnsettledRemoval(error)) {
+              inform(UNSETTLED_REMOVAL_TITLE, unsettledRemovalMessage(friend.name));
+            } else {
+              inform('Could not remove', 'Please try again.');
+            }
           });
       },
     });

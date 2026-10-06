@@ -3,6 +3,11 @@ import { useState, type ReactNode } from 'react';
 
 import { useDialog } from '@/components/use-dialog';
 import { useAuth } from '@/features/auth/use-auth';
+import {
+  isUnsettledRemoval,
+  UNSETTLED_REMOVAL_TITLE,
+  unsettledRemovalMessage,
+} from '@/features/friends/unsettled-removal';
 import { deleteGroup, removeGroupMember, updateGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -48,7 +53,12 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
       .then(() => groupsChanged.notify())
       .catch((error: unknown) => {
         logger.warn(`groups.${what}.failed`, errorFields(error));
-        inform('That didn’t work', 'Check your connection and try again.');
+        if (isUnsettledRemoval(error)) {
+          // Deleting a pair group is removing the friend it is named after.
+          inform(UNSETTLED_REMOVAL_TITLE, unsettledRemovalMessage(group.name));
+        } else {
+          inform('That didn’t work', 'Check your connection and try again.');
+        }
       })
       .finally(() => setBusyId(null));
   }

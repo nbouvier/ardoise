@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 
 import { groupsChanged } from '@/features/groups/groups-changed';
 import { pendingInvite } from '@/features/invites/pending-invite';
+import { ApiError } from '@/lib/api/errors';
 
 import { FriendsScreen } from './friends-screen';
 
@@ -198,6 +199,21 @@ describe('FriendsScreen', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(mockRemoveFriend).toHaveBeenCalledTimes(1));
+  });
+
+  it('asks to settle up first when the server refuses because something is still owed', async () => {
+    mockFetchFriends.mockResolvedValue([ada]);
+    mockRemoveFriend.mockRejectedValue(new ApiError(409, 'balance_not_settled'));
+    await render(<FriendsScreen />);
+    await screen.findByText('Ada Lovelace');
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Ada Lovelace' }));
+    await fireEvent.press(screen.getByText('Delete friend'));
+    await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(await screen.findByText('Settle up first')).toBeTruthy();
+    expect(screen.getByText(/You and Ada Lovelace still owe each other money/)).toBeTruthy();
+    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
   });
 
   it('toggles a friend’s favorite from their row', async () => {

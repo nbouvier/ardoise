@@ -82,6 +82,7 @@ release, outside the server process, and logs JSON on stdout like the server doe
 | `transactions.access.refused` | info  | `userId`, `groupId`, `reason`                               | A transaction-specific refusal: `not_group_member` (payer/participant not in the group) or `invalid_split`. |
 | `transactions.created`        | info  | `userId`, `groupId`, `transactionId`, `kind`, `splitMode`, `participantCount` | A transaction was recorded. |
 | `transactions.updated`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was edited. |
+| `friends.remove.refused`      | info  | `userId`, `reason`                                          | Removing a friend was refused: `balance_not_settled` (something is still owed in the pair group or its sub-groups). |
 | `transactions.deleted`        | info  | `userId`, `groupId`, `transactionId`                        | A transaction was deleted. |
 | `groups.placeholder.claimed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsRewritten`, `transfersDeleted`, `membershipsGained` | A member said "This is me": the placeholder's transactions became theirs (`docs/specs/placeholder-members.md`). |
 | `groups.placeholder.removed`  | info  | `userId`, `groupId`, `placeholderId`, `transactionsAnonymised`, `transfersDeleted` | A placeholder was taken out of its tree; its part became Others. |

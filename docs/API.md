@@ -302,7 +302,9 @@ Remove a friend. Symmetric and idempotent. Requires authentication. Response `20
 `400 { "error": "invalid_request" }` when `friendId` is not a UUID.
 
 **Destructive beyond the relationship**: the group the pair shared goes with the
-friendship, along with everything in it.
+friendship, along with everything in it. So it is refused with
+`409 { "error": "balance_not_settled" }` while any balance in that group or one of its
+sub-groups is not zero.
 
 ## Groups
 
@@ -445,7 +447,8 @@ Delete the group and everything in it. **Owner only**, irreversible. Response `2
 For the **implicit pair group**, this is the one exception to its usual immutability
 (`docs/specs/groups.md`): either of the two friends may delete it, since it has no owner,
 and doing so deletes the friendship itself — the same end state `DELETE /friends/:userId`
-reaches, just from the group's own side rather than the friend's.
+reaches, just from the group's own side rather than the friend's, refused the same way
+(`409 balance_not_settled`) while anything is owed in the pair group or its sub-groups.
 
 ### `POST /groups/:groupId/members`
 
@@ -472,6 +475,11 @@ A **placeholder removed from its tree's root** leaves the whole tree and is dele
 part in every transaction becomes Others, exactly as for a deleted account
 (`docs/specs/placeholder-members.md`). Removed from a sub-group, it is a member like any
 other: it leaves that branch and the transactions there keep naming it.
+
+**Only the owner removes someone else** with an account (`403 { "error":
+"not_group_owner" }` otherwise): the cascade above can delete sub-groups, with their
+transactions, that are not the caller's to delete. A placeholder deletes no group when it
+goes, so any member may remove one. Leaving stays open to everyone.
 
 The **owner cannot be removed** by another member: that would leave a group nobody is
 allowed to delete. They leave on their own terms, or delete it. The same refusal
