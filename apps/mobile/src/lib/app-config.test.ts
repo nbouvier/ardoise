@@ -28,14 +28,20 @@ describe('app.config', () => {
     delete process.env.APP_ID;
     delete process.env.APP_VARIANT;
     delete process.env.EAS_BUILD_PROFILE;
+    delete process.env.EXPO_PUBLIC_API_BASE_URL;
     delete process.env.SENTRY_DSN;
     delete process.env.SENTRY_ORG;
     delete process.env.SENTRY_PROJECT;
     delete process.env.SENTRY_URL;
   });
 
+  // Restored in place, never by replacing `process.env`: jest-expo rewrites reads of
+  // `EXPO_PUBLIC_*` variables to the object captured when the module loaded.
   afterEach(() => {
-    process.env = { ...saved };
+    for (const key of Object.keys(process.env)) {
+      if (!(key in saved)) delete process.env[key];
+    }
+    Object.assign(process.env, saved);
   });
 
   describe('application id', () => {
@@ -181,5 +187,29 @@ describe('app.config', () => {
     it('keeps the plugin, with nothing in it, outside a release build', () => {
       expect(sentryPlugin(resolve())).toEqual(['@sentry/react-native/expo', {}]);
     });
+  });
+
+  describe('App Links', () => {
+    it('lets invitation links on the API host open the app, verified by Android', () => {
+      process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.ardoise.test';
+
+      expect(resolve().android?.intentFilters).toEqual([
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [{ scheme: 'https', host: 'api.ardoise.test', pathPrefix: '/i/' }],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ]);
+    });
+
+    it.each(['http://localhost:3000', 'http://192.0.2.10:3000', 'https://localhost:8443'])(
+      'declares none for a local API (%s), which Android could never verify',
+      (url) => {
+        process.env.EXPO_PUBLIC_API_BASE_URL = url;
+
+        expect(resolve().android?.intentFilters).toEqual([]);
+      },
+    );
   });
 });

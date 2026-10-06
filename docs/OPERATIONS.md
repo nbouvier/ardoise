@@ -97,6 +97,10 @@ deploys the image staging already ran, it is never rebuilt.
    "Backups" below.
 9. **Error reporting** (optional, both environments): `SENTRY_DSN` in the `.env`, the
    same value for production and staging — see "Logs and monitoring" below.
+10. **Android App Links** (both environments): `ANDROID_APP_ID` (the staging variant's id
+    on staging) and `ANDROID_CERT_FINGERPRINTS` in the `.env`, then `./compose.sh up -d
+    server`. Check `https://<domain>/.well-known/assetlinks.json` answers. Not secrets
+    (every copy of the app carries them). See `docs/MOBILE.md`, "Deep links".
 
 The scripts (`deploy.sh`, `backup.sh`, `backup-offsite.sh`, `compose.sh`, `lib.sh`,
 `compose.yaml`) are **not**

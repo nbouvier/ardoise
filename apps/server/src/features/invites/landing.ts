@@ -26,6 +26,26 @@ export interface LandingLinks {
 export interface ValidLandingInput extends LandingLinks {
   preview: InvitePreview;
   code: string;
+  /**
+   * Set when the page is opened on Android and the deployment names its app: the
+   * app's id, and this page's own URL to come back to when it is not installed.
+   */
+  android?: { appId: string; pageUrl: string } | undefined;
+}
+
+/**
+ * Where "Open in Ardoise" leads. On Android, an intent naming the app: only Ardoise
+ * can receive the code, and Chrome comes back to this page when it is not installed.
+ * Elsewhere the `ardoise://` scheme, which any app on the device may have claimed.
+ */
+function appLink(code: string, android: ValidLandingInput['android']): string {
+  if (!android) {
+    return `${APP_SCHEME}://invite/${code}`;
+  }
+  return (
+    `intent://invite/${code}#Intent;scheme=${APP_SCHEME};package=${android.appId};` +
+    `S.browser_fallback_url=${encodeURIComponent(android.pageUrl)};end`
+  );
 }
 
 function storeLinks(links: LandingLinks): string {
@@ -58,21 +78,27 @@ export function describeInvite(preview: InvitePreview): { headline: string; blur
 export function renderInvitePage(input: ValidLandingInput): string {
   const { headline, blurb } = describeInvite(input.preview);
   const code = escapeHtml(input.code);
-  const deepLink = `${APP_SCHEME}://invite/${code}`;
+  const deepLink = appLink(input.code, input.android);
+
+  // Elsewhere, try the app straight away; the button stays as the fallback when the
+  // scheme is not registered. Not on Android: with the app installed and its links
+  // verified, this page is never shown, and the intent's way back when the app is
+  // missing is this very page — opening it on load would loop.
+  const autoOpen = input.android
+    ? ''
+    : `
+<script>
+  setTimeout(function () { window.location.href = ${JSON.stringify(deepLink)}; }, 100);
+</script>`;
 
   return page(
     headline,
     `<h1>${escapeHtml(headline)}</h1>
 <p>${escapeHtml(blurb)}</p>
-<a class="primary" href="${deepLink}">Open in Ardoise</a>
+<a class="primary" href="${escapeHtml(deepLink)}">Open in Ardoise</a>
 <p>Already installed the app? Enter this invitation code:</p>
 <code class="code">${code}</code>
-${storeLinks(input)}
-<script>
-  // Try the app straight away; the button above stays as the fallback when the
-  // scheme is not registered on this device.
-  setTimeout(function () { window.location.href = ${JSON.stringify(deepLink)}; }, 100);
-</script>`,
+${storeLinks(input)}${autoOpen}`,
   );
 }
 

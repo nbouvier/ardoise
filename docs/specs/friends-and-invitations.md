@@ -47,7 +47,10 @@ chore**.
 
 Opening the link:
 
-1. **The app is installed** — the link opens Ardoise directly.
+1. **The app is installed** — the link opens Ardoise directly. On Android it is a verified
+   App Link: only Ardoise receives it, never another app that claims the same URL scheme
+   (the code is a capability). Where the link still lands on the web page (some in-app
+   browsers), its **Open in Ardoise** button reaches Ardoise and only it.
 2. **The app is not installed** — a web page explains what Ardoise is, offers the app
    stores when they exist, and shows the **invitation code** so the person can enter it
    manually in the app after installing it.
@@ -84,9 +87,8 @@ either Friends list, the group behind their row already exists.
 
 ## Out of scope
 
-- Universal Links / App Links (real `https://` links that open the app natively). Requires a
-  domain and a store presence; the custom scheme plus a web landing page covers the current
-  need and the switch is additive.
+- iOS Universal Links: there is no iOS build yet. Android App Links are in place
+  (`docs/MOBILE.md`, "Deep links").
 - **Deferred deep linking** (automatically resuming the invitation after installing from a
   store). The manual code fallback stands in for it until the app ships to stores.
 - Finding friends by email, phone number, or from the device address book.

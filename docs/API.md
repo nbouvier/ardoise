@@ -219,10 +219,19 @@ Response `200`, discriminated on `kind`:
 
 ### `GET /i/:code`
 
-The public HTML page an invitation link points to. Not JSON: it tries to open
-`ardoise://invite/<code>`, and otherwise shows who is inviting (and which group, for a
-group invitation), the code to enter manually, and the store links when they are
-configured. Served with `Cache-Control: no-store`.
+The public HTML page an invitation link points to. Not JSON: it shows who is inviting (and
+which group, for a group invitation), the code to enter manually, the store links when they
+are configured, and an "Open in Ardoise" button. On Android, with `ANDROID_APP_ID` set, the
+button is an `intent://` naming the app; elsewhere the page opens `ardoise://invite/<code>`
+on load. Served with `Cache-Control: no-store`. See `docs/MOBILE.md`, "Deep links".
+
+### `GET /.well-known/assetlinks.json`
+
+The Digital Asset Links statement that lets the Android app open this host's invitation
+links (App Links): `[{ relation: ["delegate_permission/common.handle_all_urls"], target:
+{ namespace: "android_app", package_name, sha256_cert_fingerprints } }]`, from
+`ANDROID_APP_ID` and `ANDROID_CERT_FINGERPRINTS`. Only registered when both are set
+(otherwise `404`). `Cache-Control: public, max-age=3600`.
 
 ## Friends
 

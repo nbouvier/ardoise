@@ -50,6 +50,30 @@ function resolveAppId(config: Partial<ExpoConfig>): string {
 }
 
 /**
+ * Android App Links: invitation links (`https://<API host>/i/<code>`, built by the
+ * server from its public URL, which is the API's) open the app directly. `autoVerify`
+ * has Android check the host's `/.well-known/assetlinks.json`, so only this app — not
+ * whichever claims the `ardoise://` scheme — receives them. The host comes from the
+ * build's API URL, never from the repository; a local `http` API gets no filter.
+ */
+function appLinkFilters(
+  apiBaseUrl: string,
+): NonNullable<NonNullable<ExpoConfig['android']>['intentFilters']> {
+  const { protocol, hostname } = new URL(apiBaseUrl);
+  if (protocol !== 'https:' || hostname === 'localhost') {
+    return [];
+  }
+  return [
+    {
+      action: 'VIEW',
+      autoVerify: true,
+      data: [{ scheme: 'https', host: hostname, pathPrefix: '/i/' }],
+      category: ['BROWSABLE', 'DEFAULT'],
+    },
+  ];
+}
+
+/**
  * Sentry's config plugin, which uploads the JavaScript source maps and native debug
  * symbols of a release build so that reported stack traces are readable. Organization
  * and project come from `SENTRY_ORG` / `SENTRY_PROJECT` and the upload authenticates
@@ -66,7 +90,8 @@ function sentryPlugin(): [string, Record<string, string>] {
 
 /**
  * Layers environment-driven values onto the static config in `app.json`:
- * the application id and name (with the build's variant), the API base URL, the Google OAuth client IDs (not secret),
+ * the application id and name (with the build's variant), the API base URL and the App
+ * Links on its host, the Google OAuth client IDs (not secret),
  * the iOS URL scheme the Google SDK needs and the Sentry DSN (not secret either: it
  * only lets a client send reports). See `docs/MOBILE.md`.
  */
@@ -106,6 +131,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...config.android,
       package: appId,
+      intentFilters: [...(config.android?.intentFilters ?? []), ...appLinkFilters(apiBaseUrl)],
     },
     ios: {
       ...config.ios,
