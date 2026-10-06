@@ -1,6 +1,6 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 
-import type { Database } from '../../db/client.js';
+import type { Database, DatabaseTransaction } from '../../db/client.js';
 import {
   friendships,
   groupMembers,
@@ -28,7 +28,14 @@ export interface FriendRow {
 
 export interface FriendsRepository {
   /** Insert the pair, or do nothing when it already exists. Returns the row. */
-  upsertFriendship(pair: FriendshipPair): Promise<{ row: FriendshipRow; created: boolean }>;
+  /**
+   * The pair's friendship, inserted unless it exists, then `alongside` in the
+   * same transaction: if `alongside` fails, no new friendship is left behind.
+   */
+  upsertFriendship(
+    pair: FriendshipPair,
+    alongside: (tx: DatabaseTransaction, row: FriendshipRow) => Promise<void>,
+  ): Promise<{ row: FriendshipRow; created: boolean }>;
   listFriends(userId: string): Promise<FriendRow[]>;
   deleteFriendship(pair: FriendshipPair): Promise<void>;
 }
@@ -40,18 +47,20 @@ export function matchesPair(pair: FriendshipPair) {
 
 export function createFriendsRepository(db: Database): FriendsRepository {
   return {
-    async upsertFriendship(pair) {
-      const [inserted] = await db
-        .insert(friendships)
-        .values(pair)
-        .onConflictDoNothing()
-        .returning();
-      if (inserted) {
-        return { row: inserted, created: true };
-      }
-      // Lost the race (or already friends): the existing row is authoritative.
-      const [existing] = await db.select().from(friendships).where(matchesPair(pair));
-      return { row: existing!, created: false };
+    async upsertFriendship(pair, alongside) {
+      return db.transaction(async (tx) => {
+        const [inserted] = await tx
+          .insert(friendships)
+          .values(pair)
+          .onConflictDoNothing()
+          .returning();
+        // Lost the race (or already friends): the existing row is authoritative.
+        const [row] = inserted
+          ? [inserted]
+          : await tx.select().from(friendships).where(matchesPair(pair));
+        await alongside(tx, row!);
+        return { row: row!, created: Boolean(inserted) };
+      });
     },
 
     async listFriends(userId) {

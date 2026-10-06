@@ -18,6 +18,9 @@ import * as schema from './schema.js';
  */
 export type Database = NodePgDatabase<typeof schema>;
 
+/** A database transaction, as `Database.transaction` hands it to its callback. */
+export type DatabaseTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
 export interface DatabaseHandle {
   db: Database;
   dialect: 'pglite' | 'node-postgres';
