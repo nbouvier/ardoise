@@ -21,12 +21,14 @@ import {
   assertEffectivelyActive,
   assertNotPairGroup,
   assertOwner,
+  assertCanRemoveOthers,
   assertRemovable,
   assertWithinDepthLimit,
   GroupAccessError,
   isEffectivelyArchived,
   isPairRooted,
 } from './membership.js';
+import { createPairTreeSettlement } from './settlement.js';
 import type { ClaimedPlaceholder, GroupsRepository, MemberWithUser } from './repository.js';
 
 /**
@@ -247,6 +249,7 @@ async function assertNotPairRooted(repository: GroupsRepository, group: GroupRow
 
 export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const { repository, invites, ledger, now = () => new Date() } = deps;
+  const pairTrees = createPairTreeSettlement(repository, ledger);
 
   /**
    * A group's ancestors as a breadcrumb reads them, root first. Named the
@@ -634,7 +637,11 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         // refused: it reads as "remove this friend" from here, so either
         // side may do it, owner or not — the same friendship deletion "Remove
         // friend" already triggers, taking the group down with it through
-        // `groups_friendship_id_fkey` (`docs/specs/groups.md`).
+        // `groups_friendship_id_fkey` (`docs/specs/groups.md`). Like it, it
+        // waits until nobody in the pair tree owes anything.
+        if (!(await pairTrees.isSettled(userId, group.id))) {
+          throw new GroupAccessError('balance_not_settled');
+        }
         await repository.deleteFriendship(group.friendshipId!);
         return;
       }
@@ -686,6 +693,10 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           return { groupDeleted: false, removedFromDescendantCount: 0 };
         }
         assertRemovable(target.role as GroupRole);
+        const rootId = group.parentId === null ? group.id : await repository.findRootId(groupId);
+        if (!(await repository.findPlaceholder(rootId, targetId))) {
+          assertCanRemoveOthers(role);
+        }
       }
 
       // Cascading targetId out of groupId must not strand a sub-group only

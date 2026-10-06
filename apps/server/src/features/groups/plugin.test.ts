@@ -776,6 +776,32 @@ describe('groups routes', () => {
       expect((await getGroup(ada, group.id)).json().group.memberCount).toBe(2);
     });
 
+    it('refuses to let a member remove another member: only the owner can', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const group = await createdGroup(ada, 'Trip', [grace.userId, alan.userId]);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/groups/${group.id}/members/${alan.userId}`,
+        headers: grace.headers,
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: 'not_group_owner' });
+      expect((await getGroup(ada, group.id)).json().group.memberCount).toBe(3);
+
+      const byOwner = await app.inject({
+        method: 'DELETE',
+        url: `/groups/${group.id}/members/${alan.userId}`,
+        headers: ada.headers,
+      });
+      expect(byOwner.statusCode).toBe(204);
+    });
+
     it('treats removing someone who already left as a no-op', async () => {
       const ada = await signIn('ada');
       const grace = await signIn('grace');

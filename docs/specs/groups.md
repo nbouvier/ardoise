@@ -241,7 +241,8 @@ ever contain that friendship's own two people**, forever. Concretely:
 - **Deleting it directly does the same thing.** Unlike a standard group, it has no owner
   gating who may take this action — either of the two friends can — and doing so does not
   merely empty the shared space, it ends the friendship itself, exactly as if either side
-  had removed the other as a friend. The client's confirmation for this action reads as a
+  had removed the other as a friend — refused, like it, while anything is owed in the pair
+  group or its sub-groups. The client's confirmation for this action reads as a
   friend removal ("Remove so-and-so from your friends?"), not as a group deletion, since
   that is the loss it actually causes. This is the one operation on a pair group that is
   *not* refused as `pair_group_immutable` — see "Edge cases" above.
@@ -300,6 +301,11 @@ ever contain that friendship's own two people**, forever. Concretely:
 - **The owner trying to leave** with other members present, in this group or in a
   sub-group of it where they are the sole owner: refused with an explanation naming which
   group is the obstacle.
+- **A member trying to remove another member** with an account: refused — only the owner
+  removes people. Removing someone cascades down the tree and deletes any sub-group left
+  with no account in it, transactions included: in a member's hands that would delete
+  groups that are not theirs to delete. Removing a placeholder deletes no group, so any
+  member may (`docs/specs/placeholder-members.md`).
 - **A member trying to remove the owner**: refused. Otherwise the group would be left with
   nobody allowed to delete it.
 - **Removing someone who already left**: a no-op, not an error, at every level it would
@@ -367,6 +373,8 @@ ever contain that friendship's own two people**, forever. Concretely:
 - [ ] A member can leave a group; leaving removes them from every sub-group nested inside
       it too. The owner cannot leave while other members remain in the group **or in any
       sub-group they solely own**, and no member can remove the owner.
+- [ ] Only the owner can remove another member who has an account; any member can remove
+      a placeholder.
 - [ ] Tapping a friend in the friend list opens the group shared with that friend, showing
       their name, both members, no membership or invitation actions, and an ordinary
       sub-groups section.

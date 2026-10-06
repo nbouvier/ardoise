@@ -24,7 +24,8 @@ export type GroupAccessReason =
   | 'max_depth_reached'
   | 'placeholder_not_found'
   | 'placeholder_name_taken'
-  | 'already_claimed';
+  | 'already_claimed'
+  | 'balance_not_settled';
 
 export class GroupAccessError extends Error {
   constructor(readonly reason: GroupAccessReason) {
@@ -120,8 +121,21 @@ export function assertCanLeave(role: GroupRole, memberCount: number): void {
 }
 
 /**
- * Members may remove each other, but not the owner: that would leave a group
- * nobody is allowed to delete. The owner leaves on their own terms.
+ * Only the owner removes someone else who has an account: a removal cascades
+ * down the tree, and a sub-group left with no account in it is deleted with
+ * its transactions, so in a member's hands it would delete groups that are not
+ * theirs to delete. A placeholder never keeps a group alive, so removing one
+ * deletes nothing, and any member may (`docs/specs/placeholder-members.md`).
+ */
+export function assertCanRemoveOthers(role: GroupRole): void {
+  if (role !== 'owner') {
+    throw new GroupAccessError('not_owner');
+  }
+}
+
+/**
+ * Not even the owner can be removed: that would leave a group nobody is
+ * allowed to delete. The owner leaves on their own terms.
  */
 export function assertRemovable(targetRole: GroupRole): void {
   if (targetRole === 'owner') {

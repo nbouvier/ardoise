@@ -1,5 +1,6 @@
 import type { FriendEntry, Invite } from '@ardoise/shared';
 
+import type { PairTreeSettlement } from '../groups/settlement.js';
 import { InviteError } from '../invites/codes.js';
 import type { InviteHandler, InvitesService } from '../invites/service.js';
 import { toUserSummary } from '../users/repository.js';
@@ -16,7 +17,16 @@ export interface FriendsService {
   revokeInvite(userId: string): Promise<void>;
   /** The caller's friends, each with where the two of them stand. */
   listFriends(userId: string): Promise<FriendEntry[]>;
+  /** Throws `FriendRemovalError` while the two still owe each other in their pair tree. */
   removeFriend(userId: string, friendId: string): Promise<void>;
+}
+
+/** Why a friend cannot be removed (yet). */
+export class FriendRemovalError extends Error {
+  constructor(readonly reason: 'balance_not_settled') {
+    super(`Friend removal refused: ${reason}`);
+    this.name = 'FriendRemovalError';
+  }
 }
 
 /**
@@ -32,13 +42,14 @@ export interface FriendsServiceDeps {
   repository: FriendsRepository;
   invites: InvitesService;
   ledger: CounterpartyBalances;
+  pairTrees: PairTreeSettlement;
 }
 
 /** One active friend invitation per inviter — the link *is* "add me". */
 const targetFor = (userId: string) => ({ kind: 'friend' as const, inviterId: userId });
 
 export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
-  const { repository, invites, ledger } = deps;
+  const { repository, invites, ledger, pairTrees } = deps;
 
   return {
     getOrCreateInvite: (userId) => invites.getOrCreate(targetFor(userId), userId),
@@ -66,8 +77,14 @@ export function createFriendsService(deps: FriendsServiceDeps): FriendsService {
       if (userId === friendId) {
         return;
       }
-      // Cascades: the group the pair shared goes with the friendship.
-      await repository.deleteFriendship(orderPair(userId, friendId));
+      // Cascades: the group the pair shared goes with the friendship, so it
+      // waits until nothing is owed in it, sub-groups included.
+      const pair = orderPair(userId, friendId);
+      const pairGroupId = await repository.findPairGroupId(pair);
+      if (pairGroupId && !(await pairTrees.isSettled(userId, pairGroupId))) {
+        throw new FriendRemovalError('balance_not_settled');
+      }
+      await repository.deleteFriendship(pair);
     },
   };
 }
