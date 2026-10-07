@@ -77,6 +77,10 @@ services:
       LEGAL_HOST_NAME: ${LEGAL_HOST_NAME:?set LEGAL_HOST_NAME in .env}
       LEGAL_HOST_ADDRESS: ${LEGAL_HOST_ADDRESS:?set LEGAL_HOST_ADDRESS in .env}
       LEGAL_HOST_PHONE: ${LEGAL_HOST_PHONE:?set LEGAL_HOST_PHONE in .env}
+      # Sign-up and password-reset codes go out through Brevo (docs/DEPLOYMENT.md).
+      MAIL_TRANSPORT: brevo
+      BREVO_API_KEY: ${BREVO_API_KEY:?set BREVO_API_KEY in .env}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?set MAIL_FROM_ADDRESS in .env}
       # One proxy (Caddy, see proxy/) sits between the clients and the server.
       TRUST_PROXY: '1'
       # Error reports are filed under this environment's name (production / staging).
@@ -89,6 +93,7 @@ services:
       SENTRY_DSN:
       ANDROID_APP_ID:
       ANDROID_CERT_FINGERPRINTS:
+      MAIL_FROM_NAME:
     depends_on:
       db:
         condition: service_healthy

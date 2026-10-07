@@ -85,6 +85,20 @@
       "when": 1791206078358,
       "tag": "0011_placeholder_members",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791366029905,
+      "tag": "0012_password_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791366468451,
+      "tag": "0013_email_codes",
+      "breakpoints": true
     }
   ]
 }

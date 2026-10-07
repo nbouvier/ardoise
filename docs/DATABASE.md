@@ -56,8 +56,8 @@ npm run migrate --workspace @ardoise/server            # apply pending migration
 
 ### `users`
 
-A person a group can name: someone who has signed in with Google (`kind = 'account'`), or
-a **placeholder member** known by name only (`kind = 'placeholder'`,
+A person a group can name: an account someone signs in to, with Google, a password or
+both (`kind = 'account'`, `docs/specs/password-sign-in.md`), or a **placeholder member** known by name only (`kind = 'placeholder'`,
 `docs/specs/placeholder-members.md`).
 
 | Column                 | Type               | Notes                                                       |
@@ -65,7 +65,8 @@ a **placeholder member** known by name only (`kind = 'placeholder'`,
 | `id`                   | uuid PK            | `gen_random_uuid()`                                         |
 | `kind`                 | text               | `account` (default) or `placeholder`                        |
 | `google_sub`           | text, unique, null | Stable Google subject id; sign-in lookup. Accounts only     |
-| `email`                | text, null         | From the verified Google token. Accounts only               |
+| `email`                | text, null         | From the verified Google token, or proven by an e-mailed code. Accounts only; unique whatever its case |
+| `password_hash`        | text, null         | scrypt, self-describing (`features/auth/passwords.ts`); `NULL` without a password |
 | `name`                 | text               | From the verified Google token, or typed by a member        |
 | `picture`              | text, null         | Avatar URL, may be absent                                   |
 | `placeholder_group_id` | uuid FK, null      | → `groups.id`, `ON DELETE CASCADE`: a placeholder's tree root |
@@ -73,7 +74,10 @@ a **placeholder member** known by name only (`kind = 'placeholder'`,
 | `updated_at`           | timestamptz        | `now()`; refreshed on profile change or rename              |
 
 Constraints: `users_kind_valid`; `users_account_shape` — an account, and only an account,
-has a Google subject and an e-mail, so a placeholder can never be matched by a sign-in;
+has an e-mail and a way to sign in (a Google subject, a password hash or both), so a
+placeholder can never be matched by a sign-in; `users_email_unique` — a unique index on
+`lower(email)`: one address, one account, which is what lets Google and password
+sign-ins with the same address reach the same one;
 `users_placeholder_shape` — a placeholder, and only a placeholder, belongs to a group.
 `users_placeholder_name_unique` is a partial unique index on (`placeholder_group_id`,
 `lower(name)`) over placeholders: two placeholders of one tree never share a name.
@@ -106,7 +110,37 @@ Rotation is one transaction: `UPDATE … WHERE revoked_at IS NULL AND expires_at
 RETURNING user_id` claims the old row (a concurrent rotation of the same token matches
 nothing), then the new row is inserted. The server deletes **expired** rows every hour
 (`auth.sessions.purge`); revoked rows stay until they expire, since a revoked token coming
-back is what reveals a stolen one.
+back is what reveals a stolen one. Setting a new password **deletes** the user's other
+rows instead of revoking them: those tokens are then merely unknown, and the old device
+that presents one does not set off the theft response against the new session.
+
+### `email_codes`
+
+A 6-digit code e-mailed to prove control of an address, waiting to be entered
+(`docs/specs/password-sign-in.md`). One per address and purpose: asking again replaces it.
+
+| Column          | Type             | Notes                                                       |
+| --------------- | ---------------- | ----------------------------------------------------------- |
+| `id`            | uuid PK          | `gen_random_uuid()`                                         |
+| `purpose`       | text             | `signup` or `password_reset`                                |
+| `email`         | text             | Lowercased                                                  |
+| `user_id`       | uuid FK, null    | → `users.id`, `ON DELETE CASCADE`: the account the address had when the code was asked for |
+| `code_hash`     | text             | HMAC-SHA256 of the code with a key derived from `AUTH_JWT_SECRET`, bound to purpose and address; the code itself is never stored |
+| `attempts_left` | integer          | 5 at first; each try spends one before the code is checked  |
+| `name`          | text, null       | Sign-up only: the name the account will have                |
+| `password_hash` | text, null       | Sign-up only: the chosen password, already hashed           |
+| `expires_at`    | timestamptz      | 15 minutes after it was asked for                           |
+| `created_at`    | timestamptz      | `now()`; reset when a new code replaces the row            |
+
+Constraints: unique (`purpose`, `email`); `email_codes_purpose_valid`;
+`email_codes_attempts_non_negative`; `email_codes_signup_shape` — a sign-up code, and only
+one, carries a name and a password hash. Index: `email_codes_user_id_idx`.
+
+Entering a code is `UPDATE … SET attempts_left = attempts_left - 1 WHERE attempts_left > 0
+AND expires_at > now RETURNING *`: concurrent tries each spend their own attempt, so five
+is a hard limit. A right code is then deleted; of two requests with it, only the one that
+deletes the row goes on. The server deletes expired rows every hour
+(`auth.email_codes.purge`).
 
 ### `friendships`
 
@@ -366,7 +400,7 @@ accounts").
   inside it, at any depth, with their own memberships, invitations and transactions —
   through `groups.parent_id`'s own cascade, the same mechanism as every other cascade in
   this schema, not an application-level loop.
-- Deleting a **user** removes their sessions, friendships (and therefore their pair
+- Deleting a **user** removes their sessions, pending e-mail codes, friendships (and therefore their pair
   groups), memberships and the invitations they issued, and forgets them as the recorder
   of transactions. It is **refused** while a transaction still names them as payer or
   participant — see the note under `transaction_participants` above: account deletion
@@ -417,3 +451,9 @@ accounts").
   `group_members.claimed_placeholder_at`; `transactions.payer_id` and
   `transaction_participants.user_id` are recreated `DEFERRABLE INITIALLY DEFERRED` (edited
   in by hand, see above).
+- Migration `0012_*` — password accounts: `users.password_hash`, `users_account_shape`
+  accepts a password instead of a Google subject, and `users_email_unique`. The index
+  fails to build if two accounts already share an address in any case; nothing let that
+  happen in practice (one Google address is one Google account). The previous release
+  works on the new schema: it writes accounts with a Google subject, which still pass.
+- Migration `0013_*` — `email_codes`, a new table.

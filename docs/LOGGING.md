@@ -17,6 +17,21 @@ current setup and state.
 | ------------------------------ | ----- | ------------- | ---------------------------------------------- |
 | `auth.session.issued`          | info  | `userId`      | Sign-in succeeded, a session was created       |
 | `auth.google.verify.failed`    | warn  | `reason`      | Google rejected the ID token (categorised)     |
+| `auth.google.account_conflict` | warn  | `userId`      | A Google identity's address belongs to an account linked to another Google identity; refused (409) |
+| `auth.account.linked`          | info  | `userId`, `method` | A sign-in method was added to an existing account: `google` (by address) or `password` |
+| `auth.password.failed`         | info  | `reason`, `userId`? | A password sign-in did not match: `unknown_account`, `no_password` or `wrong_password` (`userId` when there is an account). Never the address or the password |
+| `auth.password.throttled`      | warn  | —             | An address used up its failed sign-ins for the window (429) |
+| `auth.account.created`         | info  | `userId`, `method` | A sign-up code created a password account |
+| `auth.password.reset`          | info  | `userId`      | A reset code set a new password; every other session ended |
+| `auth.password.changed`        | info  | `userId`      | The account's password was changed from the app; every other session ended |
+| `auth.password.change.refused` | info  | `userId`      | A password change gave a wrong current password, or the account has none (403) |
+| `auth.code.rejected`           | info  | `purpose`, `reason` | An e-mailed code was refused: `no_code` (none live: never sent, used, expired, out of attempts), `wrong_code`, `used`, `account_has_password`. Never the code or the address |
+| `auth.code.throttled`          | warn  | `purpose`     | An address asked for too many codes in the hour (429) |
+| `auth.mail.sent`               | info  | `purpose`     | The e-mail provider accepted a message (`signup`, `password_reset`) |
+| `auth.mail.failed`             | error | `purpose`, `status`, `error` | The provider refused (`status` is its HTTP status) or could not be reached (`null`); also reported. The request has already answered |
+| `auth.email_codes.purge.done`  | info  | `count`       | The hourly clean-up deleted expired e-mail codes (logged only when there were some) |
+| `auth.email_codes.purge.failed` | error | `error`      | That clean-up failed (also reported); the next run tries again |
+| `mail.logged`                  | info  | `to`, `subject`, `text` | **Development only** (`MAIL_TRANSPORT=log`): an e-mail written to the log instead of sent, code included. Refused in production |
 | `auth.session.refresh.reused`  | warn  | `userId`      | A revoked refresh token was presented (possible theft); every session of the user was revoked |
 | `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
 | `auth.sessions.purge.done`     | info  | `count`       | The hourly clean-up deleted expired sessions (logged only when there were some) |
@@ -24,7 +39,9 @@ current setup and state.
 | `invites.purge.done`           | info  | `count`       | The hourly clean-up deleted invitations dead for over 30 days (logged only when there were some) |
 | `invites.purge.failed`         | error | `error`       | The hourly invitation clean-up failed (also reported); the next run tries again |
 
-Never log tokens, ID tokens, authorization headers or the refresh-token hash.
+Never log tokens, ID tokens, authorization headers or the refresh-token hash. Nor
+passwords, e-mailed codes or the addresses they go to (`mail.logged`, development only,
+is the one exception, by design).
 
 ### HTTP events
 

@@ -24,10 +24,12 @@ import {
 /**
  * A person a group can name: payer, participant, member.
  *
- * `kind = 'account'` has signed in with Google, identified across sign-ins by
- * the stable Google subject id (`sub`); only the minimum profile fields are
- * stored. `kind = 'placeholder'` is a member known by name only, with no
- * Google identity and no e-mail, so nothing can ever sign in as it. It belongs
+ * `kind = 'account'` can sign in: with Google, identified across sign-ins by
+ * the stable Google subject id (`sub`), with a password, or both
+ * (`docs/specs/password-sign-in.md`). Its e-mail address is unique among
+ * accounts whatever its case; only the minimum profile fields are stored.
+ * `kind = 'placeholder'` is a member known by name only, with no Google
+ * identity, no password and no e-mail, so nothing can ever sign in as it. It belongs
  * to the root group of the tree it was created in, and goes with that group;
  * claiming it re-points everything that names it at an account and deletes it
  * (`docs/specs/placeholder-members.md`). Two placeholders of one tree never
@@ -42,6 +44,8 @@ export const users = pgTable(
     kind: text('kind').$type<'account' | 'placeholder'>().notNull().default('account'),
     googleSub: text('google_sub').unique(),
     email: text('email'),
+    /** scrypt hash (`features/auth/passwords.ts`); `NULL` for a Google-only account. */
+    passwordHash: text('password_hash'),
     name: text('name').notNull(),
     picture: text('picture'),
     placeholderGroupId: uuid('placeholder_group_id').references((): AnyPgColumn => groups.id, {
@@ -52,17 +56,19 @@ export const users = pgTable(
   },
   (table) => [
     check('users_kind_valid', sql`${table.kind} in ('account', 'placeholder')`),
-    // The two shapes are exclusive: an account has a Google identity and an
-    // e-mail and belongs to no group; a placeholder has neither and belongs
-    // to exactly one tree.
+    // The two shapes are exclusive: an account has an e-mail and a way to
+    // sign in (a Google identity, a password or both) and belongs to no group;
+    // a placeholder has none of them and belongs to exactly one tree.
     check(
       'users_account_shape',
-      sql`(${table.kind} = 'account') = (${table.googleSub} is not null and ${table.email} is not null)`,
+      sql`(${table.kind} = 'account') = (${table.email} is not null and (${table.googleSub} is not null or ${table.passwordHash} is not null))`,
     ),
     check(
       'users_placeholder_shape',
       sql`(${table.kind} = 'placeholder') = (${table.placeholderGroupId} is not null)`,
     ),
+    // One address, one account. Placeholders have none, and `NULL`s never collide.
+    uniqueIndex('users_email_unique').on(sql`lower(${table.email})`),
     uniqueIndex('users_placeholder_name_unique')
       .on(table.placeholderGroupId, sql`lower(${table.name})`)
       .where(sql`${table.kind} = 'placeholder'`),
@@ -90,6 +96,48 @@ export const sessions = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [index('sessions_user_id_idx').on(table.userId)],
+);
+
+/** What an e-mailed code proves the address for (`docs/specs/password-sign-in.md`). */
+export type EmailCodePurpose = 'signup' | 'password_reset';
+
+/**
+ * A 6-digit code e-mailed to prove control of an address, waiting to be
+ * entered. One per address and purpose: asking again replaces it. Only an
+ * HMAC of the code is stored (`features/auth/codes.ts`), so a database leak
+ * does not reveal live codes.
+ *
+ * A sign-up carries what the account will be created with (`name`,
+ * `password_hash`, already hashed). `user_id` is the account the address had
+ * when the code was asked for, if any: deleting that account deletes its codes.
+ */
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    purpose: text('purpose').$type<EmailCodePurpose>().notNull(),
+    /** Lowercased, like every address an account is looked up by. */
+    email: text('email').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    attemptsLeft: integer('attempts_left').notNull(),
+    name: text('name'),
+    passwordHash: text('password_hash'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('email_codes_purpose_email_unique').on(table.purpose, table.email),
+    index('email_codes_user_id_idx').on(table.userId),
+    check('email_codes_purpose_valid', sql`${table.purpose} in ('signup', 'password_reset')`),
+    check('email_codes_attempts_non_negative', sql`${table.attemptsLeft} >= 0`),
+    check(
+      'email_codes_signup_shape',
+      sql`(${table.purpose} = 'signup') = (${table.name} is not null and ${table.passwordHash} is not null)`,
+    ),
+  ],
 );
 
 /**
@@ -380,6 +428,8 @@ export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
+export type EmailCodeRow = typeof emailCodes.$inferSelect;
+export type NewEmailCodeRow = typeof emailCodes.$inferInsert;
 export type FriendshipRow = typeof friendships.$inferSelect;
 export type NewFriendshipRow = typeof friendships.$inferInsert;
 export type GroupRow = typeof groups.$inferSelect;

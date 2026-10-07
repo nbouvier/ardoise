@@ -22,6 +22,7 @@ const session: AuthSession = {
     email: 'a@example.com',
     name: 'Ada',
     picture: null,
+    hasPassword: false,
   },
 };
 

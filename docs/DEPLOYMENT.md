@@ -53,6 +53,7 @@ When `NODE_ENV=production`, on top of the variables that are always required
 | `PUBLIC_BASE_URL` | Required, and must not be `localhost` / a loopback / `0.0.0.0`.   | Invitation links are built from it and sent to other people's phones. |
 | `TRUST_PROXY`     | Required (`false` when no proxy is in front).                     | See [Behind a load balancer](#behind-a-load-balancer): both silent defaults are wrong in production. |
 | `CONTACT_EMAIL`, `LEGAL_PUBLISHER_NAME`, `LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS`, `LEGAL_HOST_PHONE` | Required, not blank; `CONTACT_EMAIL` an e-mail address. | The legal pages show them (see below); the law and Google Play need them live. |
+| `MAIL_TRANSPORT`  | Must be `brevo` (with `BREVO_API_KEY` and `MAIL_FROM_ADDRESS`).   | The default, `log`, only writes e-mails to the log: nobody would receive a sign-up or password-reset code, and the codes would sit in the logs. |
 
 Outside production they stay optional (`DATABASE_URL` → embedded PGlite,
 `PUBLIC_BASE_URL` → `http://localhost:3000`, `TRUST_PROXY` → `false`).
@@ -71,6 +72,27 @@ also director of publication), `LEGAL_HOST_NAME`, `LEGAL_HOST_ADDRESS` and
 and account-deletion requests made without the app arrive. Outside production they are
 optional and the pages show "(not configured)". Deletion requests are carried out with
 the operator command (`docs/OPERATIONS.md`, "Deleted accounts").
+
+### E-mail
+
+Sign-up and password-reset codes (`docs/specs/password-sign-in.md`) are e-mailed through
+[Brevo](https://www.brevo.com)'s transactional API (an EU company; the privacy policy
+names it). `MAIL_TRANSPORT=brevo` needs:
+
+- `BREVO_API_KEY` — a key created under *SMTP & API → API keys*. A secret: it lives in
+  the deployment's `.env`, nowhere else.
+- `MAIL_FROM_ADDRESS` — the sender, on a domain **authenticated in Brevo** (*Senders,
+  domains & dedicated IPs → Domains*): Brevo gives the DNS records to add (DKIM, a
+  Brevo code, and SPF / DMARC if missing). Without them, mail lands in spam or is
+  refused. `MAIL_FROM_NAME` is the sender's display name (default `Ardoise`).
+
+Staging needs them too (it runs with `NODE_ENV=production`); both environments may share
+the key and the sender. Outside production `MAIL_TRANSPORT` defaults to `log`: e-mails,
+codes included, are written to the server's log instead of being sent.
+
+A message the provider refuses or cannot be reached for is logged as
+`auth.mail.failed` with the provider's status and reported to Sentry; the request that
+triggered it has already answered, so the person asks for a new code.
 
 ## Database migrations
 

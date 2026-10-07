@@ -15,6 +15,7 @@ const user = {
   email: 'ada@example.com',
   name: 'Ada',
   picture: null,
+  hasPassword: false,
 };
 
 function makeSession(overrides: Partial<AuthSession> = {}): AuthSession {
