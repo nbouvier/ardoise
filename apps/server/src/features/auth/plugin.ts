@@ -6,6 +6,7 @@ import {
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 
+import { parseRequest } from '../../http/validation.js';
 import { schedulePeriodicTask } from '../../periodic-task.js';
 
 import { createGoogleVerifier, GoogleVerificationError, type GoogleVerifier } from './google.js';
@@ -72,12 +73,9 @@ export const authPlugin = fp<AuthPluginOptions>(
     });
 
     app.post('/auth/google', async (request: FastifyRequest, reply) => {
-      const parsed = googleAuthRequestSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: 'invalid_request' });
-      }
+      const { idToken } = parseRequest(googleAuthRequestSchema, request.body);
       try {
-        const session = await auth.signInWithGoogle(parsed.data.idToken);
+        const session = await auth.signInWithGoogle(idToken);
         app.log.info({ userId: session.user.id }, 'auth.session.issued');
         return reply.code(200).send(session);
       } catch (error) {
@@ -90,12 +88,9 @@ export const authPlugin = fp<AuthPluginOptions>(
     });
 
     app.post('/auth/refresh', async (request: FastifyRequest, reply) => {
-      const parsed = refreshRequestSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: 'invalid_request' });
-      }
+      const { refreshToken } = parseRequest(refreshRequestSchema, request.body);
       try {
-        const session = await auth.refresh(parsed.data.refreshToken);
+        const session = await auth.refresh(refreshToken);
         return reply.code(200).send(session);
       } catch (error) {
         if (error instanceof SessionError) {
@@ -110,11 +105,8 @@ export const authPlugin = fp<AuthPluginOptions>(
     });
 
     app.post('/auth/logout', async (request: FastifyRequest, reply) => {
-      const parsed = logoutRequestSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: 'invalid_request' });
-      }
-      await auth.signOut(parsed.data.refreshToken);
+      const { refreshToken } = parseRequest(logoutRequestSchema, request.body);
+      await auth.signOut(refreshToken);
       app.log.info('auth.session.revoked');
       return reply.code(204).send();
     });

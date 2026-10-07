@@ -4,13 +4,13 @@ import {
   renamePlaceholderRequestSchema,
   updateGroupRequestSchema,
 } from '@ardoise/shared';
-import type { FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 
+import { parseRequest } from '../../http/validation.js';
 import { createTransactionsRepository } from '../transactions/repository.js';
 
-import { translateGroupAccessError } from './http.js';
+import { createGroupRoutes } from './http.js';
 import { createGroupsRepository } from './repository.js';
 import {
   createGroupInviteHandler,
@@ -52,54 +52,7 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
     app.decorate('groups', groups);
     app.invites.register('group', createGroupInviteHandler(repository, ledger));
 
-    /**
-     * Turn a refusal into its HTTP answer. Refusals are logged with their
-     * reason: a spike means either a bug or someone probing.
-     */
-    function replyRefused(
-      reply: FastifyReply,
-      error: unknown,
-      userId: string | undefined,
-    ): FastifyReply {
-      const failure = translateGroupAccessError(error);
-      if (!failure) {
-        throw error;
-      }
-      app.log.info({ userId, reason: failure.reason }, 'groups.access.refused');
-      return reply.code(failure.status).send({ error: failure.error });
-    }
-
-    /**
-     * Every group route shares the same shape: validate the params, act, and
-     * translate a refusal. Factored so no route can forget the translation and
-     * leak a 500 — or, worse, answer a non-member with a 403.
-     */
-    function route<Params>(
-      schema: z.ZodType<Params>,
-      handler: (args: {
-        params: Params;
-        userId: string;
-        reply: FastifyReply;
-        body: unknown;
-      }) => Promise<unknown>,
-    ) {
-      return async (request: FastifyRequest, reply: FastifyReply) => {
-        const params = schema.safeParse(request.params);
-        if (!params.success) {
-          return reply.code(404).send({ error: 'group_not_found' });
-        }
-        try {
-          return await handler({
-            params: params.data,
-            userId: request.userId!,
-            reply,
-            body: request.body,
-          });
-        } catch (error) {
-          return replyRefused(reply, error, request.userId);
-        }
-      };
-    }
+    const { route, replyRefused } = createGroupRoutes(app.log);
 
     const authenticated = { preHandler: app.authenticate };
 
@@ -115,25 +68,22 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
     );
 
     app.post('/groups', authenticated, async (request, reply) => {
-      const parsed = createGroupRequestSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: 'invalid_request' });
-      }
+      const input = parseRequest(createGroupRequestSchema, request.body);
       try {
-        const group = await groups.create(request.userId!, parsed.data);
+        const group = await groups.create(request.userId!, input);
         app.log.info(
           {
             userId: request.userId,
             groupId: group.id,
             memberCount: group.memberCount,
-            placeholdersCreated: parsed.data.placeholderNames?.length ?? 0,
+            placeholdersCreated: input.placeholderNames?.length ?? 0,
             parentId: group.parentId,
           },
           'groups.created',
         );
         return reply.code(201).send({ group });
       } catch (error) {
-        return replyRefused(reply, error, request.userId);
+        return replyRefused(reply, error, { userId: request.userId });
       }
     });
 
@@ -149,14 +99,11 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId',
       authenticated,
       route(groupParamsSchema, async ({ params, userId, reply, body }) => {
-        const parsed = updateGroupRequestSchema.safeParse(body);
-        if (!parsed.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
-        const group = await groups.update(userId, params.groupId, parsed.data);
-        if (parsed.data.archived !== undefined) {
+        const input = parseRequest(updateGroupRequestSchema, body);
+        const group = await groups.update(userId, params.groupId, input);
+        if (input.archived !== undefined) {
           app.log.info(
-            { userId, groupId: group.id, archived: parsed.data.archived },
+            { userId, groupId: group.id, archived: input.archived },
             'groups.archive.changed',
           );
         }
@@ -178,17 +125,14 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId/members',
       authenticated,
       route(groupParamsSchema, async ({ params, userId, reply, body }) => {
-        const parsed = addGroupMembersRequestSchema.safeParse(body);
-        if (!parsed.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
-        const group = await groups.addMembers(userId, params.groupId, parsed.data);
+        const input = parseRequest(addGroupMembersRequestSchema, body);
+        const group = await groups.addMembers(userId, params.groupId, input);
         app.log.info(
           {
             userId,
             groupId: group.id,
-            added: parsed.data.memberIds?.length ?? 0,
-            placeholdersCreated: parsed.data.placeholderNames?.length ?? 0,
+            added: input.memberIds?.length ?? 0,
+            placeholdersCreated: input.placeholderNames?.length ?? 0,
           },
           'groups.members.added',
         );
@@ -210,15 +154,12 @@ export const groupsPlugin = fp<GroupsPluginOptions>(
       '/groups/:groupId/placeholders/:placeholderId',
       authenticated,
       route(placeholderParamsSchema, async ({ params, userId, reply, body }) => {
-        const parsed = renamePlaceholderRequestSchema.safeParse(body);
-        if (!parsed.success) {
-          return reply.code(400).send({ error: 'invalid_request' });
-        }
+        const { name } = parseRequest(renamePlaceholderRequestSchema, body);
         const group = await groups.renamePlaceholder(
           userId,
           params.groupId,
           params.placeholderId,
-          parsed.data.name,
+          name,
         );
         app.log.info(
           { userId, groupId: params.groupId, placeholderId: params.placeholderId },

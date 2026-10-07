@@ -247,6 +247,11 @@ describe('groups routes', () => {
       });
       expect(response.statusCode).toBe(401);
     });
+
+    it('asks to sign in before looking at the body', async () => {
+      const response = await app.inject({ method: 'POST', url: '/groups', payload: { name: 42 } });
+      expect(response.statusCode).toBe(401);
+    });
   });
 
   describe('GET /groups', () => {
