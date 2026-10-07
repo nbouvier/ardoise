@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development",
+      "env": { "APP_VARIANT": "development" },
       "android": { "buildType": "apk" }
     },
     "staging": {

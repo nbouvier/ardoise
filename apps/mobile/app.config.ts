@@ -7,12 +7,15 @@ const APP_ID_FORMAT = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const PLACEHOLDER_APP_ID = /^com\.anonymous(\.|$)/;
 
 /**
- * Builds installed next to the production app, chosen by `APP_VARIANT` (set by the
- * `staging` EAS profile and the staging updates): their own application id and name, so
- * that installing one never replaces the other and the two are told apart on the phone.
+ * Builds installed next to the production app, chosen by `APP_VARIANT` (`staging`: set by
+ * the `staging` EAS profile and the staging updates; `development`: set by the local
+ * `start` / `android` / `ios` / `prebuild` scripts and the `development` EAS profile):
+ * their own application id and name, so that installing one never replaces another and
+ * they are told apart on the phone.
  */
 const VARIANTS = {
   staging: { idSuffix: '.staging', nameSuffix: ' (staging)' },
+  development: { idSuffix: '.development', nameSuffix: ' (dev)' },
 } as const;
 
 type Variant = (typeof VARIANTS)[keyof typeof VARIANTS];

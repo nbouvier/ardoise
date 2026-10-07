@@ -50,11 +50,11 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start --dev-client --tunnel",
-    "android": "node ./scripts/android.js",
-    "ios": "expo run:ios",
+    "start": "node ./scripts/dev-variant.js expo start --dev-client --tunnel",
+    "android": "node ./scripts/dev-variant.js node ./scripts/android.js",
+    "ios": "node ./scripts/dev-variant.js expo run:ios",
     "web": "expo start --web",
-    "prebuild": "expo prebuild --clean",
+    "prebuild": "node ./scripts/dev-variant.js expo prebuild --clean",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests"

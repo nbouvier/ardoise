@@ -120,6 +120,16 @@ describe('app.config', () => {
       expect(config.ios?.bundleIdentifier).toBe('app.example.ardoise.staging');
     });
 
+    it('gives development builds their own id and name, so they install next to production', () => {
+      process.env.APP_VARIANT = 'development';
+
+      const config = resolve(real);
+
+      expect(config.name).toBe('Ardoise (dev)');
+      expect(config.android?.package).toBe('app.example.ardoise.development');
+      expect(config.ios?.bundleIdentifier).toBe('app.example.ardoise.development');
+    });
+
     it('applies the variant to an APP_ID override too', () => {
       process.env.APP_ID = 'app.example.split';
       process.env.APP_VARIANT = 'staging';
