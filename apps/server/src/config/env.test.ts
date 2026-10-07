@@ -199,6 +199,30 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('web origins', () => {
+    it('are none by default', () => {
+      expect(loadEnv({ ...base, NODE_ENV: 'development' }).WEB_ORIGINS).toEqual([]);
+    });
+
+    it('reads a comma-separated list of origins', () => {
+      const env = loadEnv({
+        ...base,
+        NODE_ENV: 'development',
+        WEB_ORIGINS: 'http://localhost:8081, https://app.ardoise.test',
+      });
+
+      expect(env.WEB_ORIGINS).toEqual(['http://localhost:8081', 'https://app.ardoise.test']);
+    });
+
+    it('refuses an entry that is not exactly an origin, which would never match', () => {
+      for (const WEB_ORIGINS of ['https://app.ardoise.test/', 'app.ardoise.test', 'https://x.test/app']) {
+        expect(() => loadEnv({ ...base, NODE_ENV: 'development', WEB_ORIGINS })).toThrow(
+          /WEB_ORIGINS/,
+        );
+      }
+    });
+  });
+
   describe('Android App Links', () => {
     const fingerprint = (byte: string) => Array.from({ length: 32 }, () => byte).join(':');
 

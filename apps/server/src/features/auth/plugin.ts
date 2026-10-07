@@ -9,6 +9,7 @@ import {
   signupRequestSchema,
   signupVerifyRequestSchema,
 } from '@ardoise/shared';
+import cookie from '@fastify/cookie';
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 
@@ -39,6 +40,7 @@ import {
 import { createSessionService, SessionError } from './sessions.js';
 import { AttemptThrottle, ThrottledError } from './throttle.js';
 import { createAccessTokenService, type AccessTokenService } from './tokens.js';
+import { createWebSession, isWebClient } from './web-session.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -61,6 +63,8 @@ export interface AuthPluginOptions {
   now?: (() => number) | undefined;
   /** Override the e-mail transport (tests: one that keeps the messages). */
   mailer?: Mailer | undefined;
+  /** The web app's origins (`WEB_ORIGINS`), from `buildApp`. */
+  webOrigins?: readonly string[] | undefined;
 }
 
 const unauthorized = (reply: FastifyReply, error: string) =>
@@ -90,6 +94,21 @@ export const authPlugin = fp<AuthPluginOptions>(
     const sessions = createSessionService(repository);
     const now = opts.now ?? Date.now;
     const mailer = opts.mailer ?? createMailer(env, app.log);
+    const web = createWebSession({
+      origins: opts.webOrigins ?? env.WEB_ORIGINS,
+      refreshTtlSeconds: env.AUTH_REFRESH_TTL_SECONDS,
+    });
+
+    await app.register(cookie);
+
+    // A web client is only answered from the web app's own pages.
+    app.addHook('onRequest', async (request, reply) => {
+      const webAuthCall = request.url.startsWith('/auth/') && isWebClient(request);
+      if (webAuthCall && !web.allowedOrigin(request)) {
+        app.log.warn('auth.web.origin_refused');
+        return reply.code(403).send({ error: 'forbidden_origin' });
+      }
+    });
 
     // Not awaited: the request has answered by the time the provider does.
     function deliver(message: MailMessage, purpose: EmailCodePurpose): void {
@@ -163,7 +182,7 @@ export const authPlugin = fp<AuthPluginOptions>(
           app.log.info({ userId: session.user.id, method: 'google' }, 'auth.account.linked');
         }
         app.log.info({ userId: session.user.id }, 'auth.session.issued');
-        return reply.code(200).send(session);
+        return web.send(request, reply, session);
       } catch (error) {
         if (error instanceof GoogleVerificationError) {
           app.log.warn({ reason: error.reason }, 'auth.google.verify.failed');
@@ -182,7 +201,7 @@ export const authPlugin = fp<AuthPluginOptions>(
       try {
         const session = await auth.signInWithPassword(email, password);
         app.log.info({ userId: session.user.id }, 'auth.session.issued');
-        return reply.code(200).send(session);
+        return web.send(request, reply, session);
       } catch (error) {
         if (error instanceof ThrottledError) {
           app.log.warn('auth.password.throttled');
@@ -221,7 +240,7 @@ export const authPlugin = fp<AuthPluginOptions>(
           app.log.info({ userId, method: 'password' }, 'auth.account.created');
         }
         app.log.info({ userId }, 'auth.session.issued');
-        return reply.code(200).send(session);
+        return web.send(request, reply, session);
       } catch (error) {
         if (error instanceof CodeError) {
           app.log.info({ purpose: 'signup', reason: error.reason }, 'auth.code.rejected');
@@ -254,7 +273,7 @@ export const authPlugin = fp<AuthPluginOptions>(
         const session = await auth.confirmPasswordReset(email, code, password);
         app.log.info({ userId: session.user.id }, 'auth.password.reset');
         app.log.info({ userId: session.user.id }, 'auth.session.issued');
-        return reply.code(200).send(session);
+        return web.send(request, reply, session);
       } catch (error) {
         if (error instanceof CodeError) {
           app.log.info({ purpose: 'password_reset', reason: error.reason }, 'auth.code.rejected');
@@ -275,7 +294,7 @@ export const authPlugin = fp<AuthPluginOptions>(
         try {
           const session = await auth.changePassword(request.userId!, currentPassword, newPassword);
           app.log.info({ userId: session.user.id }, 'auth.password.changed');
-          return reply.code(200).send(session);
+          return web.send(request, reply, session);
         } catch (error) {
           if (error instanceof ThrottledError) {
             app.log.warn('auth.password.throttled');
@@ -292,15 +311,23 @@ export const authPlugin = fp<AuthPluginOptions>(
     );
 
     app.post('/auth/refresh', async (request: FastifyRequest, reply) => {
-      const { refreshToken } = parseRequest(refreshRequestSchema, request.body);
+      const refreshToken = isWebClient(request)
+        ? web.refreshTokenOf(request)
+        : parseRequest(refreshRequestSchema, request.body).refreshToken;
       try {
+        if (!refreshToken) {
+          throw new SessionError('not_found');
+        }
         const session = await auth.refresh(refreshToken);
-        return reply.code(200).send(session);
+        return web.send(request, reply, session);
       } catch (error) {
         if (error instanceof SessionError) {
           if (error.reason === 'revoked') {
             // Every session of the user has just been revoked (see sessions.ts).
             app.log.warn({ userId: error.userId }, 'auth.session.refresh.reused');
+          }
+          if (isWebClient(request)) {
+            web.clear(reply);
           }
           return unauthorized(reply, 'invalid_refresh_token');
         }
@@ -309,9 +336,17 @@ export const authPlugin = fp<AuthPluginOptions>(
     });
 
     app.post('/auth/logout', async (request: FastifyRequest, reply) => {
-      const { refreshToken } = parseRequest(logoutRequestSchema, request.body);
-      await auth.signOut(refreshToken);
-      app.log.info('auth.session.revoked');
+      let refreshToken: string | undefined;
+      if (isWebClient(request)) {
+        refreshToken = web.refreshTokenOf(request);
+        web.clear(reply);
+      } else {
+        ({ refreshToken } = parseRequest(logoutRequestSchema, request.body));
+      }
+      if (refreshToken) {
+        await auth.signOut(refreshToken);
+        app.log.info('auth.session.revoked');
+      }
       return reply.code(204).send();
     });
 

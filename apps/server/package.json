@@ -19,6 +19,8 @@
   "dependencies": {
     "@ardoise/shared": "^1.0.0",
     "@electric-sql/pglite": "^0.5.8",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
     "@sentry/node": "^11.4.0",

@@ -232,6 +232,32 @@ const envSchema = z.object({
    */
   MAIL_FROM_ADDRESS: z.email().optional(),
   MAIL_FROM_NAME: z.string().trim().min(1).default('Ardoise'),
+  /**
+   * The web app's origins, comma-separated (`https://app.example.com`): the only
+   * pages the API answers CORS for, and the only ones a web session's cookie is
+   * accepted from (`docs/specs/authentication.md`). Unset, no browser page can use
+   * the API. The web app must be on the same site as the API (two subdomains of
+   * one domain), or browsers drop the cookie as third-party.
+   */
+  WEB_ORIGINS: z
+    .string()
+    .transform((raw, ctx) => {
+      const origins = raw
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      for (const origin of origins) {
+        if (!URL.canParse(origin) || new URL(origin).origin !== origin) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `must be comma-separated origins (scheme://host[:port], no path): ${origin}`,
+          });
+          return z.NEVER;
+        }
+      }
+      return origins;
+    })
+    .optional(),
 });
 
 /** What the legal pages cannot go live without. */
@@ -332,6 +358,7 @@ const envChecked = envSchema
     PUBLIC_BASE_URL: value.PUBLIC_BASE_URL ?? 'http://localhost:3000',
     TRUST_PROXY: value.TRUST_PROXY ?? false,
     SENTRY_ENVIRONMENT: value.SENTRY_ENVIRONMENT ?? value.NODE_ENV,
+    WEB_ORIGINS: value.WEB_ORIGINS ?? [],
   }));
 
 /** Whether a URL hostname designates the machine itself (`localhost`, loopback). */

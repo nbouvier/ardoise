@@ -7,7 +7,8 @@ import { errorFields, logger } from '@/lib/logger';
 const STORAGE_KEY = 'ardoise.session';
 
 export interface StoredSession {
-  refreshToken: string;
+  /** `null` on the web, where the refresh token is a cookie the app never sees. */
+  refreshToken: string | null;
   user: UserProfile;
 }
 
@@ -20,9 +21,9 @@ export interface TokenStore {
 /**
  * Persists the refresh token (and the last-known profile, for a fast launch) in
  * the OS secure store. The access token is never persisted — it lives only in
- * memory for the app session.
+ * memory for the app session. The web build uses `token-store.web.ts`.
  */
-export const secureTokenStore: TokenStore = {
+export const tokenStore: TokenStore = {
   async load() {
     try {
       const raw = await SecureStore.getItemAsync(STORAGE_KEY);
