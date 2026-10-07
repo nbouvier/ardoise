@@ -274,3 +274,47 @@ describe('AuthClient.deleteAccount', () => {
     expect(store.value).not.toBeNull();
   });
 });
+
+describe('AuthClient with a password', () => {
+  it('signs in with an address and a password, and persists the session', async () => {
+    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(jsonResponse(makeSession()));
+    globalThis.fetch = fetchMock;
+    const store = memoryStore();
+    const client = new AuthClient({ baseUrl: BASE_URL, google: fakeGoogle(), store });
+
+    await client.signInWithPassword('ada@example.com', 'correct horse battery');
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${BASE_URL}/auth/password`);
+    expect(client.getState()).toEqual({ status: 'signedIn', user });
+    expect(store.value?.refreshToken).toBe('refresh-1');
+  });
+
+  it('takes the fresh session a password change hands back', async () => {
+    globalThis.fetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(makeSession()))
+      .mockResolvedValueOnce(jsonResponse(makeSession({ refreshToken: 'refresh-after-change' })));
+    const store = memoryStore();
+    const client = new AuthClient({ baseUrl: BASE_URL, google: fakeGoogle(), store });
+    await client.signInWithPassword('ada@example.com', 'correct horse battery');
+
+    await client.changePassword('correct horse battery', 'a brand new password');
+
+    expect(store.value?.refreshToken).toBe('refresh-after-change');
+  });
+
+  it('stays signed in when the current password is refused', async () => {
+    globalThis.fetch = jest
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(makeSession()))
+      .mockResolvedValueOnce(jsonResponse({ error: 'invalid_password' }, 403));
+    const client = new AuthClient({ baseUrl: BASE_URL, google: fakeGoogle(), store: memoryStore() });
+    await client.signInWithPassword('ada@example.com', 'correct horse battery');
+
+    await expect(client.changePassword('wrong', 'a brand new password')).rejects.toMatchObject({
+      status: 403,
+      code: 'invalid_password',
+    });
+    expect(client.getState()).toEqual({ status: 'signedIn', user });
+  });
+});

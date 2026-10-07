@@ -1,14 +1,20 @@
-import type { UserProfile } from '@ardoise/shared';
+import type { PasswordResetConfirmRequest, SignupRequest, UserProfile } from '@ardoise/shared';
 
 import { deleteOwnAccount } from '@/lib/api/account';
-import { ApiError } from '@/lib/api/errors';
 import {
   apiRequest,
   authenticateWithGoogle,
+  confirmPasswordReset,
+  parseSession,
   refreshSession,
+  requestPasswordReset,
+  requestSignup,
   revokeSession,
+  signInWithPassword,
+  verifySignup,
   type ClientSession,
 } from '@/lib/api/endpoints';
+import { ApiError, expectOk } from '@/lib/api/errors';
 import { errorFields, logger } from '@/lib/logger';
 
 import type { GoogleModule } from './google-module';
@@ -98,6 +104,46 @@ export class AuthClient {
     const session = await authenticateWithGoogle(this.deps.baseUrl, idToken);
     logger.info('auth.session.started');
     await this.applySession(session);
+  };
+
+  readonly signInWithPassword = async (email: string, password: string): Promise<void> => {
+    const session = await signInWithPassword(this.deps.baseUrl, email, password);
+    logger.info('auth.session.started');
+    await this.applySession(session);
+  };
+
+  /** Ask for a sign-up code (`docs/specs/password-sign-in.md`); signs nothing in. */
+  readonly requestSignup = (request: SignupRequest): Promise<void> =>
+    requestSignup(this.deps.baseUrl, request);
+
+  readonly verifySignup = async (email: string, code: string): Promise<void> => {
+    const session = await verifySignup(this.deps.baseUrl, email, code);
+    logger.info('auth.session.started');
+    await this.applySession(session);
+  };
+
+  /** Ask for a password-reset code; signs nothing in. */
+  readonly requestPasswordReset = (email: string): Promise<void> =>
+    requestPasswordReset(this.deps.baseUrl, email);
+
+  readonly confirmPasswordReset = async (request: PasswordResetConfirmRequest): Promise<void> => {
+    const session = await confirmPasswordReset(this.deps.baseUrl, request);
+    logger.info('auth.session.started');
+    await this.applySession(session);
+  };
+
+  /**
+   * Change the password. The server ends every other session and hands this
+   * device a fresh one, which replaces the current. A wrong current password
+   * is an `ApiError` 403 `invalid_password`.
+   */
+  readonly changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    const response = await this.authorizedFetch('/auth/password/change', {
+      method: 'POST',
+      body: { currentPassword, newPassword },
+    });
+    await expectOk(response);
+    await this.applySession(parseSession(await response.json()));
   };
 
   readonly signOut = async (): Promise<void> => {

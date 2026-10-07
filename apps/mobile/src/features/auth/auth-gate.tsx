@@ -7,7 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-import { SignInScreen } from './sign-in-screen';
+import { SignedOutFlow } from './signed-out-flow';
 import { useAuth } from './use-auth';
 
 /**
@@ -46,7 +46,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (state.status === 'signedOut') {
-    return <SignInScreen />;
+    return <SignedOutFlow />;
   }
 
   return <>{children}</>;

@@ -19,7 +19,14 @@ export interface AuthContextValue {
   state: AuthState;
   /** Whether interactive Google sign-in works on this platform. */
   googleAvailable: boolean;
+  /** Google sign-in. */
   signIn: () => Promise<void>;
+  signInWithPassword: AuthClient['signInWithPassword'];
+  requestSignup: AuthClient['requestSignup'];
+  verifySignup: AuthClient['verifySignup'];
+  requestPasswordReset: AuthClient['requestPasswordReset'];
+  confirmPasswordReset: AuthClient['confirmPasswordReset'];
+  changePassword: AuthClient['changePassword'];
   signOut: () => Promise<void>;
   /** Delete the account for good, then sign out (`docs/specs/account-deletion.md`). */
   deleteAccount: () => Promise<void>;
@@ -66,6 +73,12 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
       state,
       googleAvailable: authClient.googleAvailable,
       signIn: authClient.signIn,
+      signInWithPassword: authClient.signInWithPassword,
+      requestSignup: authClient.requestSignup,
+      verifySignup: authClient.verifySignup,
+      requestPasswordReset: authClient.requestPasswordReset,
+      confirmPasswordReset: authClient.confirmPasswordReset,
+      changePassword: authClient.changePassword,
       signOut: authClient.signOut,
       deleteAccount: authClient.deleteAccount,
       retry: authClient.bootstrap,
