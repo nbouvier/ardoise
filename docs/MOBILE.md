@@ -71,6 +71,13 @@ The `android/` and `ios/` folders are generated and git-ignored; never edit them
 hand. Change native config through `app.json` / config plugins, then re-run, or
 `npm run prebuild --workspace @ardoise/mobile` to regenerate.
 
+The dev build is its own app, **Ardoise (dev)** under `app.nbouvier.ardoise.development`,
+so it installs next to the production and staging apps. The workspace's `start`,
+`android`, `ios` and `prebuild` scripts run through `scripts/dev-variant.js`, which sets
+`APP_VARIANT=development` (unless it is already set): building, regenerating and launching
+all need the same id. A dev build installed before 2026-10-07 has the production id:
+uninstall it once, then `npm run prebuild --workspace @ardoise/mobile` and rebuild.
+
 After the dev build is installed, iterate with just `npm run mobile` (JS reloads live;
 rebuild only when native dependencies or config change).
 
@@ -122,7 +129,7 @@ iOS profile until an Apple developer account exists.
 
 | Profile | Artifact | Talks to | EAS environment | Update channel | Use |
 | --- | --- | --- | --- | --- | --- |
-| `development` | APK, dev client | whatever the dev server says | `development` | — | An EAS-built dev client (rarely needed: local builds are faster). |
+| `development` | APK, dev client, **Ardoise (dev)** | whatever the dev server says | `development` | — | An EAS-built dev client (rarely needed: local builds are faster). |
 | `staging` | APK, **Ardoise (staging)** | the staging API | `preview` | `staging` | Install on a phone to try what staging runs, next to the production app. |
 | `production` | AAB (app bundle) | the production API | `production` | `production` | Upload to the Play Store. |
 | `production-apk` | APK | the production API | `production` | `production` | Direct download from a website. |
@@ -136,7 +143,8 @@ The `staging` profile builds a **separate app**: `APP_VARIANT=staging` (in `eas.
 it the id `app.nbouvier.ardoise.staging` and the name "Ardoise (staging)", so it installs
 next to the production app instead of replacing it, and nobody mistakes one for the other.
 It is never uploaded to a store. The Mobile release workflow sets the same variable when it
-publishes a staging update; a staging update published by hand needs it too.
+publishes a staging update; a staging update published by hand needs it too. The
+`development` profile likewise sets `APP_VARIANT=development`, the id of local dev builds.
 
 Version numbers: `version` in `app.json` is the user-visible one, bumped by hand;
 `versionCode` (what the Play Store orders by) is kept by EAS (`appVersionSource: remote`)
@@ -231,7 +239,8 @@ release is a separate, manual process (see "Distribution notes").
 6. **Google sign-in**: in Google Cloud → Credentials, one OAuth **Android** client per
    (package name, signing SHA-1) pair. The SHA-1 of an EAS keystore is shown by `eas
    credentials`; the debug one by `cd android && ./gradlew signingReport`.
-   - `app.nbouvier.ardoise` + the debug keystore's SHA-1 (local development builds);
+   - `app.nbouvier.ardoise.development` + the debug keystore's SHA-1 (local development
+     builds);
    - `app.nbouvier.ardoise` + the production keystore's SHA-1;
    - `app.nbouvier.ardoise.staging` + the staging keystore's SHA-1;
    - later, `app.nbouvier.ardoise` + the Play App Signing key's SHA-1 (Play Console → App
@@ -348,7 +357,7 @@ variables (bundled into the client; none are secret). Copy `.env.example` to `.e
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`| Google OAuth **web** client ID — the native SDK needs it to return an ID token. |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`| Google OAuth **iOS** client ID — also drives the reversed iOS URL scheme. |
 | `APP_ID`                          | Overrides the application id of `app.json` (not `EXPO_PUBLIC_`: read at build time only). Optional, unset for Ardoise itself — for a fork publishing its own build. See "Application id". |
-| `APP_VARIANT`                     | `staging` builds "Ardoise (staging)" under its own id (build time only). Set by the `staging` EAS profile and the staging updates; leave unset locally. |
+| `APP_VARIANT`                     | `staging` builds "Ardoise (staging)", `development` builds "Ardoise (dev)", each under its own id (build time only). Set by the EAS profiles, the staging updates and the workspace's local scripts (`development`); leave unset in `.env`. |
 | `SENTRY_DSN`                      | Turns error reporting on (not `EXPO_PUBLIC_`: it reaches the app through `extra`). Leave unset locally. See "Error reporting (Sentry)", which also lists the build-time `SENTRY_*` variables. |
 
 ### Application id
@@ -357,8 +366,11 @@ The id is **`app.nbouvier.ardoise`** (`android.package` in `app.json`; reversed 
 the maintainer owns, so no one else can hold it), applied by `app.config.ts` to both the
 Android `package` and the iOS `bundleIdentifier`. It is **permanent once the app is
 published** — on the Play Store it can never change. `APP_ID` overrides it.
-`APP_VARIANT=staging` appends `.staging` (and " (staging)" to the name); any other value
-fails the config, rather than silently building the production app.
+`APP_VARIANT=staging` appends `.staging` (and " (staging)" to the name),
+`APP_VARIANT=development` appends `.development` (and " (dev)"); any other value fails the
+config, rather than silently building the production app. No variant means the production
+app, so a release build or an update published without one is never mistaken for a dev
+build.
 
 - It must look like `com.example.app` (dot-separated, each part starting with a letter,
   letters/digits/underscores only); anything else fails the config with a message.
@@ -439,7 +451,7 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
   mobile:android` / `mobile:ios`).
 - **Android**: an OAuth Android client is matched by package name + signing certificate
   SHA-1, so each kind of build needs its own (list in "One-time setup", step 6). For a local
-  debug build: `app.nbouvier.ardoise` + the debug keystore SHA-1 (`cd android && ./gradlew
-  signingReport`), or sign-in fails silently.
+  debug build: `app.nbouvier.ardoise.development` + the debug keystore SHA-1 (`cd android &&
+  ./gradlew signingReport`), or sign-in fails silently.
 - Google Cloud setup (OAuth consent screen + Web/iOS/Android client IDs) is a manual
   prerequisite — see `docs/specs/authentication.md`.
