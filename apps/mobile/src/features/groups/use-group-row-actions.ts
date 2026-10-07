@@ -10,8 +10,8 @@ import {
 } from '@/features/friends/unsettled-removal';
 import { deleteGroup, removeGroupMember, updateGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
-import { groupsChanged } from './groups-changed';
 
 /** Everything a row's own Manage/Archive/Leave/Delete actions need, and no more. */
 export interface ActionableGroup {
@@ -46,11 +46,12 @@ export function useGroupRowActions(): UseGroupRowActionsResult {
   const viewerId = authState.status === 'signedIn' ? authState.user.id : null;
   const [busyId, setBusyId] = useState<string | null>(null);
   const { dialog, confirm, inform } = useDialog();
+  const invalidation = useInvalidation();
 
   function run(group: ActionableGroup, what: string, action: () => Promise<unknown>) {
     setBusyId(group.id);
     action()
-      .then(() => groupsChanged.notify())
+      .then(() => invalidation.groupsChanged())
       .catch((error: unknown) => {
         logger.warn(`groups.${what}.failed`, errorFields(error));
         if (isUnsettledRemoval(error)) {

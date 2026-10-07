@@ -1,11 +1,13 @@
 import type { Transaction, TransactionsListScope } from '@ardoise/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 
 import { useAuth } from '@/features/auth/use-auth';
 import { fetchTransactions } from '@/lib/api/transactions';
-import { errorFields, logger } from '@/lib/logger';
+import { loggedRead, readStatus, type ReadStatus } from '@/lib/query/client';
+import { queryKeys } from '@/lib/query/keys';
 
-export type TransactionsStatus = 'loading' | 'ready' | 'error';
+export type TransactionsStatus = ReadStatus;
 
 export interface UseTransactionsResult {
   status: TransactionsStatus;
@@ -19,16 +21,24 @@ export interface UseTransactionsResult {
   remove: (transactionId: string) => void;
 }
 
+type TransactionsPage = Awaited<ReturnType<typeof fetchTransactions>>;
+
+/** Most-recent-first, matching the server's own ordering: by date, then by recording order. */
+function byMostRecent(a: Transaction, b: Transaction): number {
+  if (a.occurredOn !== b.occurredOn) {
+    return a.occurredOn < b.occurredOn ? 1 : -1;
+  }
+  return a.createdAt < b.createdAt ? 1 : -1;
+}
+
 /**
  * A group's transactions, most recent first — the server does the ordering.
  * `scope: 'subtree'` (statistics only, `docs/specs/group-statistics.md`) adds
  * every sub-group the viewer belongs to; the default, `'group'`, is what the
  * plain transaction list always uses. `subgroupIds`, only meaningful with
  * `scope: 'subtree'`, narrows that to specific direct sub-groups' own
- * branches. Refetches whenever `scope` or `subgroupIds` change, keeping the
- * last-known data visible (rather than resetting to `'loading'`) while that
- * happens — the same "don't blink" choice already made for balances
- * elsewhere in this feature.
+ * branches. Changing `scope` or `subgroupIds` keeps the last-known data
+ * visible (rather than going back to `'loading'`) until the new answer lands.
  */
 export function useTransactions(
   groupId: string,
@@ -36,61 +46,54 @@ export function useTransactions(
   subgroupIds?: readonly string[],
 ): UseTransactionsResult {
   const { authorizedFetch } = useAuth();
-  const [status, setStatus] = useState<TransactionsStatus>('loading');
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [excludedSubgroupCount, setExcludedSubgroupCount] = useState(0);
-  const [reloadToken, setReloadToken] = useState(0);
+  const queryClient = useQueryClient();
   // Arrays are a new reference every render; the join is what actually
-  // identifies the selection for the effect below.
+  // identifies the selection.
   const subgroupIdsKey = subgroupIds?.join(',');
+  const queryKey = useMemo(
+    () => queryKeys.transactions(groupId, scope, subgroupIdsKey),
+    [groupId, scope, subgroupIdsKey],
+  );
+  const query = useQuery({
+    queryKey,
+    queryFn: () =>
+      loggedRead('transactions.load.failed', () =>
+        fetchTransactions(authorizedFetch, groupId, scope, subgroupIds),
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    let active = true;
-
-    fetchTransactions(authorizedFetch, groupId, scope, subgroupIds)
-      .then((loaded) => {
-        if (active) {
-          setTransactions(loaded.transactions);
-          setExcludedSubgroupCount(loaded.excludedSubgroupCount);
-          setStatus('ready');
-        }
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return;
-        }
-        logger.warn('transactions.load.failed', errorFields(error));
-        setStatus('error');
-      });
-
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- subgroupIdsKey stands in for subgroupIds, a new array reference every render
-  }, [authorizedFetch, groupId, scope, subgroupIdsKey, reloadToken]);
+  const update = useCallback(
+    (change: (transactions: Transaction[]) => Transaction[]) =>
+      queryClient.setQueryData<TransactionsPage>(queryKey, (page) =>
+        page ? { ...page, transactions: change(page.transactions) } : page,
+      ),
+    [queryKey, queryClient],
+  );
 
   const refresh = useCallback(() => {
-    setStatus('loading');
-    setReloadToken((token) => token + 1);
-  }, []);
+    void queryClient.refetchQueries({ queryKey });
+  }, [queryKey, queryClient]);
 
-  const upsert = useCallback((transaction: Transaction) => {
-    setTransactions((current) => {
-      const withoutIt = current.filter((t) => t.id !== transaction.id);
-      // Most-recent-first, matching the server's own ordering: by date, then
-      // by recording order for same-day entries.
-      return [transaction, ...withoutIt].sort((a, b) => {
-        if (a.occurredOn !== b.occurredOn) {
-          return a.occurredOn < b.occurredOn ? 1 : -1;
-        }
-        return a.createdAt < b.createdAt ? 1 : -1;
-      });
-    });
-  }, []);
+  const upsert = useCallback(
+    (transaction: Transaction) =>
+      update((current) =>
+        [transaction, ...current.filter((t) => t.id !== transaction.id)].sort(byMostRecent),
+      ),
+    [update],
+  );
 
-  const remove = useCallback((transactionId: string) => {
-    setTransactions((current) => current.filter((t) => t.id !== transactionId));
-  }, []);
+  const remove = useCallback(
+    (transactionId: string) => update((current) => current.filter((t) => t.id !== transactionId)),
+    [update],
+  );
 
-  return { status, transactions, excludedSubgroupCount, refresh, upsert, remove };
+  return {
+    status: readStatus(query),
+    transactions: query.data?.transactions ?? [],
+    excludedSubgroupCount: query.data?.excludedSubgroupCount ?? 0,
+    refresh,
+    upsert,
+    remove,
+  };
 }

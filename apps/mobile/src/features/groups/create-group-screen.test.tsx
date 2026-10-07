@@ -1,9 +1,10 @@
 import type { FriendSummary, GroupDetail } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { pendingInvite } from '@/features/invites/pending-invite';
 import { ApiError } from '@/lib/api/errors';
+import { render } from '@/test-utils/render';
 
 import { CreateGroupScreen } from './create-group-screen';
 

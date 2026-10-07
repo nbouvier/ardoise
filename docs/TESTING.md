@@ -69,6 +69,15 @@ since it's a deep subpath import): pressing the mock reports a fixed date, enoug
 the wiring around it without a real host view, which Jest cannot render. Real calendar
 interaction is a device concern.
 
+A screen that reads server data does so through TanStack Query, so it renders under a
+query cache: import `render` from `@/test-utils/render` instead of Testing Library's. It
+wraps the screen in a fresh cache per render — no retry, so a failed read shows its error
+state at once — and returns it as `queryClient`. A test standing in for a change made
+elsewhere in the app invalidates that cache by key (`queryClient.invalidateQueries({
+queryKey: queryKeys.groups })`); one asserting that a change reaches another screen spies
+on `queryClient.invalidateQueries`. Data arrives a tick after `render`: wait for it with
+`findBy…` before reading the screen. The API modules stay mocked as before.
+
 Gestures and animations run under Jest through `apps/mobile/jest.setup.js`:
 gesture-handler's own `jestSetup`, `react-native-worklets` mocked (worklets run as plain
 functions) and Reanimated's `setUpTests()`. A gesture is driven with
@@ -348,18 +357,17 @@ What each suite covers, by workspace and feature. Paths are relative to the work
     with group management on Manage, and the pair-group variant where every management
     action is absent **but "Add a transaction" is present**;
   - the favorite star on the group list row, on the group screen's header (pair groups
-    included) and on a joined sub-group's row, including the notify-then-refetch path a
-    sub-group's own toggle relies on;
+    included) and on a joined sub-group's row, including the invalidate-then-refetch path
+    a sub-group's own toggle relies on;
   - on both the group list and the friend list: starring a row moves it across the
     divider rule at once (no rule while nothing is a favorite), and a *later* refresh
-    (another change notifying the same `groupsChanged` signal) brings the server's order
-    into view.
+    (another change invalidating the groups) brings the server's order into view.
 - **Home** (`src/features/home/`): the identity block; both sections' empty states;
   favorites of every kind, with a sub-group's breadcrumb; a star taking its row *out* of
   that section (rather than moving it, as everywhere else); the latest list naming the
   group of each transaction and opening that group rather than the transaction; both
-  sections re-reading when something changes elsewhere (`transactionsChanged` /
-  `groupsChanged`); one section failing and retrying without taking the other or the
+  sections re-reading when something changes elsewhere (the ledger or the groups
+  invalidated); one section failing and retrying without taking the other or the
   identity down.
 - **Transactions** (`src/features/transactions/`):
   - the split editor: selection, weight stepper, live preview, mode switching, the

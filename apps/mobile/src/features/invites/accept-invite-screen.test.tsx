@@ -1,8 +1,9 @@
 import type { AcceptInviteResult, InvitePreview, PlaceholdersResponse } from '@ardoise/shared';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { ApiError } from '@/lib/api/errors';
+import { render } from '@/test-utils/render';
 
 import { AcceptInviteScreen } from './accept-invite-screen';
 

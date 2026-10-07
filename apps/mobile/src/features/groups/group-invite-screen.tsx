@@ -19,6 +19,7 @@ export function GroupInviteScreen({ groupId, groupName, embedded }: GroupInviteS
       title="Invite to this group"
       blurb="Anyone who opens this link and signs in joins the group. It doesn’t add them to your friends."
       shareMessage={(url) => `Join “${groupName}” on Ardoise: ${url}`}
+      inviteKey={`group:${groupId}`}
       load={(fetcher) => fetchGroupInvite(fetcher, groupId)}
       rotate={(fetcher) => rotateGroupInvite(fetcher, groupId)}
       embedded={embedded}

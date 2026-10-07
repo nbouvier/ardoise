@@ -18,10 +18,10 @@ import { ThemedText } from '@/components/themed-text';
 import { useDialog } from '@/components/use-dialog';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { groupsChanged } from '@/features/groups/groups-changed';
 import { balanceTone, balanceWithPerson } from '@/features/transactions/balance-display';
 import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
+import { useInvalidation } from '@/lib/query/use-invalidation';
 
 import { NewFriendScreen } from './new-friend-screen';
 import {
@@ -105,6 +105,7 @@ export function FriendsScreen() {
   const theme = useTheme();
   const [adding, setAdding] = useState(false);
   const { dialog, confirm, inform } = useDialog();
+  const invalidation = useInvalidation();
 
   /** Open the group shared with a friend — it always exists by now. */
   function handleOpen(friend: FriendEntry) {
@@ -128,7 +129,7 @@ export function FriendsScreen() {
       onConfirm: () => {
         remove(friend.id)
           // The pair group went with the friendship.
-          .then(() => groupsChanged.notify())
+          .then(() => invalidation.groupsChanged())
           .catch((error: unknown) => {
             logger.warn('friends.remove.failed', errorFields(error));
             if (isUnsettledRemoval(error)) {

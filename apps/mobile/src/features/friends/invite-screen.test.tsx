@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { Share } from 'react-native';
 
 import type { Invite } from '@ardoise/shared';
+
+import { render } from '@/test-utils/render';
 
 import { InviteScreen } from './invite-screen';
 
