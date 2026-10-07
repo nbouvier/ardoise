@@ -57,7 +57,7 @@ Opening the link:
 
 Once in the app:
 
-3. If the person is **not signed in**, they see the normal Google sign-in screen. The
+3. If the person is **not signed in**, they see the normal sign-in screen. The
    invitation is **remembered across sign-in**, including when an account is created on the
    spot.
 4. Signed in, they see a **confirmation screen**: the inviter's name and avatar, and
@@ -102,8 +102,8 @@ either Friends list, the group behind their row already exists.
 - Notifications (push or in-app) when someone accepts an invitation.
 - ~~Any use of the friend list by other features~~ — superseded: groups consume it
   (`docs/specs/groups.md`).
-- Web (`mobile:web`) support beyond what already works: sign-in is disabled there, so
-  invitations cannot be accepted on web.
+- Opening invitation links on the web target: the links open the native app; the web
+  app is not hosted yet.
 
 ## Edge cases
 

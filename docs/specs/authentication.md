@@ -1,4 +1,4 @@
-# Feature: Authentication (Google sign-in)
+# Feature: Authentication (sessions and Google sign-in)
 
 ## Context
 
@@ -7,8 +7,10 @@ the source of truth. Every future feature needs to know **who** is acting and to
 data to that person. This feature establishes identity: a user signs in with their
 Google account, stays signed in across app launches, and can sign out.
 
-Google sign-in is the only authentication method for now. The server never trusts an
-identity claim it has not verified against Google.
+It also owns the **session** every way of signing in ends with, on the phone and in a
+browser. Signing in with an e-mail address and a password is its own feature
+(`docs/specs/password-sign-in.md`). The server never trusts an identity claim it has not
+verified: against Google, or against a password and a code sent to the address.
 
 ## User story
 
@@ -20,8 +22,9 @@ without managing another password**.
 
 - On launch, while the app determines whether a session exists, a loading/splash state is
   shown (no flash of the sign-in screen).
-- If there is no valid session, the app shows a **sign-in screen** with a single
-  "Continue with Google" action and nothing else of the app is reachable.
+- If there is no valid session, the app shows a **sign-in screen** with a "Continue with
+  Google" action (and the password form, `docs/specs/password-sign-in.md`); nothing else
+  of the app is reachable.
 - Choosing a Google account and completing Google's consent returns the user to the app,
   now signed in, landing on the app's main screens.
 - A signed-in user has an **Account** area showing their Google profile (name, email,
@@ -42,11 +45,30 @@ without managing another password**.
 - Sign-out revokes the current refresh token server-side.
 - Only a hash of the refresh token is stored server-side.
 
+### Session on the web
+
+A browser page cannot keep a secret from the scripts it runs, so on the web target the
+refresh token never reaches JavaScript:
+
+- The web client says it is one on every `/auth/*` call. The server then puts the refresh
+  token in an **`HttpOnly`, `Secure`, `SameSite=Strict` cookie** scoped to `/auth`,
+  instead of the response body; the access token still comes in the body and stays in
+  memory.
+- Refresh and sign-out read the token from that cookie; sign-out also clears it.
+- A request that relies on the cookie is accepted only from an **allowed origin** (the
+  web app's own, from the server's configuration), which stops another site from
+  driving it. The API answers CORS for those origins only, with credentials.
+- The web app and the API must therefore be served from the same site (for example two
+  subdomains of one domain); a cookie from another site would be blocked as third-party.
+- On launch the web client asks for a refresh: the cookie, if any, restores the session.
+- The native apps are unchanged: the refresh token travels in the body and lives in the
+  OS secure store.
+
 ## Out of scope
 
-- Web (`mobile:web`) sign-in. The sign-in screen renders on web but the action is
-  disabled with a "coming soon" note; native iOS/Android is the target for this feature.
-- Any authentication method other than Google (email/password, Apple, magic links).
+- Google sign-in on the web target (`mobile:web`): the Google action renders there but is
+  disabled with a "coming soon" note. Password sign-in works on the web.
+- Authentication methods other than Google and e-mail/password (Apple, magic links).
 - Profile editing, linking multiple providers. Account deletion is its own feature:
   `docs/specs/account-deletion.md`.
 - Authorization rules for domain resources (groups/expenses) — there are no protected
@@ -105,6 +127,11 @@ without managing another password**.
       revokes every other session of that user.
 - [ ] On the web target, the sign-in screen renders and the Google action is disabled
       with a "coming soon" indication (no crash).
+- [ ] On the web target, signing in sets the refresh token in an `HttpOnly` cookie and
+      never in a response body; reloading the page keeps the user signed in; signing out
+      clears the cookie and revokes the session.
+- [ ] A refresh or sign-out relying on the cookie from an origin that is not allowed is
+      refused (403), and the API sends no CORS headers to such an origin.
 
 ## Testing considerations
 
@@ -155,9 +182,11 @@ Client persistence: the refresh token is stored in the OS secure store
   page has a **Profile** section: one row — avatar, name, email beneath — with no card
   around it. Tapping the row opens a menu with **Switch account** (signs out, then opens
   the Google account chooser straight away; dismissing it leaves the user on the sign-in
-  screen) and **Sign out**.
+  screen — for an account with a password, it stops at the sign-in screen) and **Sign
+  out**.
 - Light and dark themes via existing `ThemedText` / `ThemedView` / `Colors`.
-- Web: the button is visibly disabled with a short "Web sign-in coming soon" caption.
+- Web: the Google button is visibly disabled with a short "Google sign-in on the web is
+  coming soon" caption; the password form above it works.
 
 ## Observability
 
@@ -183,6 +212,8 @@ Client persistence: the refresh token is stored in the OS secure store
 - Only the minimum Google profile fields are requested and stored (id, email, name,
   avatar).
 - Tokens must never appear in logs, URLs or query strings.
+- On the web, the refresh token lives only in its `HttpOnly` cookie, out of reach of the
+  page's scripts; cookie-based requests are checked against the allowed origins.
 - Authorization for domain resources is always enforced server-side (future work); the
   mobile app is never the only gate.
 

@@ -27,12 +27,20 @@ Groups who share costs: flatmates, trips, couples, recurring social groups.
 
 ## Current capabilities
 
-- **Authentication** — Google sign-in. Users sign in with their Google account and stay
-  signed in across app launches (rotating refresh-token session); the server verifies
-  every Google token before trusting an identity. See `docs/specs/authentication.md`.
+- **Authentication** — Users sign in with their Google account, or with an e-mail
+  address and a password, and stay signed in across app launches (rotating refresh-token
+  session; in a browser, kept in a cookie scripts cannot read). The server verifies every
+  Google token before trusting an identity. See `docs/specs/authentication.md`.
+- **E-mail and password accounts** — anyone can create an account from a sign-up form
+  (name, e-mail, password); a 6-digit code sent to the address proves it before the
+  account exists. One address is one account: signing in with Google or with a password
+  reaches the same one, and the app never tells whether an address is registered. A
+  forgotten password is replaced with a code by e-mail; the Account page changes it.
+  E-mails go through Brevo (EU). Works on the phone and on the web target. See
+  `docs/specs/password-sign-in.md`.
 - **Friends and invitations** — each user keeps a friend list, built by sharing an
   invitation link (copy or OS share sheet: SMS, mail, WhatsApp…). The link opens the app,
-  prompts for Google sign-in if needed, and connects both people after an explicit
+  prompts for sign-in if needed, and connects both people after an explicit
   confirmation. Removing a friend deletes the group the two share, so it waits until
   nothing is owed there. See `docs/specs/friends-and-invitations.md`.
 - **Groups** — named spaces that people belong to, and where transactions live. A user

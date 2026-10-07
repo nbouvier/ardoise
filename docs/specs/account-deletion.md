@@ -41,8 +41,8 @@ deleted**, so that **I can exercise that right without reinstalling it**.
     it happens;
   - that groups the user created pass to the member who has been in them the longest, and
     groups where the user is alone are deleted;
-  - that it **cannot be undone**: signing in again with the same Google account later
-    creates a new, empty account.
+  - that it **cannot be undone**: signing in again with the same Google account or
+    address later creates a new, empty account.
 - A **Delete my account** button at the bottom, destructive. Pressing it asks one last
   time ("Delete your account? This cannot be undone."), then deletes.
 - On success, the app is signed out and back on the sign-in screen. Nothing of the
@@ -148,8 +148,11 @@ again.
   all-or-nothing, the account is either fully there or fully gone.
 - **The user has no friend, no group**: deletion works the same and only erases the
   profile and sessions.
-- **Signing in again with the same Google account**: a new account, unrelated to the old
-  one, with no friend, no group, nothing.
+- **Signing in again with the same Google account or address**: a new account, unrelated
+  to the old one, with no friend, no group, nothing.
+- **A sign-up or password-reset code is pending for the address**: it is deleted with
+  the account (`docs/specs/password-sign-in.md`), and the password hash goes with the
+  profile.
 
 ## Acceptance criteria
 
