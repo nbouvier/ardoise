@@ -53,6 +53,27 @@ export const signupVerifyRequestSchema = z.object({
 });
 export type SignupVerifyRequest = z.infer<typeof signupVerifyRequestSchema>;
 
+/** `POST /auth/password-reset` request. */
+export const passwordResetRequestSchema = z.object({
+  email: emailAddressSchema,
+});
+export type PasswordResetRequest = z.infer<typeof passwordResetRequestSchema>;
+
+/** `POST /auth/password-reset/confirm` request. */
+export const passwordResetConfirmRequestSchema = z.object({
+  email: emailAddressSchema,
+  code: emailCodeSchema,
+  password: passwordSchema,
+});
+export type PasswordResetConfirmRequest = z.infer<typeof passwordResetConfirmRequestSchema>;
+
+/** `POST /auth/password/change` request. */
+export const passwordChangeRequestSchema = z.object({
+  currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH),
+  newPassword: passwordSchema,
+});
+export type PasswordChangeRequest = z.infer<typeof passwordChangeRequestSchema>;
+
 /** `POST /auth/google` request: a Google-issued ID token to verify. */
 export const googleAuthRequestSchema = z.object({
   idToken: z.string().min(1),

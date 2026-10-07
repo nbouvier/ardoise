@@ -100,6 +100,12 @@ export interface AuthRepository {
   ): Promise<{ userId: string } | undefined>;
   /** Revoke every live session of a user; returns how many were. */
   revokeUserSessions(userId: string, at: Date): Promise<number>;
+  /**
+   * Delete every session of a user. Unlike revoking, which keeps the rows so a
+   * revoked token coming back is caught as theft, a deleted token is merely
+   * unknown: the right outcome when the sessions end on purpose.
+   */
+  deleteUserSessions(userId: string): Promise<void>;
   /** Delete the sessions expired at `at`; returns how many were. */
   deleteExpiredSessions(at: Date): Promise<number>;
 }
@@ -273,6 +279,10 @@ export function createAuthRepository(db: Database): AuthRepository {
         .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
         .returning({ id: sessions.id });
       return revoked.length;
+    },
+
+    async deleteUserSessions(userId) {
+      await db.delete(sessions).where(eq(sessions.userId, userId));
     },
 
     async deleteExpiredSessions(at) {

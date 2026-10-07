@@ -110,7 +110,9 @@ Rotation is one transaction: `UPDATE … WHERE revoked_at IS NULL AND expires_at
 RETURNING user_id` claims the old row (a concurrent rotation of the same token matches
 nothing), then the new row is inserted. The server deletes **expired** rows every hour
 (`auth.sessions.purge`); revoked rows stay until they expire, since a revoked token coming
-back is what reveals a stolen one.
+back is what reveals a stolen one. Setting a new password **deletes** the user's other
+rows instead of revoking them: those tokens are then merely unknown, and the old device
+that presents one does not set off the theft response against the new session.
 
 ### `email_codes`
 

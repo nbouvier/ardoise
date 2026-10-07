@@ -5,7 +5,7 @@ import type { Language } from '../../http/language.js';
 import type { MailMessage } from '../../mail/mailer.js';
 
 import { CODE_ATTEMPTS, CODE_TTL_MS, type EmailCodeHasher } from './codes.js';
-import { accountExistsEmail, signupCodeEmail } from './emails.js';
+import { accountExistsEmail, passwordResetEmail, signupCodeEmail } from './emails.js';
 import type { GoogleVerifier } from './google.js';
 import type { PasswordHasher } from './passwords.js';
 import type { AuthRepository, GoogleAccountOutcome } from './repository.js';
@@ -55,6 +55,14 @@ export class CodeError extends Error {
   }
 }
 
+/** A password change whose current password does not match, or an account without one. */
+export class PasswordChangeError extends Error {
+  constructor(readonly userId: string) {
+    super('Current password refused');
+    this.name = 'PasswordChangeError';
+  }
+}
+
 export interface SignupRequest {
   name: string;
   email: string;
@@ -81,6 +89,22 @@ export interface AuthService {
     email: string,
     code: string,
   ): Promise<{ session: AuthSession; outcome: 'created' | 'linked' }>;
+  /**
+   * E-mail a password-reset code to the address if it has an account; nothing
+   * otherwise. Answers the same either way. Throws `ThrottledError`.
+   */
+  requestPasswordReset(email: string, lang: Language): Promise<void>;
+  /**
+   * Set the account's password with the code, revoke every session of it, and
+   * start a new one. Throws `CodeError`.
+   */
+  confirmPasswordReset(email: string, code: string, password: string): Promise<AuthSession>;
+  /**
+   * Change the password after checking the current one, revoke every session
+   * of the account, and start a new one for the caller. Throws
+   * `ThrottledError` or `PasswordChangeError`.
+   */
+  changePassword(userId: string, current: string, next: string): Promise<AuthSession>;
   refresh(refreshToken: string): Promise<AuthSession>;
   signOut(refreshToken: string): Promise<void>;
   getProfile(userId: string): Promise<UserProfile | undefined>;
@@ -123,6 +147,21 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
   async function startSession(user: UserRow): Promise<AuthSession> {
     const session = await sessions.create(user.id);
     return toSession(user, session.refreshToken);
+  }
+
+  /**
+   * Set a new password and sign every device out but the one asking, which
+   * gets a fresh session: whoever knew the old password, or held a session,
+   * is locked out.
+   *
+   * The old sessions are deleted, not revoked: a revoked token coming back
+   * reads as theft and revokes every session, the fresh one included, so the
+   * first old device to wake up would sign this one out.
+   */
+  async function replacePassword(user: UserRow, password: string): Promise<AuthSession> {
+    const updated = await repository.setPasswordHash(user.id, await passwords.hash(password));
+    await repository.deleteUserSessions(user.id);
+    return startSession(updated);
   }
 
   /** Count a code request for the address; throws once it has asked too often. */
@@ -239,6 +278,44 @@ export function createAuthService(deps: AuthServiceDeps): AuthService {
       }
       const user = await repository.setPasswordHash(existing.id, passwordHash);
       return { session: await startSession(user), outcome: 'linked' };
+    },
+
+    async requestPasswordReset(email, lang) {
+      throttleCodeRequest('password_reset', email);
+      const existing = await repository.findAccountByEmail(email);
+      if (!existing) {
+        return;
+      }
+      const code = await issueCode('password_reset', email, { userId: existing.id });
+      deliver(passwordResetEmail(email, code, lang), 'password_reset');
+    },
+
+    async confirmPasswordReset(email, code, password) {
+      const row = await consumeCode('password_reset', email, code);
+      // Deleting the account deletes its codes: a live one has its account.
+      const user = row.userId ? await repository.findUserById(row.userId) : undefined;
+      if (!user) {
+        throw new CodeError('no_code');
+      }
+      return replacePassword(user, password);
+    },
+
+    async changePassword(userId, current, next) {
+      const user = await repository.findUserById(userId);
+      if (!user) {
+        throw new SessionError('not_found');
+      }
+      // The same budget as signing in: this is a password check too.
+      const key = (user.email ?? userId).toLowerCase();
+      const retryAfter = signInThrottle.retryAfterSeconds(key);
+      if (retryAfter > 0) {
+        throw new ThrottledError(retryAfter);
+      }
+      if (!(await passwords.verify(current, user.passwordHash))) {
+        signInThrottle.record(key);
+        throw new PasswordChangeError(userId);
+      }
+      return replacePassword(user, next);
     },
 
     async refresh(refreshToken) {

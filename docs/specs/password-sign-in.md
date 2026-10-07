@@ -217,7 +217,10 @@ my e-mail address**, so that **I do not lose my account and its groups**.
 - A code proves control of the address; it is the only thing that adds a password to an
   existing account or replaces a forgotten one. Linking Google relies on Google's own
   verification of the address.
-- Resetting or changing a password revokes every other session.
+- Resetting or changing a password ends every other session. They are ended as unknown,
+  not as revoked: a revoked token coming back is the theft signal that revokes every
+  session (`docs/specs/authentication.md`), and the first old device to wake up would
+  then sign out the one that just set the password.
 - The e-mail provider (Brevo, EU) is a new processor: the privacy policy names it, and
   the password hash joins the list of stored data (`docs/specs/legal-pages.md`).
 - The provider's API key is server-only configuration.

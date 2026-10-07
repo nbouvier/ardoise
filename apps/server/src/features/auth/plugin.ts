@@ -1,6 +1,9 @@
 import {
   googleAuthRequestSchema,
   logoutRequestSchema,
+  passwordChangeRequestSchema,
+  passwordResetConfirmRequestSchema,
+  passwordResetRequestSchema,
   passwordSignInRequestSchema,
   refreshRequestSchema,
   signupRequestSchema,
@@ -26,7 +29,13 @@ import { createEmailCodeHasher } from './codes.js';
 import { createGoogleVerifier, GoogleVerificationError, type GoogleVerifier } from './google.js';
 import { createPasswordHasher, type ScryptCost } from './passwords.js';
 import { createAuthRepository, GoogleAccountConflictError } from './repository.js';
-import { CodeError, createAuthService, CredentialsError, type AuthService } from './service.js';
+import {
+  CodeError,
+  createAuthService,
+  CredentialsError,
+  PasswordChangeError,
+  type AuthService,
+} from './service.js';
 import { createSessionService, SessionError } from './sessions.js';
 import { AttemptThrottle, ThrottledError } from './throttle.js';
 import { createAccessTokenService, type AccessTokenService } from './tokens.js';
@@ -221,6 +230,66 @@ export const authPlugin = fp<AuthPluginOptions>(
         throw error;
       }
     });
+
+    app.post('/auth/password-reset', async (request: FastifyRequest, reply) => {
+      const { email } = parseRequest(passwordResetRequestSchema, request.body);
+      try {
+        await auth.requestPasswordReset(email, languageOf(request));
+      } catch (error) {
+        if (error instanceof ThrottledError) {
+          app.log.warn({ purpose: 'password_reset' }, 'auth.code.throttled');
+          return throttled(reply, error);
+        }
+        throw error;
+      }
+      return reply.code(202).send();
+    });
+
+    app.post('/auth/password-reset/confirm', async (request: FastifyRequest, reply) => {
+      const { email, code, password } = parseRequest(
+        passwordResetConfirmRequestSchema,
+        request.body,
+      );
+      try {
+        const session = await auth.confirmPasswordReset(email, code, password);
+        app.log.info({ userId: session.user.id }, 'auth.password.reset');
+        app.log.info({ userId: session.user.id }, 'auth.session.issued');
+        return reply.code(200).send(session);
+      } catch (error) {
+        if (error instanceof CodeError) {
+          app.log.info({ purpose: 'password_reset', reason: error.reason }, 'auth.code.rejected');
+          return unauthorized(reply, 'invalid_code');
+        }
+        throw error;
+      }
+    });
+
+    app.post(
+      '/auth/password/change',
+      { preHandler: app.authenticate },
+      async (request: FastifyRequest, reply) => {
+        const { currentPassword, newPassword } = parseRequest(
+          passwordChangeRequestSchema,
+          request.body,
+        );
+        try {
+          const session = await auth.changePassword(request.userId!, currentPassword, newPassword);
+          app.log.info({ userId: session.user.id }, 'auth.password.changed');
+          return reply.code(200).send(session);
+        } catch (error) {
+          if (error instanceof ThrottledError) {
+            app.log.warn('auth.password.throttled');
+            return throttled(reply, error);
+          }
+          if (error instanceof PasswordChangeError) {
+            app.log.info({ userId: error.userId }, 'auth.password.change.refused');
+            // Not 401: the client would take it for an expired session.
+            return reply.code(403).send({ error: 'invalid_password' });
+          }
+          throw error;
+        }
+      },
+    );
 
     app.post('/auth/refresh', async (request: FastifyRequest, reply) => {
       const { refreshToken } = parseRequest(refreshRequestSchema, request.body);

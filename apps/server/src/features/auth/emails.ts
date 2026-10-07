@@ -98,6 +98,25 @@ const ACCOUNT_EXISTS: Record<Language, Content> = {
   },
 };
 
+const PASSWORD_RESET_CODE: Record<Language, Content> = {
+  fr: {
+    subject: 'Votre code Ardoise : {code}',
+    paragraphs: [
+      'Voici votre code pour définir un nouveau mot de passe Ardoise : {code}',
+      `${VALIDITY.fr} Une fois le nouveau mot de passe défini, vos autres appareils seront déconnectés.`,
+      'Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail : votre mot de passe reste le même.',
+    ],
+  },
+  en: {
+    subject: 'Your Ardoise code: {code}',
+    paragraphs: [
+      'Here is your code to set a new Ardoise password: {code}',
+      `${VALIDITY.en} Once the new password is set, your other devices will be signed out.`,
+      'If you did not ask for it, ignore this e-mail: your password stays the same.',
+    ],
+  },
+};
+
 /** The code that creates an account, or adds a password to the Google-only one. */
 export function signupCodeEmail(
   to: string,
@@ -111,4 +130,9 @@ export function signupCodeEmail(
 /** Sent instead of a code when the address already has an account with a password. */
 export function accountExistsEmail(to: string, lang: Language): MailMessage {
   return render(to, ACCOUNT_EXISTS[lang]);
+}
+
+/** The code that sets a new password ("Forgot password?"). */
+export function passwordResetEmail(to: string, code: string, lang: Language): MailMessage {
+  return render(to, PASSWORD_RESET_CODE[lang], code);
 }

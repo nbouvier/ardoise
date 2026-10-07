@@ -22,6 +22,9 @@ current setup and state.
 | `auth.password.failed`         | info  | `reason`, `userId`? | A password sign-in did not match: `unknown_account`, `no_password` or `wrong_password` (`userId` when there is an account). Never the address or the password |
 | `auth.password.throttled`      | warn  | —             | An address used up its failed sign-ins for the window (429) |
 | `auth.account.created`         | info  | `userId`, `method` | A sign-up code created a password account |
+| `auth.password.reset`          | info  | `userId`      | A reset code set a new password; every other session ended |
+| `auth.password.changed`        | info  | `userId`      | The account's password was changed from the app; every other session ended |
+| `auth.password.change.refused` | info  | `userId`      | A password change gave a wrong current password, or the account has none (403) |
 | `auth.code.rejected`           | info  | `purpose`, `reason` | An e-mailed code was refused: `no_code` (none live: never sent, used, expired, out of attempts), `wrong_code`, `used`, `account_has_password`. Never the code or the address |
 | `auth.code.throttled`          | warn  | `purpose`     | An address asked for too many codes in the hour (429) |
 | `auth.mail.sent`               | info  | `purpose`     | The e-mail provider accepted a message (`signup`, `password_reset`) |
