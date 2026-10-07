@@ -9,22 +9,18 @@ import {
 } from '@ardoise/shared';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { AsyncState } from '@/components/async-state';
 import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/button';
 import { Card } from '@/components/card';
-import { DropdownMenu } from '@/components/dropdown-menu';
 import { Icon } from '@/components/icon';
 import { MeTag } from '@/components/me-tag';
-import { Pill } from '@/components/pill';
 import { SegmentedSwitch } from '@/components/segmented-switch';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -32,8 +28,10 @@ import { centsToText } from '@/features/transactions/amount-input';
 import { DateRangeField } from '@/features/transactions/date-range-field';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
+import { toggleInSet } from '@/lib/sets';
 
 import { DonutChart } from './donut-chart';
+import { MultiSelectField } from './multi-select-field';
 import { useFollowAllSelection } from './use-follow-all-selection';
 
 export interface StatisticsScreenProps {
@@ -180,15 +178,7 @@ export function StatisticsScreen({
 
   function toggleSubgroup(subgroupId: string) {
     setSelected(null);
-    setSelectedSubgroupIds((current) => {
-      const next = new Set(current);
-      if (next.has(subgroupId)) {
-        next.delete(subgroupId);
-      } else {
-        next.add(subgroupId);
-      }
-      return next;
-    });
+    setSelectedSubgroupIds((current) => toggleInSet(current, subgroupId));
   }
 
   function setAllSubgroups(ids: ReadonlySet<string>) {
@@ -198,15 +188,7 @@ export function StatisticsScreen({
 
   function toggleMember(memberId: string) {
     setSelected(null);
-    setSelectedMemberIds((current) => {
-      const next = new Set(current);
-      if (next.has(memberId)) {
-        next.delete(memberId);
-      } else {
-        next.add(memberId);
-      }
-      return next;
-    });
+    setSelectedMemberIds((current) => toggleInSet(current, memberId));
   }
 
   function setAllMembers(ids: ReadonlySet<string>) {
@@ -215,6 +197,11 @@ export function StatisticsScreen({
   }
 
   const selectedSlice = breakdown.slices.find((slice) => slice.category === selected);
+  const memberPresets = [
+    { label: 'Everybody', ids: new Set(members.map((member) => member.id)) },
+    ...(viewerId ? [{ label: 'Only you', ids: new Set([viewerId]) }] : []),
+    { label: 'Nobody', ids: new Set<string>() },
+  ];
 
   return (
     <View style={styles.panel}>
@@ -240,10 +227,23 @@ export function StatisticsScreen({
                 <ThemedText type="overline" themeColor="textSecondary">
                   Participants
                 </ThemedText>
-                <ParticipantsField
-                  members={members}
-                  viewerId={viewerId}
-                  selectedMemberIds={selectedMemberIds}
+                <MultiSelectField
+                  name="Participants"
+                  label={participantsLabel(members, selectedMemberIds)}
+                  items={members}
+                  idOf={(member) => member.id}
+                  itemLabel={(member) => member.name}
+                  renderItem={(member) => (
+                    <>
+                      <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
+                      <ThemedText style={styles.optionName} numberOfLines={1}>
+                        {member.name}
+                      </ThemedText>
+                      {member.id === viewerId ? <MeTag /> : null}
+                    </>
+                  )}
+                  presets={memberPresets}
+                  selectedIds={selectedMemberIds}
                   onToggle={toggleMember}
                   onSetAll={setAllMembers}
                 />
@@ -253,9 +253,24 @@ export function StatisticsScreen({
                   <ThemedText type="overline" themeColor="textSecondary">
                     Subgroups
                   </ThemedText>
-                  <SubgroupsField
-                    subgroups={subgroups}
-                    selectedSubgroupIds={selectedSubgroupIds}
+                  {/* Ticking one includes it and everything nested under it
+                      (`docs/specs/group-statistics.md`). */}
+                  <MultiSelectField
+                    name="Subgroups"
+                    label={subgroupsLabel(subgroups, selectedSubgroupIds)}
+                    items={subgroups}
+                    idOf={(subgroup) => subgroup.id}
+                    itemLabel={(subgroup) => subgroup.name}
+                    renderItem={(subgroup) => (
+                      <ThemedText style={styles.optionName} numberOfLines={1}>
+                        {subgroup.name}
+                      </ThemedText>
+                    )}
+                    presets={[
+                      { label: 'All', ids: new Set(subgroups.map((subgroup) => subgroup.id)) },
+                      { label: 'None', ids: new Set() },
+                    ]}
+                    selectedIds={selectedSubgroupIds}
                     onToggle={toggleSubgroup}
                     onSetAll={setAllSubgroups}
                   />
@@ -277,89 +292,83 @@ export function StatisticsScreen({
         </Collapsible>
       </View>
 
-      {status === 'loading' ? (
-        <View style={styles.centeredBody}>
-          <ActivityIndicator testID="statistics-loading" color={theme.primary} />
-        </View>
-      ) : status === 'error' ? (
-        <View style={styles.centeredBody}>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            We couldn’t load this group’s transactions. Check your connection and try
-            again.
-          </ThemedText>
-          <Button label="Try again" variant="secondary" onPress={refresh} />
-        </View>
-      ) : selectedMemberIds.size === 0 ? (
-        <View style={styles.centeredBody}>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            Select at least one participant to see a breakdown.
-          </ThemedText>
-        </View>
-      ) : breakdown.slices.length === 0 ? (
-        <ScrollView contentContainerStyle={styles.body}>
-          <DonutChart
-            size={CHART_SIZE}
-            thickness={CHART_THICKNESS}
-            slices={[{ key: 'empty', value: 1, color: theme.border, label: 'No data' }]}>
-            <Centre
-              label={`Total ${typeLabels[type].toLowerCase()}`}
-              amountCents={0}
-              percent={null}
-            />
-          </DonutChart>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            {emptyMessage(type, everyoneSelected, dateRangeActive)}
-          </ThemedText>
-        </ScrollView>
-      ) : (
-        <ScrollView contentContainerStyle={styles.body}>
-          <DonutChart
-            size={CHART_SIZE}
-            thickness={CHART_THICKNESS}
-            slices={breakdown.slices.map((slice) => {
-              const category = categoryDefinition(slice.category);
-              return {
-                key: slice.category,
-                value: slice.amountCents,
-                color: category?.color ?? '#8A9199',
-                label: `${category?.label ?? slice.category}, ${centsToText(
-                  slice.amountCents,
-                )}, ${slice.percent}%`,
-              };
-            })}
-            selectedKey={selected}
-            onSelect={(key) =>
-              setSelected((current) => (current === key ? null : (key as TransactionCategory)))
-            }>
-            <Centre
-              label={
-                selectedSlice
-                  ? `${categoryDefinition(selectedSlice.category)?.emoji ?? ''} ${
-                      categoryDefinition(selectedSlice.category)?.label ?? ''
-                    }`
-                  : `Total ${typeLabels[type].toLowerCase()}`
-              }
-              amountCents={selectedSlice ? selectedSlice.amountCents : breakdown.totalCents}
-              percent={selectedSlice?.percent ?? null}
-            />
-          </DonutChart>
-
-          <Card style={styles.legend}>
-            {breakdown.slices.map((slice) => (
-              <LegendRow
-                key={slice.category}
-                category={slice.category}
-                amountCents={slice.amountCents}
-                percent={slice.percent}
-                selected={selected === slice.category}
-                onPress={() =>
-                  setSelected((current) => (current === slice.category ? null : slice.category))
-                }
+      <AsyncState
+        status={status}
+        loadingTestID="statistics-loading"
+        failure="We couldn’t load this group’s transactions. Check your connection and try again."
+        onRetry={refresh}>
+        {selectedMemberIds.size === 0 ? (
+          <View style={styles.centeredBody}>
+            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+              Select at least one participant to see a breakdown.
+            </ThemedText>
+          </View>
+        ) : breakdown.slices.length === 0 ? (
+          <ScrollView contentContainerStyle={styles.body}>
+            <DonutChart
+              size={CHART_SIZE}
+              thickness={CHART_THICKNESS}
+              slices={[{ key: 'empty', value: 1, color: theme.border, label: 'No data' }]}>
+              <Centre
+                label={`Total ${typeLabels[type].toLowerCase()}`}
+                amountCents={0}
+                percent={null}
               />
-            ))}
-          </Card>
-        </ScrollView>
-      )}
+            </DonutChart>
+            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+              {emptyMessage(type, everyoneSelected, dateRangeActive)}
+            </ThemedText>
+          </ScrollView>
+        ) : (
+          <ScrollView contentContainerStyle={styles.body}>
+            <DonutChart
+              size={CHART_SIZE}
+              thickness={CHART_THICKNESS}
+              slices={breakdown.slices.map((slice) => {
+                const category = categoryDefinition(slice.category);
+                return {
+                  key: slice.category,
+                  value: slice.amountCents,
+                  color: category?.color ?? '#8A9199',
+                  label: `${category?.label ?? slice.category}, ${centsToText(
+                    slice.amountCents,
+                  )}, ${slice.percent}%`,
+                };
+              })}
+              selectedKey={selected}
+              onSelect={(key) =>
+                setSelected((current) => (current === key ? null : (key as TransactionCategory)))
+              }>
+              <Centre
+                label={
+                  selectedSlice
+                    ? `${categoryDefinition(selectedSlice.category)?.emoji ?? ''} ${
+                        categoryDefinition(selectedSlice.category)?.label ?? ''
+                      }`
+                    : `Total ${typeLabels[type].toLowerCase()}`
+                }
+                amountCents={selectedSlice ? selectedSlice.amountCents : breakdown.totalCents}
+                percent={selectedSlice?.percent ?? null}
+              />
+            </DonutChart>
+
+            <Card style={styles.legend}>
+              {breakdown.slices.map((slice) => (
+                <LegendRow
+                  key={slice.category}
+                  category={slice.category}
+                  amountCents={slice.amountCents}
+                  percent={slice.percent}
+                  selected={selected === slice.category}
+                  onPress={() =>
+                    setSelected((current) => (current === slice.category ? null : slice.category))
+                  }
+                />
+              ))}
+            </Card>
+          </ScrollView>
+        )}
+      </AsyncState>
     </View>
   );
 }
@@ -467,114 +476,6 @@ function participantsLabel(
     .join(', ');
 }
 
-/**
- * Who the breakdown counts: a labelled, fixed-size pill naming the pick,
- * opening a multi-select dropdown (`DropdownMenu`) — the presets first, then a
- * checkbox row per member — rather than a row of chips that would not fit a
- * group of any size (`docs/specs/group-statistics.md`). The menu stays open
- * while ticking, so several members can be picked in one go; tapping outside
- * closes it.
- */
-function ParticipantsField({
-  members,
-  viewerId,
-  selectedMemberIds,
-  onToggle,
-  onSetAll,
-}: {
-  members: readonly GroupMember[];
-  viewerId: string | null;
-  selectedMemberIds: ReadonlySet<string>;
-  onToggle: (memberId: string) => void;
-  onSetAll: (ids: ReadonlySet<string>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const label = participantsLabel(members, selectedMemberIds);
-  const preset = selectionPreset(members, selectedMemberIds, viewerId);
-
-  return (
-    <>
-      <SelectField
-        accessibilityLabel={`Participants: ${label}`}
-        label={label}
-        onPress={() => setOpen(true)}
-      />
-      <DropdownMenu visible={open} onClose={() => setOpen(false)}>
-        <View style={styles.menuPresets}>
-          <Pill
-            label="Everybody"
-            selected={preset === 'all'}
-            onPress={() => onSetAll(new Set(members.map((member) => member.id)))}
-          />
-          {viewerId ? (
-            <Pill
-              label="Only you"
-              selected={preset === 'onlyMe'}
-              onPress={() => onSetAll(new Set([viewerId]))}
-            />
-          ) : null}
-          <Pill label="Nobody" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
-        </View>
-
-        <MenuOptions>
-          {members.map((member) => (
-            <ParticipantOption
-              key={member.id}
-              member={member}
-              isViewer={member.id === viewerId}
-              selected={selectedMemberIds.has(member.id)}
-              onPress={() => onToggle(member.id)}
-            />
-          ))}
-        </MenuOptions>
-      </DropdownMenu>
-    </>
-  );
-}
-
-/** The pill-shaped field that opens a dropdown — the same shape for both selectors. */
-function SelectField({
-  accessibilityLabel,
-  label,
-  onPress,
-}: {
-  accessibilityLabel: string;
-  label: string;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.selectField,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-      ]}>
-      <ThemedText numberOfLines={1} style={styles.selectFieldLabel}>
-        {label}
-      </ThemedText>
-      <Icon name="collapse" size={16} color={theme.textSecondary} />
-    </Pressable>
-  );
-}
-
-/**
- * A dropdown's option rows. Scrolls past half the screen's height, so a long
- * list stays inside the menu — and the menu inside the screen.
- */
-function MenuOptions({ children }: { children: ReactNode }) {
-  const { height } = useWindowDimensions();
-
-  return (
-    <ScrollView style={{ maxHeight: height * 0.5 }} contentContainerStyle={styles.menuList}>
-      {children}
-    </ScrollView>
-  );
-}
-
 function subgroupsLabel(
   subgroups: readonly SubgroupSummary[],
   selectedSubgroupIds: ReadonlySet<string>,
@@ -589,170 +490,6 @@ function subgroupsLabel(
     .filter((subgroup) => selectedSubgroupIds.has(subgroup.id))
     .map((subgroup) => subgroup.name)
     .join(', ');
-}
-
-type SelectionPreset = 'all' | 'onlyMe' | 'none' | null;
-
-function selectionPreset(
-  members: readonly GroupMember[],
-  selectedMemberIds: ReadonlySet<string>,
-  viewerId: string | null,
-): SelectionPreset {
-  if (selectedMemberIds.size === members.length) {
-    return 'all';
-  }
-  if (selectedMemberIds.size === 0) {
-    return 'none';
-  }
-  if (viewerId && selectedMemberIds.size === 1 && selectedMemberIds.has(viewerId)) {
-    return 'onlyMe';
-  }
-  return null;
-}
-
-function ParticipantOption({
-  member,
-  isViewer,
-  selected,
-  onPress,
-}: {
-  member: GroupMember;
-  isViewer: boolean;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={member.name}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.participantRow,
-        selected && { backgroundColor: theme.primarySoft },
-        pressed && styles.pressed,
-      ]}>
-      <Avatar name={member.name} picture={member.picture} size={36} seed={member.id} />
-      <ThemedText style={styles.participantName} numberOfLines={1}>
-        {member.name}
-      </ThemedText>
-      {isViewer ? <MeTag /> : null}
-      <View
-        style={[
-          styles.checkbox,
-          { borderColor: selected ? theme.primary : theme.border },
-          selected && { backgroundColor: theme.primary },
-        ]}>
-        {selected ? <Icon name="check" size={14} color={theme.onPrimary} /> : null}
-      </View>
-    </Pressable>
-  );
-}
-
-type SubgroupsPreset = 'all' | 'none' | null;
-
-function subgroupsPreset(
-  subgroups: readonly SubgroupSummary[],
-  selectedSubgroupIds: ReadonlySet<string>,
-): SubgroupsPreset {
-  if (selectedSubgroupIds.size === subgroups.length) {
-    return 'all';
-  }
-  if (selectedSubgroupIds.size === 0) {
-    return 'none';
-  }
-  return null;
-}
-
-/**
- * Which of the group's direct sub-groups count — the same field and dropdown
- * as `ParticipantsField`, with "All" / "None" for presets. Ticking one
- * includes it and everything nested under it (`docs/specs/group-statistics.md`).
- */
-function SubgroupsField({
-  subgroups,
-  selectedSubgroupIds,
-  onToggle,
-  onSetAll,
-}: {
-  subgroups: readonly SubgroupSummary[];
-  selectedSubgroupIds: ReadonlySet<string>;
-  onToggle: (subgroupId: string) => void;
-  onSetAll: (ids: ReadonlySet<string>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const label = subgroupsLabel(subgroups, selectedSubgroupIds);
-  const preset = subgroupsPreset(subgroups, selectedSubgroupIds);
-
-  return (
-    <>
-      <SelectField
-        accessibilityLabel={`Subgroups: ${label}`}
-        label={label}
-        onPress={() => setOpen(true)}
-      />
-      <DropdownMenu visible={open} onClose={() => setOpen(false)}>
-        <View style={styles.menuPresets}>
-          <Pill
-            label="All"
-            selected={preset === 'all'}
-            onPress={() => onSetAll(new Set(subgroups.map((subgroup) => subgroup.id)))}
-          />
-          <Pill label="None" selected={preset === 'none'} onPress={() => onSetAll(new Set())} />
-        </View>
-
-        <MenuOptions>
-          {subgroups.map((subgroup) => (
-            <SubgroupOption
-              key={subgroup.id}
-              subgroup={subgroup}
-              selected={selectedSubgroupIds.has(subgroup.id)}
-              onPress={() => onToggle(subgroup.id)}
-            />
-          ))}
-        </MenuOptions>
-      </DropdownMenu>
-    </>
-  );
-}
-
-function SubgroupOption({
-  subgroup,
-  selected,
-  onPress,
-}: {
-  subgroup: SubgroupSummary;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={subgroup.name}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.subgroupRow,
-        selected && { backgroundColor: theme.primarySoft },
-        pressed && styles.pressed,
-      ]}>
-      <ThemedText style={styles.subgroupName} numberOfLines={1}>
-        {subgroup.name}
-      </ThemedText>
-      <View
-        style={[
-          styles.checkbox,
-          { borderColor: selected ? theme.primary : theme.border },
-          selected && { backgroundColor: theme.primary },
-        ]}>
-        {selected ? <Icon name="check" size={14} color={theme.onPrimary} /> : null}
-      </View>
-    </Pressable>
-  );
 }
 
 function Centre({
@@ -830,6 +567,9 @@ function LegendRow({
 }
 
 const styles = StyleSheet.create({
+  optionName: {
+    flex: 1,
+  },
   panel: {
     flex: 1,
     gap: Spacing.three,
@@ -882,62 +622,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
   },
-  selectField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    alignSelf: 'stretch',
-    gap: Spacing.two,
-    height: 44,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-  },
-  selectFieldLabel: {
-    flexShrink: 1,
-  },
   // The presets, at the head of a dropdown, inset like its option rows.
-  menuPresets: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    paddingTop: Spacing.one,
-    paddingBottom: Spacing.one,
-  },
-  menuList: {
-    gap: Spacing.one,
-  },
-  participantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Radius.medium,
-  },
-  participantName: {
-    flex: 1,
-  },
-  subgroupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    borderRadius: Radius.medium,
-  },
-  subgroupName: {
-    flex: 1,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: Radius.pill,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   body: {
     gap: Spacing.four,
     paddingBottom: Spacing.four,

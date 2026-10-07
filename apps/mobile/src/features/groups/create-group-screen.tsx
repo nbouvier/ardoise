@@ -19,6 +19,7 @@ import { ApiError } from '@/lib/api/errors';
 import { createGroup } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
 import { useInvalidation } from '@/lib/query/use-invalidation';
+import { toggleInSet } from '@/lib/sets';
 
 import { FriendPickerCard } from './friend-picker';
 import { OtherParticipants } from './other-participants';
@@ -68,13 +69,7 @@ export function CreateGroupScreen({
   const [error, setError] = useState<string | null>(null);
 
   function toggle(id: string) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) {
-        next.add(id);
-      }
-      return next;
-    });
+    setSelected((current) => toggleInSet(current, id));
   }
 
   async function handleCreate() {

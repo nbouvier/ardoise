@@ -9,6 +9,7 @@ import { useAuth } from '@/features/auth/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchPlaceholders } from '@/lib/api/groups';
 import { errorFields, logger } from '@/lib/logger';
+import { toggleInSet } from '@/lib/sets';
 
 import { FriendPickerCard } from './friend-picker';
 import { GroupInviteScreen } from './group-invite-screen';
@@ -55,13 +56,7 @@ export function InvitePanel({ group, busy, onAdd, onClose }: InvitePanelProps) {
   }, [authorizedFetch, group.id]);
 
   function toggle(id: string) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) {
-        next.add(id);
-      }
-      return next;
-    });
+    setSelected((current) => toggleInSet(current, id));
   }
 
   const nothingToAdd = selected.size === 0 && placeholderNames.length === 0;

@@ -1,20 +1,17 @@
 import type { GroupSummary } from '@ardoise/shared';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/button';
-import { Card } from '@/components/card';
+import { AsyncState, EmptyState } from '@/components/async-state';
 import { ListDivider } from '@/components/list-divider';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { SheetModal } from '@/components/sheet-modal';
 import { TextAction } from '@/components/text-action';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 import { CreateGroupScreen } from './create-group-screen';
 import { GroupRow } from './group-row';
@@ -34,7 +31,6 @@ export function GroupsScreen() {
   } = useGroups();
   const rowActions = useGroupRowActions();
   const router = useRouter();
-  const theme = useTheme();
   const [creating, setCreating] = useState(false);
   // Archived groups are out of the way by default: the list is about what is
   // still going on.
@@ -87,36 +83,13 @@ export function GroupsScreen() {
       </View>
     );
 
-  function body() {
-    if (status === 'loading') {
-      return (
-        <View style={styles.centered}>
-          <ActivityIndicator testID="groups-loading" color={theme.primary} />
-        </View>
-      );
-    }
-
-    if (status === 'error') {
-      return (
-        <View style={styles.centered}>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            We couldn’t load your groups. Check your connection and try again.
-          </ThemedText>
-          <Button label="Try again" variant="secondary" onPress={refresh} />
-        </View>
-      );
-    }
-
+  function list() {
     if (active.length === 0 && archived.length === 0) {
       return (
-        <View style={styles.centered}>
-          <Card tone="brand" style={styles.empty}>
-            <ThemedText style={styles.emptyGlyph}>👥</ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-              No groups yet. Create one, or join one with a code, to start tracking what you share.
-            </ThemedText>
-          </Card>
-        </View>
+        <EmptyState
+          glyph="👥"
+          message="No groups yet. Create one, or join one with a code, to start tracking what you share."
+        />
       );
     }
 
@@ -161,7 +134,15 @@ export function GroupsScreen() {
           <TextAction label="+ Join or Create" onPress={() => setCreating(true)} />
         </View>
 
-        <View style={styles.body}>{body()}</View>
+        <View style={styles.body}>
+          <AsyncState
+            status={status}
+            loadingTestID="groups-loading"
+            failure="We couldn’t load your groups. Check your connection and try again."
+            onRetry={refresh}>
+            {list()}
+          </AsyncState>
+        </View>
       </SafeAreaView>
 
       <SheetModal visible={creating} onClose={() => setCreating(false)}>
@@ -186,24 +167,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     paddingBottom: Spacing.three,
     gap: Spacing.three,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.three,
-  },
-  centeredText: {
-    textAlign: 'center',
-  },
-  empty: {
-    alignItems: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.five,
-  },
-  emptyGlyph: {
-    fontSize: 40,
-    lineHeight: 48,
   },
   list: {
     paddingVertical: Spacing.two,

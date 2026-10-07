@@ -1,8 +1,8 @@
 import type { FriendSummary } from '@ardoise/shared';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { AsyncState } from '@/components/async-state';
 import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -30,49 +30,34 @@ export function FriendPicker({
   emptyLabel = 'Invite someone from the Friends tab first.',
 }: FriendPickerProps) {
   const { status, friends, refresh } = useFriends();
-  const theme = useTheme();
-
-  if (status === 'loading') {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator testID="friend-picker-loading" color={theme.primary} />
-      </View>
-    );
-  }
-
-  if (status === 'error') {
-    return (
-      <View style={styles.centered}>
-        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-          We couldn’t load your friends.
-        </ThemedText>
-        <Button label="Try again" variant="secondary" onPress={refresh} />
-      </View>
-    );
-  }
-
-  if (friends.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-          {emptyLabel}
-        </ThemedText>
-      </View>
-    );
-  }
 
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      {friends.map((friend) => (
-        <FriendOption
-          key={friend.id}
-          friend={friend}
-          locked={lockedIds?.has(friend.id) ?? false}
-          checked={(lockedIds?.has(friend.id) ?? false) || selected.has(friend.id)}
-          onPress={() => onToggle(friend.id)}
-        />
-      ))}
-    </ScrollView>
+    <AsyncState
+      status={status}
+      loadingTestID="friend-picker-loading"
+      failure="We couldn’t load your friends."
+      onRetry={refresh}
+      style={styles.centered}>
+      {friends.length === 0 ? (
+        <View style={styles.centered}>
+          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+            {emptyLabel}
+          </ThemedText>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.list}>
+          {friends.map((friend) => (
+            <FriendOption
+              key={friend.id}
+              friend={friend}
+              locked={lockedIds?.has(friend.id) ?? false}
+              checked={(lockedIds?.has(friend.id) ?? false) || selected.has(friend.id)}
+              onPress={() => onToggle(friend.id)}
+            />
+          ))}
+        </ScrollView>
+      )}
+    </AsyncState>
   );
 }
 

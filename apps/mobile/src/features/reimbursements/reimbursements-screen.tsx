@@ -1,9 +1,9 @@
 import { planReimbursements, type Balance, type GroupMember } from '@ardoise/shared';
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { AsyncState } from '@/components/async-state';
 import { Avatar } from '@/components/avatar';
-import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -109,7 +109,6 @@ export function ReimbursementsScreen({
   readOnly,
   onRecord,
 }: ReimbursementsScreenProps) {
-  const theme = useTheme();
   const { status, balances: loaded, refresh } = balances;
   const byId = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
   const memberIds = useMemo(() => new Set(members.map((member) => member.id)), [members]);
@@ -132,63 +131,59 @@ export function ReimbursementsScreen({
 
   return (
     <View style={styles.panel}>
-      {status === 'loading' ? (
-        <View style={styles.centeredBody}>
-          <ActivityIndicator testID="reimbursements-loading" color={theme.primary} />
-        </View>
-      ) : status === 'error' ? (
-        <View style={styles.centeredBody}>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            We couldn’t work out who owes what. Check your connection and try again.
-          </ThemedText>
-          <Button label="Try again" variant="secondary" onPress={refresh} />
-        </View>
-      ) : settled ? (
-        <View style={styles.centeredBody}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            You’re all settled up
-          </ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.centeredText}>
-            Nobody owes anybody here.
-          </ThemedText>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.body}>
-          <View style={styles.section}>
-            <ThemedText type="overline" themeColor="textSecondary">
-              Balances
+      <AsyncState
+        status={status}
+        loadingTestID="reimbursements-loading"
+        failure="We couldn’t work out who owes what. Check your connection and try again."
+        onRetry={refresh}
+        style={styles.centeredBody}>
+        {settled ? (
+          <View style={styles.centeredBody}>
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              You’re all settled up
             </ThemedText>
-            <Card style={styles.standings}>
-              {forDisplay(loaded, viewerId).map((balance) => (
-                <BalanceRow
-                  key={balance.userId}
-                  party={partyOf(balance.userId, byId)}
-                  amountCents={balance.amountCents}
-                  isViewer={balance.userId === viewerId}
+            <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+              Nobody owes anybody here.
+            </ThemedText>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.body}>
+            <View style={styles.section}>
+              <ThemedText type="overline" themeColor="textSecondary">
+                Balances
+              </ThemedText>
+              <Card style={styles.standings}>
+                {forDisplay(loaded, viewerId).map((balance) => (
+                  <BalanceRow
+                    key={balance.userId}
+                    party={partyOf(balance.userId, byId)}
+                    amountCents={balance.amountCents}
+                    isViewer={balance.userId === viewerId}
+                  />
+                ))}
+              </Card>
+            </View>
+
+            <View style={styles.section}>
+              <ThemedText type="overline" themeColor="textSecondary">
+                Reimbursements
+              </ThemedText>
+              {suggestions.map((suggestion) => (
+                <SuggestionRow
+                  key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
+                  suggestion={suggestion}
+                  viewerId={viewerId}
+                  blocked={blockedReason(suggestion, readOnly, memberIds)}
+                  onPress={() => onRecord(suggestion)}
                 />
               ))}
-            </Card>
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText type="overline" themeColor="textSecondary">
-              Reimbursements
-            </ThemedText>
-            {suggestions.map((suggestion) => (
-              <SuggestionRow
-                key={`${suggestion.from.id}-${suggestion.to.id}-${suggestion.amountCents}`}
-                suggestion={suggestion}
-                viewerId={viewerId}
-                blocked={blockedReason(suggestion, readOnly, memberIds)}
-                onPress={() => onRecord(suggestion)}
-              />
-            ))}
-            <ThemedText type="small" themeColor="textSecondary" style={styles.tapHint}>
-              Tap a row to reimburse.
-            </ThemedText>
-          </View>
-        </ScrollView>
-      )}
+              <ThemedText type="small" themeColor="textSecondary" style={styles.tapHint}>
+                Tap a row to reimburse.
+              </ThemedText>
+            </View>
+          </ScrollView>
+        )}
+      </AsyncState>
     </View>
   );
 }
