@@ -1,13 +1,35 @@
-import { and, eq, gt, isNull, lte } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
 import { sessions, users, type SessionRow, type UserRow } from '../../db/schema.js';
 
-export interface UpsertUserInput {
+export interface GoogleAccountInput {
   googleSub: string;
   email: string;
   name: string;
   picture: string | null;
+}
+
+/**
+ * How a Google sign-in found its account: by its Google identity, by its
+ * address (Google is now linked to it), or not at all (created).
+ */
+export type GoogleAccountOutcome = 'existing' | 'linked' | 'created';
+
+/**
+ * A Google identity whose verified address belongs to an account already
+ * linked to another Google identity: neither can be told to be the owner.
+ */
+export class GoogleAccountConflictError extends Error {
+  constructor(readonly userId: string) {
+    super('The address belongs to an account linked to another Google identity');
+    this.name = 'GoogleAccountConflictError';
+  }
+}
+
+/** The account with this address, whatever its case (`users_email_unique`). */
+function accountWithEmail(email: string) {
+  return and(eq(users.kind, 'account'), sql`lower(${users.email}) = lower(${email})`);
 }
 
 export interface InsertSessionInput {
@@ -17,8 +39,20 @@ export interface InsertSessionInput {
 }
 
 export interface AuthRepository {
-  upsertUserByGoogleSub(input: UpsertUserInput): Promise<UserRow>;
+  /**
+   * The account a Google sign-in reaches, refreshing its name and picture:
+   * the one with this Google identity, else the one with this address (linking
+   * Google to it), else a new one. The address follows Google's unless another
+   * account has it. Throws `GoogleAccountConflictError` when the address's
+   * account is linked to another Google identity.
+   */
+  signInGoogleAccount(
+    input: GoogleAccountInput,
+  ): Promise<{ user: UserRow; outcome: GoogleAccountOutcome }>;
   findUserById(id: string): Promise<UserRow | undefined>;
+  /** The account with this address, whatever its case. */
+  findAccountByEmail(email: string): Promise<UserRow | undefined>;
+  setPasswordHash(userId: string, passwordHash: string): Promise<UserRow>;
   insertSession(input: InsertSessionInput): Promise<void>;
   findSessionByHash(refreshTokenHash: string): Promise<SessionRow | undefined>;
   revokeSessionByHash(refreshTokenHash: string, at: Date): Promise<void>;
@@ -41,21 +75,41 @@ export interface AuthRepository {
 
 export function createAuthRepository(db: Database): AuthRepository {
   return {
-    async upsertUserByGoogleSub(input) {
-      const [row] = await db
-        .insert(users)
-        .values(input)
-        .onConflictDoUpdate({
-          target: users.googleSub,
-          set: {
-            email: input.email,
-            name: input.name,
-            picture: input.picture,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      return row!;
+    async signInGoogleAccount(input) {
+      return db.transaction(async (tx) => {
+        const profile = { name: input.name, picture: input.picture, updatedAt: new Date() };
+
+        const [bySub] = await tx.select().from(users).where(eq(users.googleSub, input.googleSub));
+        if (bySub) {
+          const [holder] = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(and(accountWithEmail(input.email), ne(users.id, bySub.id)));
+          const [row] = await tx
+            .update(users)
+            .set(holder ? profile : { ...profile, email: input.email })
+            .where(eq(users.id, bySub.id))
+            .returning();
+          return { user: row!, outcome: 'existing' as const };
+        }
+
+        // Google has verified the address: it may claim the account that has it.
+        const [byEmail] = await tx.select().from(users).where(accountWithEmail(input.email));
+        if (byEmail) {
+          if (byEmail.googleSub !== null) {
+            throw new GoogleAccountConflictError(byEmail.id);
+          }
+          const [row] = await tx
+            .update(users)
+            .set({ ...profile, googleSub: input.googleSub })
+            .where(eq(users.id, byEmail.id))
+            .returning();
+          return { user: row!, outcome: 'linked' as const };
+        }
+
+        const [row] = await tx.insert(users).values(input).returning();
+        return { user: row!, outcome: 'created' as const };
+      });
     },
 
     async findUserById(id) {
@@ -66,6 +120,20 @@ export function createAuthRepository(db: Database): AuthRepository {
         .from(users)
         .where(and(eq(users.id, id), eq(users.kind, 'account')));
       return row;
+    },
+
+    async findAccountByEmail(email) {
+      const [row] = await db.select().from(users).where(accountWithEmail(email));
+      return row;
+    },
+
+    async setPasswordHash(userId, passwordHash) {
+      const [row] = await db
+        .update(users)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(users.id, userId))
+        .returning();
+      return row!;
     },
 
     async insertSession(input) {

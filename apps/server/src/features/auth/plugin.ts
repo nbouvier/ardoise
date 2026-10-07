@@ -1,6 +1,7 @@
 import {
   googleAuthRequestSchema,
   logoutRequestSchema,
+  passwordSignInRequestSchema,
   refreshRequestSchema,
 } from '@ardoise/shared';
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
@@ -10,9 +11,11 @@ import { parseRequest } from '../../http/validation.js';
 import { schedulePeriodicTask } from '../../periodic-task.js';
 
 import { createGoogleVerifier, GoogleVerificationError, type GoogleVerifier } from './google.js';
-import { createAuthRepository } from './repository.js';
-import { createAuthService, type AuthService } from './service.js';
+import { createPasswordHasher, type ScryptCost } from './passwords.js';
+import { createAuthRepository, GoogleAccountConflictError } from './repository.js';
+import { createAuthService, CredentialsError, type AuthService } from './service.js';
 import { createSessionService, SessionError } from './sessions.js';
+import { AttemptThrottle, ThrottledError } from './throttle.js';
 import { createAccessTokenService, type AccessTokenService } from './tokens.js';
 
 declare module 'fastify' {
@@ -30,10 +33,24 @@ export interface AuthPluginOptions {
   googleVerifier?: GoogleVerifier | undefined;
   /** Override the access-token service (tests). */
   accessTokens?: AccessTokenService | undefined;
+  /** Override the password hashing cost (tests: a cheap one). */
+  passwordCost?: ScryptCost | undefined;
+  /** Override the clock of the per-address limits (tests). */
+  now?: (() => number) | undefined;
 }
 
 const unauthorized = (reply: FastifyReply, error: string) =>
   reply.code(401).send({ error });
+
+/** The per-address limits' answer, shaped like the per-client rate limit's. */
+const throttled = (reply: FastifyReply, error: ThrottledError) =>
+  reply
+    .code(429)
+    .header('retry-after', String(error.retryAfterSeconds))
+    .send({ error: 'rate_limited' });
+
+/** Failed password checks an address may have in a window (`docs/specs/password-sign-in.md`). */
+const SIGN_IN_FAILURES = { limit: 10, windowMs: 15 * 60 * 1000 };
 
 export const authPlugin = fp<AuthPluginOptions>(
   async (app, opts) => {
@@ -41,7 +58,15 @@ export const authPlugin = fp<AuthPluginOptions>(
     const google = opts.googleVerifier ?? createGoogleVerifier();
     const repository = createAuthRepository(app.db);
     const sessions = createSessionService(repository);
-    const auth = createAuthService({ google, accessTokens, sessions, repository });
+    const now = opts.now ?? Date.now;
+    const auth = createAuthService({
+      google,
+      accessTokens,
+      sessions,
+      repository,
+      passwords: createPasswordHasher(opts.passwordCost),
+      signInThrottle: new AttemptThrottle(SIGN_IN_FAILURES.limit, SIGN_IN_FAILURES.windowMs, now),
+    });
 
     // Every refresh adds a session row; the expired ones are no use to anyone.
     schedulePeriodicTask(app, {
@@ -75,13 +100,39 @@ export const authPlugin = fp<AuthPluginOptions>(
     app.post('/auth/google', async (request: FastifyRequest, reply) => {
       const { idToken } = parseRequest(googleAuthRequestSchema, request.body);
       try {
-        const session = await auth.signInWithGoogle(idToken);
+        const { session, outcome } = await auth.signInWithGoogle(idToken);
+        if (outcome === 'linked') {
+          app.log.info({ userId: session.user.id, method: 'google' }, 'auth.account.linked');
+        }
         app.log.info({ userId: session.user.id }, 'auth.session.issued');
         return reply.code(200).send(session);
       } catch (error) {
         if (error instanceof GoogleVerificationError) {
           app.log.warn({ reason: error.reason }, 'auth.google.verify.failed');
           return unauthorized(reply, 'invalid_google_token');
+        }
+        if (error instanceof GoogleAccountConflictError) {
+          app.log.warn({ userId: error.userId }, 'auth.google.account_conflict');
+          return reply.code(409).send({ error: 'account_conflict' });
+        }
+        throw error;
+      }
+    });
+
+    app.post('/auth/password', async (request: FastifyRequest, reply) => {
+      const { email, password } = parseRequest(passwordSignInRequestSchema, request.body);
+      try {
+        const session = await auth.signInWithPassword(email, password);
+        app.log.info({ userId: session.user.id }, 'auth.session.issued');
+        return reply.code(200).send(session);
+      } catch (error) {
+        if (error instanceof ThrottledError) {
+          app.log.warn('auth.password.throttled');
+          return throttled(reply, error);
+        }
+        if (error instanceof CredentialsError) {
+          app.log.info({ reason: error.reason, userId: error.userId }, 'auth.password.failed');
+          return unauthorized(reply, 'invalid_credentials');
         }
         throw error;
       }

@@ -24,7 +24,7 @@ describe('session service', () => {
   beforeEach(async () => {
     await handle.db.delete(sessions);
     await handle.db.delete(users);
-    const user = await repository.upsertUserByGoogleSub({
+    const { user } = await repository.signInGoogleAccount({
       googleSub: 'sub-1',
       email: 'ada@example.com',
       name: 'Ada',

@@ -59,6 +59,7 @@ describe('AuthGate', () => {
         email: 'ada@example.com',
         name: 'Ada',
         picture: null,
+        hasPassword: false,
       },
     };
     await render(<AuthGate>{child}</AuthGate>);

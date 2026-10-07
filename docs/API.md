@@ -88,6 +88,8 @@ An account with the same address (case-insensitive) and no Google identity yet g
 Google identity linked to it instead of a second account being created.
 
 `401 { "error": "invalid_google_token" }` when the token cannot be verified.
+`409 { "error": "account_conflict" }` when the address's account is already linked to
+another Google identity.
 
 ### `POST /auth/signup`
 

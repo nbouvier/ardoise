@@ -24,10 +24,12 @@ import {
 /**
  * A person a group can name: payer, participant, member.
  *
- * `kind = 'account'` has signed in with Google, identified across sign-ins by
- * the stable Google subject id (`sub`); only the minimum profile fields are
- * stored. `kind = 'placeholder'` is a member known by name only, with no
- * Google identity and no e-mail, so nothing can ever sign in as it. It belongs
+ * `kind = 'account'` can sign in: with Google, identified across sign-ins by
+ * the stable Google subject id (`sub`), with a password, or both
+ * (`docs/specs/password-sign-in.md`). Its e-mail address is unique among
+ * accounts whatever its case; only the minimum profile fields are stored.
+ * `kind = 'placeholder'` is a member known by name only, with no Google
+ * identity, no password and no e-mail, so nothing can ever sign in as it. It belongs
  * to the root group of the tree it was created in, and goes with that group;
  * claiming it re-points everything that names it at an account and deletes it
  * (`docs/specs/placeholder-members.md`). Two placeholders of one tree never
@@ -42,6 +44,8 @@ export const users = pgTable(
     kind: text('kind').$type<'account' | 'placeholder'>().notNull().default('account'),
     googleSub: text('google_sub').unique(),
     email: text('email'),
+    /** scrypt hash (`features/auth/passwords.ts`); `NULL` for a Google-only account. */
+    passwordHash: text('password_hash'),
     name: text('name').notNull(),
     picture: text('picture'),
     placeholderGroupId: uuid('placeholder_group_id').references((): AnyPgColumn => groups.id, {
@@ -52,17 +56,19 @@ export const users = pgTable(
   },
   (table) => [
     check('users_kind_valid', sql`${table.kind} in ('account', 'placeholder')`),
-    // The two shapes are exclusive: an account has a Google identity and an
-    // e-mail and belongs to no group; a placeholder has neither and belongs
-    // to exactly one tree.
+    // The two shapes are exclusive: an account has an e-mail and a way to
+    // sign in (a Google identity, a password or both) and belongs to no group;
+    // a placeholder has none of them and belongs to exactly one tree.
     check(
       'users_account_shape',
-      sql`(${table.kind} = 'account') = (${table.googleSub} is not null and ${table.email} is not null)`,
+      sql`(${table.kind} = 'account') = (${table.email} is not null and (${table.googleSub} is not null or ${table.passwordHash} is not null))`,
     ),
     check(
       'users_placeholder_shape',
       sql`(${table.kind} = 'placeholder') = (${table.placeholderGroupId} is not null)`,
     ),
+    // One address, one account. Placeholders have none, and `NULL`s never collide.
+    uniqueIndex('users_email_unique').on(sql`lower(${table.email})`),
     uniqueIndex('users_placeholder_name_unique')
       .on(table.placeholderGroupId, sql`lower(${table.name})`)
       .where(sql`${table.kind} = 'placeholder'`),

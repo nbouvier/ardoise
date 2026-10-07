@@ -56,8 +56,8 @@ npm run migrate --workspace @ardoise/server            # apply pending migration
 
 ### `users`
 
-A person a group can name: someone who has signed in with Google (`kind = 'account'`), or
-a **placeholder member** known by name only (`kind = 'placeholder'`,
+A person a group can name: an account someone signs in to, with Google, a password or
+both (`kind = 'account'`, `docs/specs/password-sign-in.md`), or a **placeholder member** known by name only (`kind = 'placeholder'`,
 `docs/specs/placeholder-members.md`).
 
 | Column                 | Type               | Notes                                                       |
@@ -65,7 +65,8 @@ a **placeholder member** known by name only (`kind = 'placeholder'`,
 | `id`                   | uuid PK            | `gen_random_uuid()`                                         |
 | `kind`                 | text               | `account` (default) or `placeholder`                        |
 | `google_sub`           | text, unique, null | Stable Google subject id; sign-in lookup. Accounts only     |
-| `email`                | text, null         | From the verified Google token. Accounts only               |
+| `email`                | text, null         | From the verified Google token, or proven by an e-mailed code. Accounts only; unique whatever its case |
+| `password_hash`        | text, null         | scrypt, self-describing (`features/auth/passwords.ts`); `NULL` without a password |
 | `name`                 | text               | From the verified Google token, or typed by a member        |
 | `picture`              | text, null         | Avatar URL, may be absent                                   |
 | `placeholder_group_id` | uuid FK, null      | → `groups.id`, `ON DELETE CASCADE`: a placeholder's tree root |
@@ -73,7 +74,10 @@ a **placeholder member** known by name only (`kind = 'placeholder'`,
 | `updated_at`           | timestamptz        | `now()`; refreshed on profile change or rename              |
 
 Constraints: `users_kind_valid`; `users_account_shape` — an account, and only an account,
-has a Google subject and an e-mail, so a placeholder can never be matched by a sign-in;
+has an e-mail and a way to sign in (a Google subject, a password hash or both), so a
+placeholder can never be matched by a sign-in; `users_email_unique` — a unique index on
+`lower(email)`: one address, one account, which is what lets Google and password
+sign-ins with the same address reach the same one;
 `users_placeholder_shape` — a placeholder, and only a placeholder, belongs to a group.
 `users_placeholder_name_unique` is a partial unique index on (`placeholder_group_id`,
 `lower(name)`) over placeholders: two placeholders of one tree never share a name.
@@ -417,3 +421,8 @@ accounts").
   `group_members.claimed_placeholder_at`; `transactions.payer_id` and
   `transaction_participants.user_id` are recreated `DEFERRABLE INITIALLY DEFERRED` (edited
   in by hand, see above).
+- Migration `0012_*` — password accounts: `users.password_hash`, `users_account_shape`
+  accepts a password instead of a Google subject, and `users_email_unique`. The index
+  fails to build if two accounts already share an address in any case; nothing let that
+  happen in practice (one Google address is one Google account). The previous release
+  works on the new schema: it writes accounts with a Google subject, which still pass.

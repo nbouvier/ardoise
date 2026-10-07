@@ -17,6 +17,10 @@ current setup and state.
 | ------------------------------ | ----- | ------------- | ---------------------------------------------- |
 | `auth.session.issued`          | info  | `userId`      | Sign-in succeeded, a session was created       |
 | `auth.google.verify.failed`    | warn  | `reason`      | Google rejected the ID token (categorised)     |
+| `auth.google.account_conflict` | warn  | `userId`      | A Google identity's address belongs to an account linked to another Google identity; refused (409) |
+| `auth.account.linked`          | info  | `userId`, `method` | A sign-in method was added to an existing account: `google` (by address) or `password` |
+| `auth.password.failed`         | info  | `reason`, `userId`? | A password sign-in did not match: `unknown_account`, `no_password` or `wrong_password` (`userId` when there is an account). Never the address or the password |
+| `auth.password.throttled`      | warn  | —             | An address used up its failed sign-ins for the window (429) |
 | `auth.session.refresh.reused`  | warn  | `userId`      | A revoked refresh token was presented (possible theft); every session of the user was revoked |
 | `auth.session.revoked`         | info  | —             | Sign-out revoked a session                     |
 | `auth.sessions.purge.done`     | info  | `count`       | The hourly clean-up deleted expired sessions (logged only when there were some) |

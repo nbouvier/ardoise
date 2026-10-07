@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { buildApp, type BuildAppOptions } from '../app.js';
+import { TEST_SCRYPT_COST } from './auth.js';
 import { createTestDatabase, resetDatabase } from './database.js';
 
 export type TestAppOptions = Pick<
@@ -28,7 +29,8 @@ export async function createTestContext(
   const handle = await createTestDatabase();
   const app = buildApp({
     db: { handle, migrations: 'skip' },
-    auth: options.auth,
+    // Real hashing costs a tenth of a second a password: tests use a cheap one.
+    auth: { passwordCost: TEST_SCRYPT_COST, ...options.auth },
     invites: options.invites,
     groups: options.groups,
     transactions: options.transactions,
