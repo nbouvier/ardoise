@@ -117,6 +117,12 @@ export interface TransactionsRepository {
    * (`docs/specs/balances.md`) treats that as zero.
    */
   balancesByGroup(userId: string, groupIds: readonly string[]): Promise<Map<string, number>>;
+  /**
+   * Every person's net balance in `groupId`, keyed by user id — the rule
+   * `computeBalances` states, aggregated in SQL so it never loads the group's
+   * history. Someone with no counted flow in the group is absent.
+   */
+  balancesInGroup(groupId: string): Promise<Map<string, number>>;
 }
 
 function toParticipantRows(
@@ -400,6 +406,71 @@ export function createTransactionsRepository(db: Database): TransactionsReposito
       }
       for (const row of owed) {
         add(row.groupId, -Number(row.deltaCents));
+      }
+
+      return balances;
+    },
+
+    async balancesInGroup(groupId) {
+      const signedShare = sql`case when ${transactions.kind} = 'income'
+        then -${transactionParticipants.shareCents} else ${transactionParticipants.shareCents} end`;
+
+      // Credited: each payer, by the members' shares of what they paid —
+      // never Others', which is settled outside the group.
+      const paid = await db
+        .select({
+          userId: transactions.payerId,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
+        })
+        .from(transactions)
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            eq(transactions.groupId, groupId),
+            isNotNull(transactions.payerId),
+            isNotNull(transactionParticipants.userId),
+          ),
+        )
+        .groupBy(transactions.payerId);
+
+      // Debited: each member, by their own share — of what a member paid
+      // only: a transaction Others paid moves nothing.
+      const owed = await db
+        .select({
+          userId: transactionParticipants.userId,
+          deltaCents: sql<string>`sum(${signedShare})::bigint`,
+        })
+        .from(transactions)
+        .innerJoin(
+          transactionParticipants,
+          eq(transactionParticipants.transactionId, transactions.id),
+        )
+        .where(
+          and(
+            eq(transactions.groupId, groupId),
+            isNotNull(transactions.payerId),
+            isNotNull(transactionParticipants.userId),
+          ),
+        )
+        .groupBy(transactionParticipants.userId);
+
+      const balances = new Map<string, number>();
+      const add = (userId: string | null, deltaCents: number) => {
+        // Unreachable given the filters above; narrows the column type.
+        if (userId === null) {
+          return;
+        }
+        balances.set(userId, (balances.get(userId) ?? 0) + deltaCents);
+      };
+
+      for (const row of paid) {
+        add(row.userId, Number(row.deltaCents));
+      }
+      for (const row of owed) {
+        add(row.userId, -Number(row.deltaCents));
       }
 
       return balances;

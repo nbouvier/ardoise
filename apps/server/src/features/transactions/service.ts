@@ -3,7 +3,6 @@ import type {
   Balance,
   CreateTransactionRequest,
   FriendSummary,
-  GroupDetail,
   PartyId,
   RecentTransaction,
   SplitMode,
@@ -13,12 +12,11 @@ import type {
 } from '@ardoise/shared';
 
 import type { TransactionParticipantRow, TransactionRow } from '../../db/schema.js';
-import { GroupAccessError } from '../groups/membership.js';
-import type { GroupsService } from '../groups/service.js';
+import type { GroupAccess, GroupsService } from '../groups/service.js';
 import type { UsersRepository } from '../users/repository.js';
 import { toUserSummary } from '../users/repository.js';
 
-import { computeBalances, groupParticipantsByTransaction } from './balances.js';
+import { groupParticipantsByTransaction } from './balances.js';
 import { TransactionError } from './errors.js';
 import type { ParticipantInput, TransactionFields, TransactionsRepository } from './repository.js';
 
@@ -212,20 +210,17 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
    * the same `not_found` refusal as every other group route, and a group the
    * caller belongs to is always readable even when archived.
    */
-  async function requireMembership(userId: string, groupId: string): Promise<GroupDetail> {
-    return groups.get(userId, groupId);
+  function requireMembership(userId: string, groupId: string): Promise<GroupAccess> {
+    return groups.access(userId, groupId);
   }
 
   /**
-   * A group that is archived — itself, or any ancestor of it — is fully
-   * read-only for transactions (`docs/specs/groups.md`). `readOnly` already
-   * carries that combined check; a root group's is exactly its own
-   * `archivedAt !== null`, since it has no ancestors.
+   * Membership, and a group that is not archived — itself, or any ancestor
+   * of it: an archived group is fully read-only for transactions
+   * (`docs/specs/groups.md`).
    */
-  function requireActive(group: GroupDetail): void {
-    if (group.readOnly) {
-      throw new GroupAccessError('archived');
-    }
+  function requireWritable(userId: string, groupId: string): Promise<GroupAccess> {
+    return groups.access(userId, groupId, { writable: true });
   }
 
   /**
@@ -244,7 +239,7 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
   /** Profiles of every user named; Others (`null`) has none to look up. */
   async function buildUserMap(ids: readonly PartyId[]): Promise<Map<string, FriendSummary>> {
     const userIds = ids.filter((id): id is string => id !== null);
-    const rows = await users.findManyByIds([...new Set(userIds)]);
+    const rows = await users.findSummariesByIds([...new Set(userIds)]);
     return new Map(rows.map((user) => [user.id, toUserSummary(user)]));
   }
 
@@ -334,10 +329,8 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     },
 
     async create(userId, groupId, input) {
-      const group = await requireMembership(userId, groupId);
-      requireActive(group);
-      const memberIds = new Set(group.members.map((member) => member.id));
-      const { splitMode, payerId, participants } = resolveSplit(input, memberIds);
+      const { memberIds } = await requireWritable(userId, groupId);
+      const { splitMode, payerId, participants } = resolveSplit(input, new Set(memberIds));
 
       const created = await repository.create(
         { groupId, ...toTransactionFields(input, splitMode, payerId) },
@@ -348,15 +341,14 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     },
 
     async update(userId, groupId, transactionId, input) {
-      const group = await requireMembership(userId, groupId);
-      requireActive(group);
+      const { memberIds } = await requireWritable(userId, groupId);
       const stored = await requireTransaction(groupId, transactionId);
       // Someone who has left the group since stays on a transaction that
       // already names them: editing it must not force rewriting history. They
       // still cannot be added where they were not (`docs/specs/transactions.md`).
       const storedParticipants = await repository.listParticipants([stored.id]);
       const allowedIds = new Set([
-        ...group.members.map((member) => member.id),
+        ...memberIds,
         ...[stored.payerId, ...storedParticipants.map((p) => p.userId)].filter(
           (id): id is string => id !== null,
         ),
@@ -373,21 +365,18 @@ export function createTransactionsService(deps: TransactionsServiceDeps): Transa
     },
 
     async remove(userId, groupId, transactionId) {
-      const group = await requireMembership(userId, groupId);
-      requireActive(group);
+      await requireWritable(userId, groupId);
       await requireTransaction(groupId, transactionId);
       await repository.remove(transactionId);
     },
 
     async balances(userId, groupId) {
-      const group = await requireMembership(userId, groupId);
-      const rows = await repository.listByGroup(groupId);
-      const participants = await repository.listParticipants(rows.map((row) => row.id));
-      const totals = computeBalances(rows, groupParticipantsByTransaction(participants));
+      const { memberIds } = await requireMembership(userId, groupId);
+      const totals = await repository.balancesInGroup(groupId);
 
-      for (const member of group.members) {
-        if (!totals.has(member.id)) {
-          totals.set(member.id, 0);
+      for (const memberId of memberIds) {
+        if (!totals.has(memberId)) {
+          totals.set(memberId, 0);
         }
       }
 

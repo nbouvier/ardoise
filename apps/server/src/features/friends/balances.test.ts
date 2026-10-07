@@ -474,6 +474,8 @@ describe('friend balances', () => {
       await repository.listParticipants(tripRows.map((row) => row.id)),
     );
     const groupBalances = computeBalances(tripRows, tripParticipants);
+    // The group's own balances, aggregated in SQL, state that same rule too.
+    expect(await repository.balancesInGroup(trip.id)).toEqual(groupBalances);
     for (const viewer of [ada, grace, alan]) {
       const pairwise = computePairwiseBalances(viewer.userId, tripRows, tripParticipants);
       const total = [...pairwise.values()].reduce((sum, value) => sum + value, 0);

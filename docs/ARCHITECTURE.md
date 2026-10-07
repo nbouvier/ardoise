@@ -218,6 +218,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 | 2026-10-05 | Server request logs drop the client's IP address and port (custom `req` serializer) | Data minimisation: the privacy policy can say no IP is kept, with no retention to define for it. Rate limiting keeps using it in memory |
 | 2026-10-05 | `transactions.payer_id` and `transaction_participants.user_id` are `DEFERRABLE INITIALLY DEFERRED` instead of `ON DELETE RESTRICT` | Deleting a root group cascades to its placeholders and to its transactions in one statement, in no guaranteed order; an immediate check refuses the placeholder first. Checked at commit, the keys still refuse deleting anyone a transaction names, and a write naming a deleted person still fails (at commit) as `not_group_member`. drizzle cannot express it, so the migration carries it by hand |
 | 2026-10-06 | Housekeeping (deleting expired rows) runs inside the server: `schedulePeriodicTask` (`src/periodic-task.ts`) runs a task once the app is ready, then on an interval, never two at once, until it closes | No scheduler to deploy or monitor for a few idempotent `DELETE`s; with several instances each runs its own, which is harmless. A failure is logged and reported to Sentry, and the next run retries |
+| 2026-10-06 | Group-scoped routes outside `groups` authorize through `GroupsService.access` (membership, member ids, optionally "not archived"), not `GroupsService.get` | `get` builds the whole group detail — members, sub-groups, ancestors, balances — about a dozen queries; a transaction route needs three to five. Both share `requireMembership`, so they refuse identically |
 
 ## Open items
 
@@ -251,7 +252,7 @@ tsconfig.base.json Shared TypeScript compiler options; each workspace extends it
 - Group ownership cannot be transferred, so an inactive owner strands a group nobody can
   delete. Deliberate for now; revisit with real usage (`docs/specs/groups.md`).
 - Balances are recomputed from the transaction rows on every request, both per group and
-  per friend (`docs/specs/balances.md`). Fine at the volume a trip or a flatshare
+  per friend, aggregated in SQL (`docs/specs/balances.md`). Fine at the volume a trip or a flatshare
   produces, and deliberately so: a stored total is a duplicate that every write path
   (create, edit, delete, group deletion, friendship removal) must keep correct, and a
   drifted money figure is the worst failure this product can have.

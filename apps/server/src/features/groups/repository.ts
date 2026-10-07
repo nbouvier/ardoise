@@ -15,6 +15,7 @@ import {
 } from '../../db/schema.js';
 import type { FriendshipPair } from '../friends/friendships.js';
 import { replaceParty, type ReplacedParty } from '../transactions/replace-party.js';
+import { userSummaryColumns, type UserSummaryRow } from '../users/repository.js';
 
 import { GroupAccessError } from './membership.js';
 
@@ -35,7 +36,7 @@ export interface ListedGroupSummary extends GroupWithCount {
 }
 
 export interface MemberWithUser {
-  user: UserRow;
+  user: UserSummaryRow;
   role: GroupRole;
 }
 
@@ -67,6 +68,8 @@ export interface CreateGroupInput {
 
 export interface GroupsRepository {
   findGroupById(groupId: string): Promise<GroupRow | undefined>;
+  /** Several groups at once; order is not guaranteed, and a missing id is simply absent. */
+  findGroupsByIds(groupIds: readonly string[]): Promise<GroupRow[]>;
   findMembership(groupId: string, userId: string): Promise<GroupMemberRow | undefined>;
   /**
    * The user's **root** groups with their member and direct sub-group counts.
@@ -82,7 +85,12 @@ export interface GroupsRepository {
    * group has no name of its own to sort on until the service resolves it.
    */
   listFavoriteGroupsForUser(userId: string): Promise<ListedGroupSummary[]>;
+  /** Everyone in the group, alphabetical. */
   listMembers(groupId: string): Promise<MemberWithUser[]>;
+  /** {@link listMembers} for several groups in one query, keyed by group id. */
+  listMembersOf(groupIds: readonly string[]): Promise<Map<string, MemberWithUser[]>>;
+  /** The ids of everyone in the group, placeholders included — for authorization checks. */
+  listMemberIds(groupId: string): Promise<string[]>;
   /** Everyone in the group, placeholders included — the member count shown. */
   countMembers(groupId: string): Promise<number>;
   /**
@@ -197,17 +205,17 @@ export interface GroupsRepository {
   /** Set or clear the caller's own favorite marker on their membership row. */
   setFavorite(groupId: string, userId: string, favoritedAt: Date | null): Promise<void>;
   /**
-   * Create the group two friends share. Returns the existing one when another
-   * request won the race — the unique constraint on `friendship_id` is what
-   * guarantees there is only ever one.
-   */
-  /**
    * Every ancestor of a group, root first (ascending `depth`) — nearest parent
    * last. Empty for a root group. Used for breadcrumbs and for the
    * "effectively archived" / "effectively active" checks a sub-group's write
    * paths need (`docs/specs/groups.md`).
    */
   listAncestors(groupId: string): Promise<GroupRow[]>;
+  /**
+   * {@link listAncestors} for several groups in one read, keyed by group id.
+   * A root group, or an id that does not exist, is absent from the map.
+   */
+  listAncestorsOf(groupIds: readonly string[]): Promise<Map<string, GroupRow[]>>;
   /**
    * Every descendant of a group, at any depth, in no particular order. Empty
    * for a group with no sub-groups. Used to cascade a membership change (leave,
@@ -422,6 +430,16 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       return row;
     },
 
+    async findGroupsByIds(groupIds) {
+      if (groupIds.length === 0) {
+        return [];
+      }
+      return db
+        .select()
+        .from(groups)
+        .where(inArray(groups.id, [...groupIds]));
+    },
+
     async findMembership(groupId, userId) {
       const [row] = await db
         .select()
@@ -458,14 +476,43 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listMembers(groupId) {
-      const rows = await db
-        .select({ user: users, role: groupMembers.role })
+      return db
+        .select({ user: userSummaryColumns, role: groupMembers.role })
         .from(groupMembers)
         .innerJoin(users, eq(users.id, groupMembers.userId))
         .where(eq(groupMembers.groupId, groupId))
         .orderBy(asc(users.name));
+    },
 
-      return rows;
+    async listMembersOf(groupIds) {
+      const membersByGroup = new Map<string, MemberWithUser[]>();
+      if (groupIds.length === 0) {
+        return membersByGroup;
+      }
+      const rows = await db
+        .select({ groupId: groupMembers.groupId, user: userSummaryColumns, role: groupMembers.role })
+        .from(groupMembers)
+        .innerJoin(users, eq(users.id, groupMembers.userId))
+        .where(inArray(groupMembers.groupId, [...groupIds]))
+        .orderBy(asc(users.name));
+
+      for (const { groupId, ...member } of rows) {
+        const members = membersByGroup.get(groupId);
+        if (members) {
+          members.push(member);
+        } else {
+          membersByGroup.set(groupId, [member]);
+        }
+      }
+      return membersByGroup;
+    },
+
+    async listMemberIds(groupId) {
+      const rows = await db
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .where(eq(groupMembers.groupId, groupId));
+      return rows.map((row) => row.userId);
     },
 
     async countMembers(groupId) {
@@ -914,6 +961,50 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       // root-first order for free — no need to thread a `level` column
       // through the recursive query itself.
       return db.select().from(groups).where(inArray(groups.id, ids)).orderBy(asc(groups.depth));
+    },
+
+    async listAncestorsOf(groupIds) {
+      const ancestorsByGroup = new Map<string, GroupRow[]>();
+      if (groupIds.length === 0) {
+        return ancestorsByGroup;
+      }
+      // The same walk as `fetchAncestorIds`, from every start at once, each
+      // ancestor tagged with the group it was reached from.
+      const { rows: chain } = await db.execute<{ start_id: string; id: string }>(sql`
+        WITH RECURSIVE ancestors(start_id, id) AS (
+          SELECT id, parent_id FROM groups
+          WHERE ${inArray(groups.id, [...groupIds])} AND parent_id IS NOT NULL
+          UNION ALL
+          SELECT a.start_id, g.parent_id
+          FROM groups g
+          JOIN ancestors a ON g.id = a.id
+          WHERE g.parent_id IS NOT NULL
+        )
+        SELECT start_id, id FROM ancestors
+      `);
+      if (chain.length === 0) {
+        return ancestorsByGroup;
+      }
+
+      const rows = await db
+        .select()
+        .from(groups)
+        .where(inArray(groups.id, [...new Set(chain.map((link) => link.id))]))
+        .orderBy(asc(groups.depth));
+      const idsByStart = new Map<string, Set<string>>();
+      for (const link of chain) {
+        const ids = idsByStart.get(link.start_id) ?? new Set<string>();
+        ids.add(link.id);
+        idsByStart.set(link.start_id, ids);
+      }
+      for (const [startId, ids] of idsByStart) {
+        // `rows` is already root first; keep that order for each start.
+        ancestorsByGroup.set(
+          startId,
+          rows.filter((row) => ids.has(row.id)),
+        );
+      }
+      return ancestorsByGroup;
     },
 
     async listDescendantIds(groupId) {
