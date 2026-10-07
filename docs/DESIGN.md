@@ -356,17 +356,37 @@ or box**; a screen that styles its own is a bug in this document.
 
 Wraps the app. States: **loading** (centred spinner while the session is restored, under
 the animated splash overlay), **error** ("Can't connect" + a secondary "Try again"),
-**signedOut** (the sign-in screen), **signedIn** (the app).
+**signedOut** (the signed-out flow), **signedIn** (the app).
+
+### Signed-out flow (`src/features/auth/signed-out-flow.tsx`)
+
+The steps before a session exists — sign-in, create an account, check your e-mail,
+forgot password, set a new password — are one component switching between screens, not
+routes: the gate shows it in place of the app, so a link the app was opened on survives
+it. The address typed on one step is carried to the next.
+
+Every step sits in `AuthPage` (`auth-page.tsx`): a narrow centred column that scrolls and
+moves out of the keyboard's way; all but sign-in have a back arrow, a `title` and a
+secondary subtitle. Fields are the shared `TextField`, wrapped where a field needs its own
+hints: `EmailField` (e-mail keyboard, no capitals, `username` autofill), `PasswordField`
+(a **Show / Hide** `TextAction` inside the field's right end; `current-password` or
+`new-password` autofill so password managers fill or save it) and `CodeField` (digits
+only, `one-time-code` autofill, centred, spaced digits once typed). One primary button
+per step; errors are `small` `danger` text with the `alert` role, just above it. Enter
+submits on the web; on the phone the return key moves to the next field, then submits.
+"Resend code" is a `TextAction` after a short secondary sentence, its outcome beneath.
 
 ### Sign-in (`src/features/auth/sign-in-screen.tsx`)
 
-Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "Ardoise", a tagline,
-and a single primary "Continue with Google". Inline `danger` error text on failure (not
-on user cancellation). On web the button is disabled with a "coming soon" caption. Last,
-centred secondary `small` text: "By continuing, you agree to the **Terms of use** and
-acknowledge the **Privacy policy**." — each name an inline link in the ink colour,
-underlined, opening the server's page in the in-app browser (`legal-links.ts`,
-`docs/specs/legal-pages.md`).
+Full-screen, centred. The `BrandMark` on a `primarySoft` wash, "Ardoise", a tagline.
+Then the password form: e-mail, password, a right-aligned **Forgot password?**
+`TextAction`, and the primary **Sign in**. An `OrDivider`, then **Continue with Google**
+as a secondary button — on web, disabled with a "coming soon" caption beneath. Inline
+`danger` error text on failure (not on Google cancellation). Then "New to Ardoise?
+**Create an account**" (a `TextAction`), and last, centred secondary `small` text: "By
+continuing, you agree to the **Terms of use** and acknowledge the **Privacy policy**." —
+each name an inline link in the ink colour, underlined, opening the server's page in the
+in-app browser (`legal-links.ts`, `docs/specs/legal-pages.md`).
 
 ### Account (`src/features/auth/account-screen.tsx`)
 
@@ -375,6 +395,11 @@ under it, one bare row — no card — of the Google avatar (48), the name in `s
 the email beneath in secondary `small`, and a down chevron. The row is the one control:
 pressing it opens a `DropdownMenu` with **Switch account** and, in the danger colour,
 **Sign out**. Further sections (preferences, …) join under it as the page grows.
+
+For an account with a password, a **Security** section follows: an `overline` and one
+`key` `MenuRow`, **Change password**, opening its page in a `SheetModal` — the current
+password, the new one with its hint, the primary button; once done, a confirmation and
+**Done**.
 
 Under it, a **Your data** section: an `overline` and one `MenuRow` — trash icon, **Delete
 account** in the danger colour. It is deliberately not in the Profile row's menu, where it
@@ -987,8 +1012,9 @@ page says where it came from.
 
 The whole surface — auth, groups, friends, transactions, statistics, reimbursements,
 invitations — is on this design system; every Expo starter component and asset is gone.
-Web sign-in is disabled, so the web target only reaches the sign-in screen: every other
-screen is covered by component tests, and its rendering is checked on a development build.
+Every screen is covered by component tests. With password sign-in, the web target
+(`npm run mobile:web`) reaches the whole app, so rendering can be checked there too; a
+development build remains the reference for the phone.
 
 The app icon, splash glyph, favicon and Android adaptive layers were generated from
 `BrandMark`. They are flat exports of the SVG: if the mark ever changes, regenerate them

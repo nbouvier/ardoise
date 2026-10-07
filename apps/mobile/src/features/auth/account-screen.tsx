@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { appVersionLabel } from '@/lib/app-version';
 import { errorFields, logger } from '@/lib/logger';
 
+import { ChangePasswordScreen } from './change-password-screen';
 import { DeleteAccountScreen } from './delete-account-screen';
 import { GoogleSignInCancelled } from './google-module';
 import { LEGAL_PAGES, openLegalPage } from './legal-links';
@@ -25,6 +26,7 @@ export function AccountScreen() {
   const theme = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   if (state.status !== 'signedIn') {
     return null;
@@ -41,8 +43,13 @@ export function AccountScreen() {
 
   // Signing out clears the chosen Google account, so the chooser that opens
   // straight after lists them all; dismissing it lands on the sign-in screen.
+  // An account with a password may be signed into either way: the sign-in
+  // screen offers both.
   async function handleSwitchAccount() {
     await handleSignOut();
+    if (user.hasPassword) {
+      return;
+    }
     try {
       await signIn();
     } catch (caught) {
@@ -79,6 +86,15 @@ export function AccountScreen() {
           </Pressable>
         </View>
 
+        {user.hasPassword ? (
+          <View style={styles.section}>
+            <ThemedText type="overline" themeColor="textSecondary">
+              Security
+            </ThemedText>
+            <MenuRow icon="key" label="Change password" onPress={() => setChangingPassword(true)} />
+          </View>
+        ) : null}
+
         {/* Apart from the Profile row's menu: a wrong tap next to "Sign out" must
           not be where an account gets deleted. */}
         <View style={styles.section}>
@@ -114,6 +130,10 @@ export function AccountScreen() {
 
       <SheetModal visible={deleting} onClose={() => setDeleting(false)}>
         <DeleteAccountScreen onClose={() => setDeleting(false)} />
+      </SheetModal>
+
+      <SheetModal visible={changingPassword} onClose={() => setChangingPassword(false)}>
+        <ChangePasswordScreen onClose={() => setChangingPassword(false)} />
       </SheetModal>
 
       <DropdownMenu visible={menuOpen} onClose={() => setMenuOpen(false)}>

@@ -1,81 +1,158 @@
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRef, useState } from 'react';
+import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/button';
+import { OrDivider } from '@/components/or-divider';
+import { TextAction } from '@/components/text-action';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorFields, logger } from '@/lib/logger';
 
+import { AuthPage } from './auth-page';
+import { authErrorMessage } from './auth-errors';
+import { EmailField } from './email-field';
 import { GoogleSignInCancelled } from './google-module';
 import { LEGAL_PAGES, openLegalPage, type LegalPage } from './legal-links';
+import { PasswordField } from './password-field';
 import { useAuth } from './use-auth';
 
-export function SignInScreen() {
-  const { signIn, googleAvailable } = useAuth();
+export interface SignInScreenProps {
+  /** The address typed so far, carried between the signed-out steps. */
+  email: string;
+  onEmailChange: (email: string) => void;
+  onCreateAccount: () => void;
+  onForgotPassword: () => void;
+}
+
+/**
+ * The way in: an e-mail and password form, then Google
+ * (`docs/specs/password-sign-in.md`, `docs/specs/authentication.md`).
+ */
+export function SignInScreen({
+  email,
+  onEmailChange,
+  onCreateAccount,
+  onForgotPassword,
+}: SignInScreenProps) {
+  const { signIn, signInWithPassword, googleAvailable } = useAuth();
   const theme = useTheme();
-  const [busy, setBusy] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState<'password' | 'google' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSignIn() {
+  async function handlePasswordSignIn() {
+    if (!email.trim() || !password) {
+      setError('Enter your e-mail and password.');
+      return;
+    }
     setError(null);
-    setBusy(true);
+    setBusy('password');
+    try {
+      await signInWithPassword(email, password);
+    } catch (caught) {
+      logger.warn('auth.sign_in.failed', { method: 'password', ...errorFields(caught) });
+      setError(authErrorMessage(caught));
+      setBusy(null);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setBusy('google');
     try {
       await signIn();
     } catch (caught) {
       if (!(caught instanceof GoogleSignInCancelled)) {
-        logger.warn('auth.sign_in.failed', errorFields(caught));
-        setError('Could not sign you in. Please try again.');
+        logger.warn('auth.sign_in.failed', { method: 'google', ...errorFields(caught) });
+        setError('Could not sign you in with Google. Please try again.');
       }
-    } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.hero}>
-          {/* The mark sits on its own brand wash, so it reads on both themes. */}
-          <View style={[styles.logoDisc, { backgroundColor: theme.primarySoft }]}>
-            <BrandMark size={88} />
-          </View>
-          <ThemedText type="title">Ardoise</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.tagline}>
-            Share expenses with the people you split with.
+    <AuthPage>
+      <View style={styles.hero}>
+        {/* The mark sits on its own brand wash, so it reads on both themes. */}
+        <View style={[styles.logoDisc, { backgroundColor: theme.primarySoft }]}>
+          <BrandMark size={72} />
+        </View>
+        <ThemedText type="title">Ardoise</ThemedText>
+        <ThemedText themeColor="textSecondary" style={styles.centered}>
+          Share expenses with the people you split with.
+        </ThemedText>
+      </View>
+
+      <View style={styles.form}>
+        <EmailField
+          value={email}
+          onChangeText={onEmailChange}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          submitBehavior="submit"
+        />
+        <PasswordField
+          ref={passwordRef}
+          purpose="current"
+          placeholder="Password"
+          accessibilityLabel="Password"
+          value={password}
+          onChangeText={setPassword}
+          returnKeyType="go"
+          onSubmitEditing={() => void handlePasswordSignIn()}
+        />
+        <TextAction
+          label="Forgot password?"
+          onPress={onForgotPassword}
+          style={styles.forgot}
+        />
+        {error ? (
+          <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+            {error}
           </ThemedText>
+        ) : null}
+        <Button
+          label="Sign in"
+          onPress={() => void handlePasswordSignIn()}
+          busy={busy === 'password'}
+          disabled={busy !== null}
+        />
+      </View>
+
+      <View>
+        <OrDivider />
+        <Button
+          label="Continue with Google"
+          variant="secondary"
+          onPress={() => void handleGoogleSignIn()}
+          busy={busy === 'google'}
+          disabled={!googleAvailable || busy !== null}
+        />
+        {!googleAvailable ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.caption}>
+            Google sign-in on the web is coming soon.
+          </ThemedText>
+        ) : null}
+      </View>
+
+      <View style={styles.footer}>
+        <View style={styles.signUp}>
+          <ThemedText type="small" themeColor="textSecondary">
+            New to Ardoise?
+          </ThemedText>
+          <TextAction label="Create an account" onPress={onCreateAccount} />
         </View>
 
-        <View style={styles.actions}>
-          <Button
-            label="Continue with Google"
-            onPress={() => void handleSignIn()}
-            busy={busy}
-            disabled={!googleAvailable}
-          />
-
-          {!googleAvailable ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-              Web sign-in is coming soon — use the iOS or Android app.
-            </ThemedText>
-          ) : null}
-          {error ? (
-            <ThemedText type="small" themeColor="danger" style={styles.hint}>
-              {error}
-            </ThemedText>
-          ) : null}
-
-          {/* Continuing is how the terms are accepted (`docs/specs/legal-pages.md`). */}
-          <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-            By continuing, you agree to the <LegalLink page="terms" /> and acknowledge the{' '}
-            <LegalLink page="privacy" />.
-          </ThemedText>
-        </View>
-      </SafeAreaView>
-    </ThemedView>
+        {/* Continuing is how the terms are accepted (`docs/specs/legal-pages.md`). */}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
+          By continuing, you agree to the <LegalLink page="terms" /> and acknowledge the{' '}
+          <LegalLink page="privacy" />.
+        </ThemedText>
+      </View>
+    </AuthPage>
   );
 }
 
@@ -98,39 +175,38 @@ const styles = StyleSheet.create({
   link: {
     textDecorationLine: 'underline',
   },
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    paddingHorizontal: Spacing.four,
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.six,
-  },
   hero: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.three,
+    gap: Spacing.two,
   },
   logoDisc: {
-    width: 132,
-    height: 132,
+    width: 108,
+    height: 108,
     borderRadius: Radius.large,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.one,
   },
-  tagline: {
+  centered: {
     textAlign: 'center',
   },
-  actions: {
+  form: {
     gap: Spacing.three,
   },
-  hint: {
+  forgot: {
+    alignSelf: 'flex-end',
+  },
+  caption: {
     textAlign: 'center',
+    marginTop: Spacing.two,
+  },
+  footer: {
+    gap: Spacing.four,
+  },
+  signUp: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
 });

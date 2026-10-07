@@ -6,15 +6,14 @@ import { GoogleSignInCancelled } from './google-module';
 
 const mockSignOut = jest.fn<() => Promise<void>>();
 const mockSignIn = jest.fn<() => Promise<void>>();
-const mockState: { status: string; user?: unknown } = {
-  status: 'signedIn',
-  user: {
-    id: '11111111-1111-4111-8111-111111111111',
-    email: 'ada@example.com',
-    name: 'Ada Lovelace',
-    picture: null,
-  },
+const googleOnly = {
+  id: '11111111-1111-4111-8111-111111111111',
+  email: 'ada@example.com',
+  name: 'Ada Lovelace',
+  picture: null,
+  hasPassword: false,
 };
+const mockState: { status: string; user?: unknown } = { status: 'signedIn', user: googleOnly };
 
 jest.mock('./use-auth', () => ({
   useAuth: () => ({
@@ -27,10 +26,14 @@ jest.mock('./use-auth', () => ({
   }),
 }));
 
-// The page itself has its own tests; here only that the Account page opens it.
+// The pages themselves have their own tests; here only that the Account page opens them.
 jest.mock('./delete-account-screen', () => {
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
   return { DeleteAccountScreen: () => <Text>Delete account page</Text> };
+});
+jest.mock('./change-password-screen', () => {
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return { ChangePasswordScreen: () => <Text>Change password page</Text> };
 });
 
 const mockOpenBrowser = jest.fn<(url: string) => Promise<unknown>>();
@@ -45,6 +48,7 @@ jest.mock('@/lib/app-version', () => ({
 }));
 
 beforeEach(() => {
+  mockState.user = googleOnly;
   mockOpenBrowser.mockReset().mockResolvedValue({ type: 'dismiss' });
   mockSignOut.mockReset();
   mockSignOut.mockResolvedValue(undefined);
@@ -105,6 +109,32 @@ describe('AccountScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Switch account' }));
 
     expect(mockSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches an account with a password by signing out to the sign-in screen, no chooser', async () => {
+    mockState.user = { ...googleOnly, hasPassword: true };
+    await render(<AccountScreen />);
+    await openProfileMenu();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Switch account' }));
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('offers Change password to an account with a password, opening its own page', async () => {
+    mockState.user = { ...googleOnly, hasPassword: true };
+    await render(<AccountScreen />);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(screen.getByText('Change password page')).toBeTruthy();
+  });
+
+  it('offers no Change password to a Google-only account', async () => {
+    await render(<AccountScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
   });
 
   it('offers Delete account apart from the profile menu, opening its own page', async () => {
