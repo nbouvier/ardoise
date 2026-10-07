@@ -6,32 +6,40 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { Pressable, useColorScheme, useWindowDimensions, View, StyleSheet } from 'react-native';
 
-import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 
+/**
+ * Below this window width the wordmark and the four tabs no longer fit side by
+ * side (they need about 500px), so the bar turns compact: no wordmark — the
+ * home hero already says "Ardoise" — and the tabs share the whole bar.
+ */
+const CompactTabBarWidth = 540;
+
 export default function AppTabs() {
+  const { width } = useWindowDimensions();
+  const compact = width < CompactTabBarWidth;
+
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
-        <CustomTabList>
+        <CustomTabList compact={compact}>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+            <TabButton compact={compact}>Home</TabButton>
           </TabTrigger>
           <TabTrigger name="groups" href="/groups" asChild>
-            <TabButton>Groups</TabButton>
+            <TabButton compact={compact}>Groups</TabButton>
           </TabTrigger>
           <TabTrigger name="friends" href="/friends" asChild>
-            <TabButton>Friends</TabButton>
+            <TabButton compact={compact}>Friends</TabButton>
           </TabTrigger>
           <TabTrigger name="account" href="/account" asChild>
-            <TabButton>Account</TabButton>
+            <TabButton compact={compact}>Account</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -39,13 +47,27 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({
+  children,
+  isFocused,
+  compact,
+  ...props
+}: TabTriggerSlotProps & { compact?: boolean }) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable
+      {...props}
+      style={({ pressed }) => [
+        styles.tabButton,
+        compact && styles.compactTabButton,
+        pressed && styles.pressed,
+      ]}>
       <ThemedView
         type={isFocused ? 'primary' : 'transparent'}
-        style={styles.tabButtonView}>
-        <ThemedText type="smallBold" themeColor={isFocused ? 'onPrimary' : 'textSecondary'}>
+        style={[styles.tabButtonView, compact && styles.compactTabButtonView]}>
+        <ThemedText
+          type="smallBold"
+          themeColor={isFocused ? 'onPrimary' : 'textSecondary'}
+          numberOfLines={1}>
           {children}
         </ThemedText>
       </ThemedView>
@@ -53,7 +75,7 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
   );
 }
 
-export function CustomTabList(props: TabListProps) {
+export function CustomTabList({ compact, ...props }: TabListProps & { compact?: boolean }) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
@@ -61,23 +83,22 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={styles.tabListContainer}>
       <ThemedView
         type="surface"
-        style={[styles.innerContainer, { borderColor: colors.border }]}>
-        <ThemedText type="sectionTitle" themeColor="primary" style={styles.brandText}>
-          Ardoise
-        </ThemedText>
+        style={[
+          styles.innerContainer,
+          compact && styles.compactInnerContainer,
+          { borderColor: colors.border },
+        ]}>
+        {!compact && (
+          <ThemedText
+            type="sectionTitle"
+            themeColor="primary"
+            numberOfLines={1}
+            style={styles.brandText}>
+            Ardoise
+          </ThemedText>
+        )}
 
         {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.primary}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
       </ThemedView>
     </View>
   );
@@ -100,8 +121,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexGrow: 1,
+    // Never wider than the window: a bar wider than its row would spill out on
+    // both sides (it is centred), off-screen on the left and widening the page.
+    flexShrink: 1,
+    minWidth: 0,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
+  },
+  compactInnerContainer: {
+    paddingHorizontal: Spacing.two,
+    gap: Spacing.one,
   },
   brandText: {
     marginRight: 'auto',
@@ -109,16 +138,20 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
+  tabButton: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  compactTabButton: {
+    flexGrow: 1,
+  },
   tabButtonView: {
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,
-  },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+  },
+  compactTabButtonView: {
+    paddingHorizontal: Spacing.two,
   },
 });

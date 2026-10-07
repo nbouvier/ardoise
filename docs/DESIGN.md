@@ -956,8 +956,15 @@ bar is a **surface**, not the canvas, and the active tab carries the brand hue �
 its label and the pill behind the icon — the one place navigation says which app this
 is. The **Account tab's icon is the signed-in person's own avatar** (24, initial on a
 medallion when Google gave no picture) inside a thin ring that takes the tab's colour —
-brand when active, invisible otherwise — so it is always clear whose account is open. On web the tab list is a floating pill bar with the
-"Ardoise" wordmark in brand violet.
+brand when active, invisible otherwise — so it is always clear whose account is open.
+
+On web the tab list is a floating pill bar (`app-tabs.web.tsx`) with the "Ardoise"
+wordmark in brand violet on the left and the four tabs on the right. **It never makes the
+page scroll sideways**: below a 540-wide window, where the wordmark and the four labels
+no longer fit side by side, the bar turns compact — no wordmark (the home hero already
+names the app) and the four tabs share the bar's whole width with tighter padding, which
+fits down to 320. Narrower still, the bar shrinks with the window and labels truncate
+rather than overflow.
 
 The home is the index of that group, so its URL is `/`; the groups list sits at
 `/groups`, which coexists with the `/groups/[id]` detail route outside the tabs.
