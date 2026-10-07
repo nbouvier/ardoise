@@ -57,6 +57,7 @@ import { transactionsChanged } from '@/features/transactions/transactions-change
 import { useBalances } from '@/features/transactions/use-balances';
 import { useTransactions } from '@/features/transactions/use-transactions';
 import { useTheme } from '@/hooks/use-theme';
+import { useTimeout } from '@/hooks/use-timeout';
 import { ApiError } from '@/lib/api/errors';
 import {
   addGroupMembers,
@@ -1073,7 +1074,9 @@ function GroupNameField({
   // The pending delay between losing focus and the unsaved hint actually
   // showing — cleared whenever that hint no longer applies (refocusing,
   // discarding, committing) before it gets the chance to fire.
-  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintTimeout = useTimeout();
+  // How long the checkmark stays up after a successful rename.
+  const confirmTimeout = useTimeout();
   // Real focus state — tapping directly into or away from the field, plus
   // the discard/commit actions setting it directly rather than waiting on a
   // blur event a real device may fire late, or not at all here (see the
@@ -1101,12 +1104,7 @@ function GroupNameField({
   // back in doesn't deserve a flash of "not saved" on the way past.
   const showUnsavedHint = hintDue && dirty && !hasFocus && !confirmed;
 
-  function clearHintTimeout() {
-    if (hintTimeoutRef.current) {
-      clearTimeout(hintTimeoutRef.current);
-      hintTimeoutRef.current = null;
-    }
-  }
+  const clearHintTimeout = hintTimeout.clear;
 
   function handleFocus() {
     clearHintTimeout();
@@ -1121,10 +1119,7 @@ function GroupNameField({
   // the field to keep editing doesn't flash it for no reason.
   function handleBlur() {
     setHasFocus(false);
-    clearHintTimeout();
-    hintTimeoutRef.current = setTimeout(() => {
-      setHintDue(true);
-    }, NAME_UNSAVED_HINT_DELAY_MS);
+    hintTimeout.schedule(() => setHintDue(true), NAME_UNSAVED_HINT_DELAY_MS);
   }
 
   function discard() {
@@ -1165,9 +1160,7 @@ function GroupNameField({
       );
       setHasFocus(false);
       inputRef.current?.blur();
-      setTimeout(() => {
-        setConfirmed(false);
-      }, NAME_CONFIRM_HOLD_MS);
+      confirmTimeout.schedule(() => setConfirmed(false), NAME_CONFIRM_HOLD_MS);
     } finally {
       savingRef.current = false;
     }

@@ -14,7 +14,7 @@ import { createTestContext } from '../../test/app.js';
 import { signInAs, type TestUser } from '../../test/auth.js';
 import { fakeGoogleVerifier } from '../../test/google.js';
 import { TransactionError } from '../transactions/errors.js';
-import { createTransactionsRepository } from '../transactions/repository.js';
+import { createTransactionsRepository, type TransactionFields } from '../transactions/repository.js';
 
 const google = fakeGoogleVerifier({
   ada: { sub: 'google-ada', email: 'ada@example.com', name: 'Ada Lovelace' },
@@ -459,7 +459,7 @@ describe('account deletion', () => {
       const groupId = await createdGroup(grace, 'Flat');
       const gone = '00000000-0000-4000-8000-000000000000';
       const repository = createTransactionsRepository(app.db);
-      const fields = {
+      const fields: Omit<TransactionFields, 'payerId'> = {
         groupId,
         kind: 'expense',
         title: 'Groceries',

@@ -1,3 +1,4 @@
+import type { SplitMode, TransactionCategory, TransactionKind } from '@ardoise/shared';
 import { and, desc, eq, exists, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
@@ -44,15 +45,15 @@ async function refusingDeletedPeople<T>(write: () => Promise<T>): Promise<T> {
 /** The core fields of a transaction, independent of its participants. */
 export interface TransactionFields {
   groupId: string;
-  kind: string;
+  kind: TransactionKind;
   title: string;
   amountCents: number;
   occurredOn: string;
   comment: string | null;
-  category: string;
+  category: TransactionCategory;
   /** `null` is Others — see `docs/specs/transactions.md`. */
   payerId: string | null;
-  splitMode: string;
+  splitMode: SplitMode;
 }
 
 export interface ParticipantInput {

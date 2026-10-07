@@ -1,5 +1,5 @@
 import type { GroupRole } from '@ardoise/shared';
-import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { aliasedTable, and, asc, eq, inArray, isNull, ne, notExists, or, sql, type SQL } from 'drizzle-orm';
 
 import type { Database, DatabaseTransaction } from '../../db/client.js';
 import {
@@ -151,7 +151,6 @@ export interface GroupsRepository {
    * is reported as "already there" rather than guessed.
    */
   addMembers(groupId: string, userIds: readonly string[]): Promise<string[]>;
-  removeMember(groupId: string, userId: string): Promise<void>;
   /**
    * Remove `userId` from `groupId` and from every one of its descendants —
    * nobody can remain in a sub-group of a group they are no longer part of
@@ -289,7 +288,7 @@ async function insertPlaceholders(
   }
   const created = await tx
     .insert(users)
-    .values(names.map((name) => ({ kind: 'placeholder', name, placeholderGroupId: rootId })))
+    .values(names.map((name) => ({ kind: 'placeholder' as const, name, placeholderGroupId: rootId })))
     .returning({ id: users.id });
   await tx.insert(groupMembers).values(
     groupIds.flatMap((groupId) =>
@@ -386,6 +385,36 @@ async function withSubgroupCounts(
   }));
 }
 
+/**
+ * The groups `userId` belongs to that match `filter`, each with its member
+ * and sub-group counts and the caller's own membership details. Joined twice:
+ * once to find the caller's own rows, once to count everyone in each group.
+ */
+async function listMemberGroups(
+  db: Database,
+  userId: string,
+  filter: SQL | undefined,
+  order: readonly SQL[],
+): Promise<ListedGroupSummary[]> {
+  const everyone = aliasedTable(groupMembers, 'everyone');
+
+  const own = await db
+    .select({
+      group: groups,
+      memberCount: sql<number>`count(${everyone.id})`,
+      favoritedAt: groupMembers.favoritedAt,
+      role: groupMembers.role,
+    })
+    .from(groupMembers)
+    .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+    .innerJoin(everyone, eq(everyone.groupId, groups.id))
+    .where(and(eq(groupMembers.userId, userId), filter))
+    .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role)
+    .orderBy(...order);
+
+  return withSubgroupCounts(db, own);
+}
+
 export function createGroupsRepository(db: Database): GroupsRepository {
   return {
     async findGroupById(groupId) {
@@ -402,63 +431,30 @@ export function createGroupsRepository(db: Database): GroupsRepository {
     },
 
     async listGroupsForUser(userId) {
-      // Joined twice: once to find the caller's root groups, once to count
-      // everyone in them.
-      const everyone = aliasedTable(groupMembers, 'everyone');
-
-      const own = await db
-        .select({
-          group: groups,
-          memberCount: sql<number>`count(${everyone.id})`,
-          favoritedAt: groupMembers.favoritedAt,
-          role: groupMembers.role,
-        })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-        .innerJoin(everyone, eq(everyone.groupId, groups.id))
-        .where(
-          and(
-            eq(groupMembers.userId, userId),
-            ne(groups.kind, 'pair'),
-            // Only root groups: a group that is itself a sub-group is reached
-            // by opening its parent, never listed at the top level.
-            isNull(groups.parentId),
-          ),
-        )
-        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role)
+      return listMemberGroups(
+        db,
+        userId,
+        and(
+          ne(groups.kind, 'pair'),
+          // Only root groups: a group that is itself a sub-group is reached
+          // by opening its parent, never listed at the top level.
+          isNull(groups.parentId),
+        ),
         // Active groups first, then archived ones; favorited groups first
         // within each of those (`docs/specs/favorites.md`); alphabetical
         // within what's left.
-        .orderBy(
+        [
           sql`${groups.archivedAt} is not null`,
           sql`${groupMembers.favoritedAt} is null`,
           asc(groups.name),
-        );
-
-      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
+        ],
+      );
     },
 
     async listFavoriteGroupsForUser(userId) {
-      const everyone = aliasedTable(groupMembers, 'everyone');
-
-      const own = await db
-        .select({
-          group: groups,
-          memberCount: sql<number>`count(${everyone.id})`,
-          favoritedAt: groupMembers.favoritedAt,
-          role: groupMembers.role,
-        })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-        .innerJoin(everyone, eq(everyone.groupId, groups.id))
-        // No kind or depth filter, unlike `listGroupsForUser`: a favorite is
-        // gathered wherever it lives (`docs/specs/home.md`).
-        .where(
-          and(eq(groupMembers.userId, userId), sql`${groupMembers.favoritedAt} is not null`),
-        )
-        .groupBy(groups.id, groupMembers.favoritedAt, groupMembers.role);
-
-      return withSubgroupCounts(db, own.map((row) => ({ ...row, role: row.role as GroupRole })));
+      // No kind or depth filter, unlike `listGroupsForUser`: a favorite is
+      // gathered wherever it lives (`docs/specs/home.md`).
+      return listMemberGroups(db, userId, sql`${groupMembers.favoritedAt} is not null`, []);
     },
 
     async listMembers(groupId) {
@@ -469,7 +465,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(eq(groupMembers.groupId, groupId))
         .orderBy(asc(users.name));
 
-      return rows.map((row) => ({ user: row.user, role: row.role as GroupRole }));
+      return rows;
     },
 
     async countMembers(groupId) {
@@ -744,7 +740,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .insert(groupMembers)
         .values(
           targets.flatMap((targetGroupId) =>
-            userIds.map((userId) => ({ groupId: targetGroupId, userId, role: 'member' })),
+            userIds.map((userId) => ({ groupId: targetGroupId, userId, role: 'member' as const })),
           ),
         )
         .onConflictDoNothing()
@@ -756,12 +752,6 @@ export function createGroupsRepository(db: Database): GroupsRepository {
       return inserted
         .filter((row) => row.groupId === groupId)
         .map((row) => row.userId);
-    },
-
-    async removeMember(groupId, userId) {
-      await db
-        .delete(groupMembers)
-        .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
     },
 
     async removeMemberWithDescendants(groupId, userId) {
@@ -888,7 +878,7 @@ export function createGroupsRepository(db: Database): GroupsRepository {
         .where(
           and(eq(groupMembers.userId, userId), inArray(groupMembers.groupId, [...groupIds])),
         );
-      return new Map(rows.map((row) => [row.groupId, row.role as GroupRole]));
+      return new Map(rows.map((row) => [row.groupId, row.role]));
     },
 
     async listFavoriteGroupIds(userId, groupIds) {

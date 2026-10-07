@@ -114,7 +114,7 @@ describe('claiming a placeholder on a generated ledger', () => {
       members.map((userId, position) => ({
         groupId: group!.id,
         userId,
-        role: position === 1 ? 'owner' : 'member',
+        role: position === 1 ? ('owner' as const) : ('member' as const),
       })),
     );
 

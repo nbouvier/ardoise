@@ -169,13 +169,21 @@ export interface GroupsServiceDeps {
 const targetFor = (groupId: string) => ({ kind: 'group' as const, groupId });
 
 /**
+ * A standard group's own name. Always set in practice — only a pair group has
+ * none, and `nameFor` names it instead — but the column is nullable.
+ */
+function ownName(group: Pick<GroupRow, 'name'>): string {
+  return group.name ?? 'Untitled group';
+}
+
+/**
  * What to call a group. A standard group carries its own name; a pair group
  * carries none and is named after the *other* person, so each side sees who
  * they are sharing with.
  */
 function nameFor(group: GroupRow, viewerId: string, members: MemberWithUser[]): string {
   if (group.kind !== 'pair') {
-    return group.name ?? 'Untitled group';
+    return ownName(group);
   }
   const other = members.find((member) => member.user.id !== viewerId);
   // The other account could have been deleted; the group still has to render.
@@ -252,14 +260,6 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   const pairTrees = createPairTreeSettlement(repository, ledger);
 
   /**
-   * A group's ancestors as a breadcrumb reads them, root first. Named the
-   * same way the group itself is: a pair group can be an ancestor too — a
-   * friendship may have sub-groups (`docs/specs/groups.md`) — and it carries
-   * no name of its own, so it is named after the other member, exactly as
-   * `nameFor` names it everywhere else. Its member list is the only extra
-   * read, and only for a pair-rooted tree.
-   */
-  /**
    * A group as somewhere other than its own page presents it. Costs a read
    * only for what it cannot know from the row itself: a pair group's members
    * (it stores no name) and a sub-group's ancestors. A favorited root group,
@@ -269,7 +269,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     const [name, ancestors] = await Promise.all([
       group.kind === 'pair'
         ? repository.listMembers(group.id).then((members) => nameFor(group, viewerId, members))
-        : Promise.resolve(group.name ?? 'Untitled group'),
+        : Promise.resolve(ownName(group)),
       group.parentId
         ? repository.listAncestors(group.id).then((rows) => nameAncestors(rows, viewerId))
         : Promise.resolve([]),
@@ -277,6 +277,14 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     return { name, ancestors };
   }
 
+  /**
+   * A group's ancestors as a breadcrumb reads them, root first. Named the
+   * same way the group itself is: a pair group can be an ancestor too — a
+   * friendship may have sub-groups (`docs/specs/groups.md`) — and it carries
+   * no name of its own, so it is named after the other member, exactly as
+   * `nameFor` names it everywhere else. Its member list is the only extra
+   * read, and only for a pair-rooted tree.
+   */
   function nameAncestors(
     rows: readonly GroupRow[],
     viewerId: string,
@@ -287,11 +295,10 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         name:
           row.kind === 'pair'
             ? nameFor(row, viewerId, await repository.listMembers(row.id))
-            : (row.name ?? 'Untitled group'),
+            : ownName(row),
       })),
     );
   }
-
 
   function summaryOf(
     group: GroupRow,
@@ -305,7 +312,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
   ): GroupSummary {
     return {
       id: group.id,
-      kind: group.kind as GroupSummary['kind'],
+      kind: group.kind,
       name,
       memberCount,
       parentId: group.parentId,
@@ -387,7 +394,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         id: child.group.id,
         // A sub-group is always a standard group (`groups_pair_no_parent`),
         // so it always carries its own name — no `nameFor` fallback needed.
-        name: child.group.name ?? 'Untitled group',
+        name: ownName(child.group),
         memberCount: child.memberCount,
         viewerIsMember: joinedChildIds.has(child.group.id),
         viewerBalanceCents: balances.get(child.group.id) ?? 0,
@@ -425,7 +432,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
     }
     const membership = await repository.findMembership(groupId, userId);
     if (membership) {
-      return { group, role: membership.role as GroupRole, favoritedAt: membership.favoritedAt };
+      return { group, role: membership.role, favoritedAt: membership.favoritedAt };
     }
     if (group.parentId && (await repository.findMembership(group.parentId, userId))) {
       throw new GroupAccessError('join_required');
@@ -499,7 +506,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       return rows.map(({ group, memberCount, subgroupCount, favoritedAt, role }) =>
         summaryOf(
           group,
-          group.name ?? 'Untitled group',
+          ownName(group),
           memberCount,
           subgroupCount,
           balances.get(group.id) ?? 0,
@@ -692,7 +699,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
           // Already out — nothing to do, and nothing to disclose.
           return { groupDeleted: false, removedFromDescendantCount: 0 };
         }
-        assertRemovable(target.role as GroupRole);
+        assertRemovable(target.role);
         const rootId = group.parentId === null ? group.id : await repository.findRootId(groupId);
         if (!(await repository.findPlaceholder(rootId, targetId))) {
           assertCanRemoveOthers(role);
@@ -737,7 +744,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
       // caller already a member — as an owner, say — must not be downgraded
       // in the response.
       const membership = await repository.findMembership(group.id, userId);
-      return detailOf(group, userId, membership!.role as GroupRole, membership!.favoritedAt);
+      return detailOf(group, userId, membership!.role, membership!.favoritedAt);
     },
 
     async listPlaceholders(userId, groupId) {
@@ -789,7 +796,7 @@ export function createGroupsService(deps: GroupsServiceDeps): GroupsService {
         group: await detailOf(
           group,
           userId,
-          membership!.role as GroupRole,
+          membership!.role,
           membership!.favoritedAt,
         ),
         claimed,
@@ -888,7 +895,7 @@ export function createGroupInviteHandler(
         inviter,
         group: {
           id: group.id,
-          name: group.name ?? 'Untitled group',
+          name: ownName(group),
           memberCount: await repository.countMembers(group.id),
         },
       };
@@ -915,7 +922,7 @@ export function createGroupInviteHandler(
         group: {
           id: group.id,
           kind: 'standard',
-          name: group.name ?? 'Untitled group',
+          name: ownName(group),
           memberCount: await repository.countMembers(group.id),
           parentId: group.parentId,
           depth: group.depth,
@@ -925,7 +932,7 @@ export function createGroupInviteHandler(
           // outright — so each carries its own name.
           ancestors: ancestors.map((ancestor) => ({
             id: ancestor.id,
-            name: ancestor.name ?? 'Untitled group',
+            name: ownName(ancestor),
           })),
           subgroupCount: children.length,
           viewerBalanceCents,

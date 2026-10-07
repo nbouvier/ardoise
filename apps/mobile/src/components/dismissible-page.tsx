@@ -16,6 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { useTimeout } from '@/hooks/use-timeout';
+
 /** How far the banner must be pulled down for the page to close. */
 export const DISMISS_DISTANCE = 120;
 /** …or how fast it must be flicked down, past a small distance. */
@@ -57,11 +59,12 @@ export function DismissiblePage({
 }: DismissiblePageProps) {
   const { height } = useWindowDimensions();
   const offset = useSharedValue(0);
+  const resetTimeout = useTimeout();
 
   function close() {
     onClose();
     // Were the page to stay (nowhere to go back to), it must not stay off-screen.
-    setTimeout(() => {
+    resetTimeout.schedule(() => {
       offset.value = 0;
     }, 1200);
   }

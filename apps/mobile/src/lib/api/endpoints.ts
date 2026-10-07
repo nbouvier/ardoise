@@ -1,9 +1,4 @@
-import {
-  authSessionSchema,
-  meResponseSchema,
-  type AuthSession,
-  type MeResponse,
-} from '@ardoise/shared';
+import { authSessionSchema, type AuthSession } from '@ardoise/shared';
 
 import { ApiError, expectOk, NetworkError, readErrorCode } from './errors';
 
@@ -90,14 +85,4 @@ export async function revokeSession(baseUrl: string, refreshToken: string): Prom
   if (!response.ok && response.status !== 401) {
     throw new ApiError(response.status, await readErrorCode(response));
   }
-}
-
-export async function fetchMe(baseUrl: string, accessToken: string): Promise<MeResponse> {
-  const response = await apiRequest(baseUrl, {
-    method: 'GET',
-    path: '/auth/me',
-    accessToken,
-  });
-  await expectOk(response);
-  return meResponseSchema.parse(await response.json());
 }
