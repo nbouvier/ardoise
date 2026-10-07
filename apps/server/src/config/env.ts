@@ -218,6 +218,20 @@ const envSchema = z.object({
   LEGAL_HOST_NAME: z.string().trim().min(1).optional(),
   LEGAL_HOST_ADDRESS: z.string().trim().min(1).optional(),
   LEGAL_HOST_PHONE: z.string().trim().min(1).optional(),
+  /**
+   * How e-mails (sign-up and password-reset codes) leave the server: `brevo` sends
+   * them through Brevo's API; `log` only writes them to the log, codes included,
+   * for local development — refused when `NODE_ENV=production`.
+   */
+  MAIL_TRANSPORT: z.enum(['log', 'brevo']).default('log'),
+  /** Brevo API key (server-only secret). Required when `MAIL_TRANSPORT=brevo`. */
+  BREVO_API_KEY: z.string().trim().min(1).optional(),
+  /**
+   * The sender of every e-mail: an address on a domain authenticated in Brevo
+   * (SPF / DKIM). Required when `MAIL_TRANSPORT=brevo`.
+   */
+  MAIL_FROM_ADDRESS: z.email().optional(),
+  MAIL_FROM_NAME: z.string().trim().min(1).default('Ardoise'),
 });
 
 /** What the legal pages cannot go live without. */
@@ -243,6 +257,17 @@ const envChecked = envSchema
         path: ['ANDROID_APP_ID'],
         message: 'is required when ANDROID_CERT_FINGERPRINTS is set',
       });
+    }
+    if (value.MAIL_TRANSPORT === 'brevo') {
+      for (const name of ['BREVO_API_KEY', 'MAIL_FROM_ADDRESS'] as const) {
+        if (!value[name]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message: 'is required when MAIL_TRANSPORT=brevo',
+          });
+        }
+      }
     }
     if (value.NODE_ENV !== 'production') {
       return;
@@ -279,6 +304,15 @@ const envChecked = envSchema
         code: 'custom',
         path: ['PUBLIC_BASE_URL'],
         message: 'must not point at a local address when NODE_ENV=production',
+      });
+    }
+    // Logged e-mails reach nobody: sign-up and password reset would silently
+    // never work, and the codes would sit in the logs.
+    if (value.MAIL_TRANSPORT === 'log') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MAIL_TRANSPORT'],
+        message: 'must be brevo when NODE_ENV=production',
       });
     }
     // The law requires the legal notice; Google Play requires the privacy

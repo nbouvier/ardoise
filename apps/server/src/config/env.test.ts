@@ -19,6 +19,9 @@ const production = {
   LEGAL_HOST_NAME: 'Example Hosting',
   LEGAL_HOST_ADDRESS: '1 Example Street, 75000 Paris, France',
   LEGAL_HOST_PHONE: '+33 1 00 00 00 00',
+  MAIL_TRANSPORT: 'brevo',
+  BREVO_API_KEY: 'change-me-brevo-key',
+  MAIL_FROM_ADDRESS: 'no-reply@ardoise.test',
 };
 
 describe('loadEnv', () => {
@@ -169,6 +172,29 @@ describe('loadEnv', () => {
     it('refuses a contact that is not an e-mail address, which every public page shows', () => {
       expect(() => loadEnv({ ...production, CONTACT_EMAIL: 'write to us' })).toThrow(
         /CONTACT_EMAIL/,
+      );
+    });
+  });
+
+  describe('e-mail', () => {
+    it('only logs e-mails outside production by default', () => {
+      const env = loadEnv({ ...base, NODE_ENV: 'development' });
+
+      expect(env.MAIL_TRANSPORT).toBe('log');
+      expect(env.MAIL_FROM_NAME).toBe('Ardoise');
+    });
+
+    it('refuses to only log e-mails in production, where nobody would receive a code', () => {
+      expect(() => loadEnv({ ...production, MAIL_TRANSPORT: 'log' })).toThrow(
+        'MAIL_TRANSPORT: must be brevo when NODE_ENV=production',
+      );
+    });
+
+    it('refuses Brevo without its key and a sender, in any environment', () => {
+      expect(() =>
+        loadEnv({ ...base, NODE_ENV: 'development', MAIL_TRANSPORT: 'brevo' }),
+      ).toThrow(
+        /BREVO_API_KEY: is required when MAIL_TRANSPORT=brevo.*MAIL_FROM_ADDRESS: is required/,
       );
     });
   });
