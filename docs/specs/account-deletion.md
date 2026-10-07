@@ -94,8 +94,8 @@ again.
     user's part as Others; anything the user typed into a transaction's title or
     comment), and how long backups keep a copy (see "Security / privacy
     considerations");
-  - how to ask for it without the app: by writing to a contact address, from the address
-    of the Google account used to sign in. The request is carried out by an operator
+  - how to ask for it without the app: by writing to a contact address, from the
+    account's e-mail address. The request is carried out by an operator
     with the same deletion as in the app.
 - Same plain style as the invitation landing page, in French and English and with the
   legal pages' footer, like them (`docs/specs/legal-pages.md`).
@@ -270,7 +270,7 @@ again.
   (production only; the page omits that paragraph when it is not set), never from the
   repository.
 - A deletion requested by e-mail is only carried out when the request comes from the
-  e-mail address of the account's Google account.
+  account's e-mail address.
 
 ## Open questions
 

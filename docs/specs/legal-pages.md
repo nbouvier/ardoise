@@ -61,8 +61,10 @@ so that the app can be published and I stay within the law.
 
 - **Controller**: the publisher, reachable at the contact address.
 - **What is collected**:
-  - from the Google account, at each sign-in: name, e-mail address, profile picture,
-    Google identifier;
+  - the account: name and e-mail address; from the Google account, at each Google
+    sign-in: name, e-mail address, profile picture, Google identifier; for a password,
+    only a hash of it (`docs/specs/password-sign-in.md`); the 6-digit codes e-mailed to
+    confirm an address or set a new password;
   - what users enter: groups and their names, transactions (amounts, dates, titles,
     comments, categories, who paid and who shares), friendships, invitations,
     favorites;
@@ -90,7 +92,8 @@ so that the app can be published and I stay within the law.
     - a hosting provider in the European Union;
     - encrypted backup storage in the European Union;
     - Sentry, for error reports, with data stored in the European Union;
-    - Google, for sign-in; it also serves profile pictures;
+    - Brevo (Sendinblue SAS, France), which sends the e-mails carrying the codes;
+    - Google, for Google sign-in; it also serves profile pictures;
     - Expo, for delivering app updates.
 - **Transfers outside the EU**: Google, Expo and Sentry are US companies. Transfers rely
   on the EU–US Data Privacy Framework or the European Commission's standard contractual
@@ -100,28 +103,31 @@ so that the app can be published and I stay within the law.
   - what stays after a deletion is what the deletion page lists;
   - backups: up to 12 months;
   - error reports: 30 days;
+  - an e-mailed code: 15 minutes, or until used;
   - server logs: until rotated. They hold only internal identifiers.
 - **Rights**:
   - access, rectification, erasure, restriction, objection and portability, exercised
     by writing to the contact address. An answer comes within one month;
   - deletion is also available directly in the app;
-  - name and picture come from Google and follow the Google account at the next
-    sign-in;
+  - with Google sign-in, name and picture come from Google and follow the Google
+    account at the next sign-in; otherwise the name is corrected on request;
   - the right to complain to the CNIL.
 - **People added by name**: someone named in a group without an account can ask, at the
   contact address, for their name to be erased. The publisher handles it by hand
   (`docs/OPERATIONS.md`, "Privacy requests").
 - **Minimum age**: 15.
-- **Security**: encrypted connections, encrypted backups, access limited to the
-  publisher.
-- **On the device**: session credentials in the system's secure storage; no cookies.
+- **Security**: encrypted connections, encrypted backups, passwords kept only as
+  hashes, access limited to the publisher.
+- **On the device**: session credentials in the system's secure storage. In a browser,
+  a strictly necessary `HttpOnly` session cookie (no consent needed) and the last
+  profile (name, e-mail) in local storage, erased at sign-out; no other cookie.
 - **Changes**: the date of the last update is shown. A material change is announced in
   the app.
 
 **Terms of use:**
 
-- Using Ardoise means accepting them; continuing with Google at sign-in says so.
-- **Access**: 15 years old or over, with a Google account. Free.
+- Using Ardoise means accepting them; creating an account or signing in says so.
+- **Access**: 15 years old or over, with an e-mail address or a Google account. Free.
 - **What Ardoise is**: a tool for tracking shared expenses. It holds and moves no money.
   Balances and reimbursement plans are computed only from what members enter, and
   Ardoise does not guarantee they match reality. Settling up happens between the people
@@ -130,6 +136,7 @@ so that the app can be published and I stay within the law.
   - enter accurate, lawful content;
   - nothing insulting, hateful or unlawful in names, titles or comments;
   - add a person by name only with good reason, knowing others in the group will see it;
+  - keep their password to themselves, and sign up only with an address of their own;
   - each user is responsible for what they enter.
 - **Shared content**: what is entered in a group is visible to its members, and any
   member can change or remove it.
