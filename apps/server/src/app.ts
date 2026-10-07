@@ -13,6 +13,7 @@ import {
   transactionsPlugin,
   type TransactionsPluginOptions,
 } from './features/transactions/plugin.js';
+import { corsPlugin } from './http/cors.js';
 import { registerErrorHandler } from './http/error-handler.js';
 import { rateLimitPlugin, type RateLimitPluginOptions } from './http/rate-limit.js';
 import { securityHeadersPlugin } from './http/security-headers.js';
@@ -37,6 +38,8 @@ export interface BuildAppOptions {
   account?: AccountPluginOptions;
   /** Legal pages overrides. Tests pass the publisher and host here. */
   legal?: LegalPluginOptions;
+  /** Override `WEB_ORIGINS` (tests). */
+  webOrigins?: readonly string[] | undefined;
   /** Send log lines here, at this level (tests read them). Default: standard output, `LOG_LEVEL`. */
   log?: { level: string; stream: { write: (line: string) => void } } | undefined;
 }
@@ -82,6 +85,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   app.register(securityHeadersPlugin);
 
+  const webOrigins = options.webOrigins ?? env.WEB_ORIGINS;
+  app.register(corsPlugin, { origins: webOrigins });
+
   // Before any route: it limits the routes registered after it.
   app.register(rateLimitPlugin, {
     globalPerMinute: env.RATE_LIMIT_GLOBAL_PER_MINUTE,
@@ -100,7 +106,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     ...options.db,
   });
 
-  app.register(authPlugin, { ...options.auth });
+  app.register(authPlugin, { webOrigins, ...options.auth });
   // `invites` owns the code space; `friends` and `groups` register what their
   // own invitations lead to, so neither depends on the other.
   app.register(invitesPlugin, { ...options.invites });

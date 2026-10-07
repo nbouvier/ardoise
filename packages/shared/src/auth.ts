@@ -103,6 +103,13 @@ export const authSessionSchema = z.object({
 });
 export type AuthSession = z.infer<typeof authSessionSchema>;
 
+/**
+ * The session as a web client receives it: the refresh token went into an
+ * `HttpOnly` cookie instead (`docs/specs/authentication.md`).
+ */
+export const webAuthSessionSchema = authSessionSchema.omit({ refreshToken: true });
+export type WebAuthSession = z.infer<typeof webAuthSessionSchema>;
+
 /** `GET /auth/me` response. */
 export const meResponseSchema = z.object({
   user: userProfileSchema,

@@ -1,4 +1,4 @@
-import type { AuthSession, UserProfile } from '@ardoise/shared';
+import type { UserProfile } from '@ardoise/shared';
 
 import { deleteOwnAccount } from '@/lib/api/account';
 import { ApiError } from '@/lib/api/errors';
@@ -7,6 +7,7 @@ import {
   authenticateWithGoogle,
   refreshSession,
   revokeSession,
+  type ClientSession,
 } from '@/lib/api/endpoints';
 import { errorFields, logger } from '@/lib/logger';
 
@@ -34,9 +35,9 @@ export interface AuthClientDeps {
  */
 export class AuthClient {
   private state: AuthState = { status: 'loading' };
-  private session: AuthSession | null = null;
+  private session: ClientSession | null = null;
   private listeners = new Set<() => void>();
-  private refreshing: Promise<AuthSession | null> | null = null;
+  private refreshing: Promise<ClientSession | null> | null = null;
 
   constructor(private readonly deps: AuthClientDeps) {}
 
@@ -58,7 +59,7 @@ export class AuthClient {
     }
   }
 
-  private async applySession(session: AuthSession): Promise<void> {
+  private async applySession(session: ClientSession): Promise<void> {
     this.session = session;
     await this.deps.store.save({ refreshToken: session.refreshToken, user: session.user });
     this.setState({ status: 'signedIn', user: session.user });
@@ -100,11 +101,11 @@ export class AuthClient {
   };
 
   readonly signOut = async (): Promise<void> => {
-    const refreshToken = this.session?.refreshToken;
+    const session = this.session;
     await this.deps.google.signOut();
     await this.clearSession();
-    if (refreshToken) {
-      revokeSession(this.deps.baseUrl, refreshToken).catch((error) => {
+    if (session) {
+      revokeSession(this.deps.baseUrl, session.refreshToken).catch((error) => {
         logger.warn('auth.session.revoke.failed', errorFields(error));
       });
     }
@@ -129,14 +130,14 @@ export class AuthClient {
     await this.clearSession();
   };
 
-  private refresh(): Promise<AuthSession | null> {
+  private refresh(): Promise<ClientSession | null> {
     this.refreshing ??= (async () => {
-      const current = this.session?.refreshToken;
+      const current = this.session;
       try {
         if (!current) {
           return null;
         }
-        const session = await refreshSession(this.deps.baseUrl, current);
+        const session = await refreshSession(this.deps.baseUrl, current.refreshToken);
         await this.applySession(session);
         return session;
       } catch (error) {

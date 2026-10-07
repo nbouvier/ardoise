@@ -1,6 +1,20 @@
-import { authSessionSchema, type AuthSession } from '@ardoise/shared';
+import { authSessionSchema, webAuthSessionSchema, type AuthSession } from '@ardoise/shared';
 
+import { REFRESH_TOKEN_IN_COOKIE } from './auth-transport';
 import { ApiError, expectOk, NetworkError, readErrorCode } from './errors';
+
+/**
+ * A session as the app holds it. `refreshToken` is `null` on the web, where it
+ * lives in an `HttpOnly` cookie the app never sees (`docs/specs/authentication.md`).
+ */
+export type ClientSession = Omit<AuthSession, 'refreshToken'> & { refreshToken: string | null };
+
+/** Read a session response, whichever way this platform receives the refresh token. */
+export function parseSession(body: unknown): ClientSession {
+  return REFRESH_TOKEN_IN_COOKIE
+    ? { ...webAuthSessionSchema.parse(body), refreshToken: null }
+    : authSessionSchema.parse(body);
+}
 
 const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 
@@ -31,6 +45,11 @@ export async function apiRequest(baseUrl: string, options: RequestOptions): Prom
   if (options.accessToken) {
     headers.authorization = `Bearer ${options.accessToken}`;
   }
+  // On the web, auth calls say so and carry the cookie the refresh token is in.
+  const webAuthCall = REFRESH_TOKEN_IN_COOKIE && options.path.startsWith('/auth/');
+  if (webAuthCall) {
+    headers['x-ardoise-client'] = 'web';
+  }
 
   // `AbortSignal.timeout` is not available on every React Native runtime.
   const controller = new AbortController();
@@ -40,6 +59,7 @@ export async function apiRequest(baseUrl: string, options: RequestOptions): Prom
       method: options.method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      ...(webAuthCall ? { credentials: 'include' as const } : {}),
       signal: controller.signal,
     });
   } catch (error) {
@@ -52,34 +72,35 @@ export async function apiRequest(baseUrl: string, options: RequestOptions): Prom
 export async function authenticateWithGoogle(
   baseUrl: string,
   idToken: string,
-): Promise<AuthSession> {
+): Promise<ClientSession> {
   const response = await apiRequest(baseUrl, {
     method: 'POST',
     path: '/auth/google',
     body: { idToken },
   });
   await expectOk(response);
-  return authSessionSchema.parse(await response.json());
+  return parseSession(await response.json());
 }
 
+/** Rotate the session: with the token on native, with the cookie on the web (`null`). */
 export async function refreshSession(
   baseUrl: string,
-  refreshToken: string,
-): Promise<AuthSession> {
+  refreshToken: string | null,
+): Promise<ClientSession> {
   const response = await apiRequest(baseUrl, {
     method: 'POST',
     path: '/auth/refresh',
-    body: { refreshToken },
+    body: refreshToken === null ? undefined : { refreshToken },
   });
   await expectOk(response);
-  return authSessionSchema.parse(await response.json());
+  return parseSession(await response.json());
 }
 
-export async function revokeSession(baseUrl: string, refreshToken: string): Promise<void> {
+export async function revokeSession(baseUrl: string, refreshToken: string | null): Promise<void> {
   const response = await apiRequest(baseUrl, {
     method: 'POST',
     path: '/auth/logout',
-    body: { refreshToken },
+    body: refreshToken === null ? undefined : { refreshToken },
   });
   // A logout that races an expiry is still a successful logout.
   if (!response.ok && response.status !== 401) {

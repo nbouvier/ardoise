@@ -21,6 +21,7 @@ current setup and state.
 | `auth.account.linked`          | info  | `userId`, `method` | A sign-in method was added to an existing account: `google` (by address) or `password` |
 | `auth.password.failed`         | info  | `reason`, `userId`? | A password sign-in did not match: `unknown_account`, `no_password` or `wrong_password` (`userId` when there is an account). Never the address or the password |
 | `auth.password.throttled`      | warn  | —             | An address used up its failed sign-ins for the window (429) |
+| `auth.web.origin_refused`      | warn  | —             | A web-client auth call came from an origin outside `WEB_ORIGINS` (403) |
 | `auth.account.created`         | info  | `userId`, `method` | A sign-up code created a password account |
 | `auth.password.reset`          | info  | `userId`      | A reset code set a new password; every other session ended |
 | `auth.password.changed`        | info  | `userId`      | The account's password was changed from the app; every other session ended |

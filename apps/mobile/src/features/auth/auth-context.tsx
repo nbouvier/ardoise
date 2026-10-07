@@ -13,7 +13,7 @@ import { setReportingUser } from '@/lib/error-reporting';
 
 import { AuthClient, type AuthState } from './auth-client';
 import { googleSignIn } from './google';
-import { secureTokenStore } from './token-store';
+import { tokenStore } from './token-store';
 
 export interface AuthContextValue {
   state: AuthState;
@@ -35,7 +35,7 @@ function createDefaultClient(): AuthClient {
   return new AuthClient({
     baseUrl: getApiBaseUrl(),
     google: googleSignIn,
-    store: secureTokenStore,
+    store: tokenStore,
   });
 }
 

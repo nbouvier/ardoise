@@ -21,7 +21,7 @@ development build, or the web target.
 
 | Target            | Command (repo root)     | Notes                                        |
 | ----------------- | ----------------------- | -------------------------------------------- |
-| Web               | `npm run mobile:web`    | Runs in any browser, no native build needed. |
+| Web               | `npm run mobile:web`    | Runs in any browser, no native build needed. The local API must list its origin in `WEB_ORIGINS` (`http://localhost:8081`, as `apps/server/.env.example` does). |
 | Android dev build | `npm run mobile:android`| Builds + installs the native app, then serves. |
 | iOS dev build     | `npm run mobile:ios`    | macOS + Xcode only.                          |
 | Dev server        | `npm run mobile`        | `expo start --dev-client --tunnel`; use once a dev build is installed. |
@@ -426,8 +426,12 @@ In production it is required and must not be a local address (`docs/DEPLOYMENT.m
 ## Google sign-in
 
 - Uses `@react-native-google-signin/google-signin` (native SDK) — a development build is
-  required; it does not run in Expo Go. The web target shows the sign-in screen with the
-  action disabled.
+  required; it does not run in Expo Go. The web target shows the Google action disabled;
+  password sign-in works there.
+- On the web the refresh token is an `HttpOnly` cookie set by the API, never seen by the
+  app: `src/lib/api/auth-transport.web.ts` switches auth calls to it
+  (`X-Ardoise-Client: web`, `credentials: 'include'`), and `token-store.web.ts` keeps
+  only the last profile in `localStorage`. See `docs/specs/authentication.md`.
 - Config plugins (`expo-secure-store`, `@react-native-google-signin/google-signin`) are in
   `app.json`; `app.config.ts` adds the iOS URL scheme from the iOS client ID.
 - After changing the Google config or client IDs, regenerate native code:

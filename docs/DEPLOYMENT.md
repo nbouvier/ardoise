@@ -226,8 +226,13 @@ per response, because the landing page's script contains the invitation code. Th
 block or an external resource to the page, the policy follows automatically for inline
 `<style>` / `<script>`; anything else (an image, a font) needs the policy extended there.
 
-The API sets no CORS headers; add them deliberately if a browser client (the Expo web
-target) ever needs to call it.
+CORS is answered to the web app's origins only, `WEB_ORIGINS` (comma-separated, exact
+origins: `https://app.example.com`, no path), with credentials: a web session's refresh
+token is an `HttpOnly` cookie (`docs/specs/authentication.md`). Any other origin gets no
+CORS header at all. Unset — the default, and production's until the web app is hosted —
+no browser page can use the API. The web app must be served from the **same site** as
+the API (two subdomains of one domain, say `app.` and `api.`): browsers drop a cookie
+from another site as third-party.
 
 ## Error responses
 
