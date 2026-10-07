@@ -7,8 +7,9 @@ export interface Invalidation {
   /**
    * A group was created, joined, left, renamed, archived, deleted or
    * (un)favorited, or its members changed. Also reaches the friend list — a
-   * friend's star lives on the pair group — and the home's latest
-   * transactions, which only show groups the viewer is still in.
+   * friend's star lives on the pair group — the home's latest transactions,
+   * which only show groups the viewer is still in, and the statistics, whose
+   * sub-groups in scope are the ones the viewer is in.
    */
   groupsChanged: () => Promise<void>;
   /**
@@ -36,7 +37,12 @@ export function useInvalidation(): Invalidation {
     };
     return {
       groupsChanged: () =>
-        invalidate(queryKeys.groups, queryKeys.recentTransactions, queryKeys.friends),
+        invalidate(
+          queryKeys.groups,
+          queryKeys.recentTransactions,
+          queryKeys.allStatistics,
+          queryKeys.friends,
+        ),
       transactionsChanged: () =>
         invalidate(queryKeys.ledger, queryKeys.groups, queryKeys.friends),
       friendsChanged: () => invalidate(queryKeys.friends),

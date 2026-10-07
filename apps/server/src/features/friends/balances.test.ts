@@ -453,10 +453,9 @@ describe('friend balances', () => {
     });
 
     const repository = createTransactionsRepository(app.db);
-    const rows = [
-      ...(await repository.listByGroup(trip.id)),
-      ...(await repository.listByGroup(pair.id)),
-    ];
+    // Every row of a group: far fewer than one page holds.
+    const everyRow = async (groupId: string) => (await repository.listPage(groupId, 100)).rows;
+    const rows = [...(await everyRow(trip.id)), ...(await everyRow(pair.id))];
     const participants = await repository.listParticipants(rows.map((row) => row.id));
     const byTransaction = groupParticipantsByTransaction(participants);
 
@@ -469,7 +468,7 @@ describe('friend balances', () => {
 
     // And the consistency property, on the group that holds all three: a
     // member's balances with the others sum to their balance in the group.
-    const tripRows = await repository.listByGroup(trip.id);
+    const tripRows = await everyRow(trip.id);
     const tripParticipants = groupParticipantsByTransaction(
       await repository.listParticipants(tripRows.map((row) => row.id)),
     );

@@ -1,11 +1,14 @@
 import type { Transaction } from '@ardoise/shared';
 import type { ReactElement } from 'react';
-import { FlatList, StyleSheet } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 
 import { AsyncState, EmptyState } from '@/components/async-state';
+import { Button } from '@/components/button';
+import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import type { UseTransactionsResult } from '@/features/transactions/use-transactions';
+import { useTheme } from '@/hooks/use-theme';
 
 export interface TransactionListProps {
   result: UseTransactionsResult;
@@ -20,9 +23,12 @@ export interface TransactionListProps {
   header: ReactElement;
 }
 
-/** A group's own transactions, most recent first, under whatever `header` is. */
+/**
+ * A group's own transactions, most recent first, under whatever `header` is.
+ * The next page is asked for as the end comes near (`docs/specs/transactions.md`).
+ */
 export function TransactionList({ result, viewerId, archived, onOpen, header }: TransactionListProps) {
-  const { status, transactions, refresh } = result;
+  const { status, transactions, refresh, loadMore } = result;
   const rows = status === 'ready' && viewerId ? transactions : [];
 
   return (
@@ -51,6 +57,9 @@ export function TransactionList({ result, viewerId, archived, onOpen, header }: 
           />
         </AsyncState>
       }
+      ListFooterComponent={rows.length > 0 ? <MoreFooter result={result} /> : null}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
         <TransactionRow
@@ -61,6 +70,34 @@ export function TransactionList({ result, viewerId, archived, onOpen, header }: 
       )}
     />
   );
+}
+
+/**
+ * Under the last row: a spinner while the next page is on its way, so it
+ * reads as "more is coming" rather than the end of the list; what went wrong
+ * with a way to try again if it failed; nothing once everything is in.
+ */
+function MoreFooter({ result }: { result: UseTransactionsResult }) {
+  const theme = useTheme();
+
+  if (result.moreStatus === 'loading') {
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator testID="transactions-loading-more" color={theme.primary} />
+      </View>
+    );
+  }
+  if (result.moreStatus === 'error') {
+    return (
+      <View style={styles.footer}>
+        <ThemedText themeColor="textSecondary" style={styles.footerText}>
+          We couldn’t load more transactions.
+        </ThemedText>
+        <Button label="Try again" variant="secondary" onPress={result.retryMore} />
+      </View>
+    );
+  }
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -77,5 +114,13 @@ const styles = StyleSheet.create({
   },
   state: {
     padding: Spacing.four,
+  },
+  footer: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.three,
+  },
+  footerText: {
+    textAlign: 'center',
   },
 });

@@ -39,7 +39,14 @@ describe('useInvalidation', () => {
       groupList: queryKeys.groupList,
       favoriteGroups: queryKeys.favoriteGroups,
       group: queryKeys.group('g1'),
-      transactions: queryKeys.transactions('g1', 'group'),
+      transactions: queryKeys.transactions('g1'),
+      statistics: queryKeys.statistics('g1', {
+        type: 'spending',
+        participantIds: null,
+        subgroupIds: null,
+        from: null,
+        to: null,
+      }),
       balances: queryKeys.balances('g1'),
       recentTransactions: queryKeys.recentTransactions,
       friends: queryKeys.friends,
@@ -60,9 +67,9 @@ describe('useInvalidation', () => {
       .sort();
   }
 
-  it('refreshes what shows groups, friends included, when a group changes', async () => {
+  it('refreshes what shows groups, friends and statistics included, when a group changes', async () => {
     expect(await staleAfter('groupsChanged')).toEqual(
-      ['favoriteGroups', 'friends', 'group', 'groupList', 'recentTransactions'].sort(),
+      ['favoriteGroups', 'friends', 'group', 'groupList', 'recentTransactions', 'statistics'].sort(),
     );
   });
 
@@ -75,6 +82,7 @@ describe('useInvalidation', () => {
         'group',
         'groupList',
         'recentTransactions',
+        'statistics',
         'transactions',
       ].sort(),
     );

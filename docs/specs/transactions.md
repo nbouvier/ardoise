@@ -140,7 +140,22 @@ concerns.
 ### Viewing
 
 - A group shows its transactions, most recent first (by date, then by recording order for
-  same-day entries).
+  same-day entries, then by id so the order is total).
+- The list loads **a page at a time** — 30 transactions — and asks for the next page as
+  the viewer scrolls near the end of what is loaded. While a page is on its way, a
+  **spinner sits under the last row**, so it is plain that more is coming rather than
+  that the list ended. Once the last page is in, nothing more is asked for and nothing is
+  shown under the last row.
+- **A further page that fails to load** leaves every row already shown in place; the
+  bottom of the list says it could not load more, with a **Try again**. Nothing else on
+  the screen is affected. (The first page failing is the list's ordinary error state.)
+- Paging never repeats or skips an entry: each page starts strictly after the last row of
+  the previous one in that total order (a cursor, not an offset), so a transaction
+  recorded meanwhile cannot shift the pages under the viewer.
+- **After the viewer records, edits or deletes a transaction**, it shows in its place in
+  the list at once, and the pages already loaded are read again in the background. A
+  change made by another member shows the next time the list is read: the group opened
+  again, or the app coming back to the foreground.
 - Each entry shows its title, date, amount, kind, the payer, and — for the person looking
   at it — their own share, so "what do I owe on this one" never needs mental math. That
   figure is the transaction's effect on the viewer's balance, by the balance rule below:
@@ -186,7 +201,7 @@ feature establishes, which that spec builds on.
 - Comments/discussion on a transaction beyond the single optional comment field.
 - An edit history or audit trail of who changed what.
 - Notifying members when a transaction is added, edited or deleted.
-- Pagination or filtering of the transaction list (see Open questions).
+- Filtering the transaction list (by member, category, date…).
 
 ## Edge cases
 
@@ -414,9 +429,6 @@ See `docs/API.md` for the authoritative surface and `docs/DATABASE.md` for the s
 
 ## Open questions
 
-- **Pagination**: the transaction list has no limit or paging in this pass. Fine for a
-  trip or a flatshare's typical volume; will need revisiting (cursor-based, most likely)
-  once a long-lived group accumulates hundreds of entries.
 - **Should an edit history be kept**, given any member can silently change another's
   entry? Deferred — see Security / privacy considerations.
 - Should recording, editing or deleting later require confirmation from the payer or

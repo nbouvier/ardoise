@@ -129,11 +129,32 @@ has one (`Other` by default), so nothing falls outside the breakdown.
 
 ### Freshness
 
-The breakdown describes exactly the transactions the group (and, in scope, its
-sub-groups) is currently showing — it is the same lists, read again, not a separate figure
-that could disagree with them. Recording, editing or deleting a transaction anywhere in
-scope is therefore reflected the next time the breakdown is looked at, with no refresh of
-its own.
+The breakdown is computed by the server from the transactions themselves, on every read —
+nothing is stored, so it can never drift from them. It is read again whenever the
+Statistics tab is shown, when the app comes back to the foreground, and right after any
+change the viewer makes that could move it. What moves it:
+
+- **A transaction recorded, edited or deleted** — in the group, or in a sub-group in
+  scope: its amount, kind, category, date, payer or shares.
+- **A placeholder member removed from the tree's root** — their share of every transaction
+  becomes Others', which is never counted, so "Everybody" totals drop by it; transfers
+  naming them are deleted (`docs/specs/placeholder-members.md`).
+- **A placeholder claimed** — their shares become the claimer's: the "Everybody" total is
+  unchanged, but a selection including the claimer now counts them.
+- **An account deleted** — its share in every group becomes Others', exactly as for a
+  removed placeholder (`docs/specs/account-deletion.md`). Made by someone else, so it
+  shows the next time the view is read.
+- **A sub-group created, deleted, joined or left** — which branches are in scope, and the
+  "n sub-groups you're not in" note.
+- **A member joining or leaving** — the participant list (who can be ticked), not the
+  figures: a departed member's transactions still count.
+- **The group itself deleted**, or the friendship behind a pair group removed — the view is
+  gone with it.
+
+Archiving changes nothing: an archived group's breakdown stays readable as it was.
+
+The viewer's own changes are reflected the moment they come back to the tab. Another
+member's are reflected the next time the view is read — there is no live push.
 
 ## Out of scope
 
@@ -332,42 +353,27 @@ its own.
 - **No new persisted data.** The breakdown itself is still derived on the fly, the way
   balances are (`docs/ARCHITECTURE.md`); nesting adds a data-fetching question, not a
   storage one.
-- **The aggregation lives in `@ardoise/shared`** as a pure function operating on a flat
-  list of transactions, unchanged by sub-groups: scope is resolved into *which*
-  transactions are handed to it, not into new logic inside it. The rule for what counts —
-  and the percentage rounding — keeps its one definition.
+- **The aggregation is computed by the server**, in SQL, so the client never needs every
+  transaction in scope — the transaction list is paginated (`docs/specs/transactions.md`).
+  `categoryBreakdown` in `@ardoise/shared` stays the readable statement of the rule, and
+  the SQL aggregate is tested against it, the way balances are
+  (`docs/specs/balances.md`). The percentage rounding keeps its one shared definition.
 - **Each category gains a fixed colour**, alongside its emoji and label, in the same
   shared preset list. A category's colour is part of its identity, used by the chart and
   its legend together; it is not chosen per screen.
-- **A group's transaction list gains a `scope` query parameter** (`group`, the default, or
-  `subtree`) so the client can ask for the group's own transactions or for the group's
-  together with every sub-group's the caller is a member of, in one call — see
-  `docs/API.md`. This is what "including sub-groups" is built from; the plain
-  `GET /groups/:groupId/transactions` used by the transaction list itself is unaffected
-  and keeps returning only that group's own transactions.
-- **`scope=subtree` also takes an optional `subgroupIds`** — a comma-separated list of
-  direct sub-group ids — narrowing the descendants added to only those named branches,
-  each with everything nested under it. Resolved server-side (each branch's own
-  descendant ids, unioned, then filtered to the ones the caller belongs to exactly as
-  `scope=subtree` already was) so an id outside the group's own tree can never leak
-  another group's transactions in. Omitting it keeps today's behaviour — every branch —
-  unchanged; this is additive, not a breaking change to `scope=subtree`'s existing
-  callers.
-- **This is only viable while the client holds every transaction in scope.** The
-  transaction list is unpaginated today (an open question in
-  `docs/specs/transactions.md`); the moment it is paginated, a client-side breakdown would
-  silently describe only the loaded page, and the aggregation must move behind a
-  `GET /groups/:groupId/transactions/statistics` route that accepts the same `scope`.
-  Recorded as an open question below and in `docs/ARCHITECTURE.md`.
-- **The date range needed no API change at all.** `occurredOn` was already on every
-  `Transaction` the client holds for this view; the range is one more `Array.filter`
-  alongside the existing participant one, computed on the same already-fetched list, the
-  same way participants and (client-side) sub-group branches already are. It inherits the
-  pagination caveat directly above rather than adding a new one: once the transaction list
-  is paginated, the date range moves behind the same future
-  `GET /groups/:groupId/transactions/statistics` route, most naturally as its own
-  `from`/`to` query parameters, rather than staying a client-side filter over a partial
-  list.
+- **`GET /groups/:groupId/statistics`** answers one breakdown: `type` (`spending` or
+  `income`), `participantIds` (comma-separated; omitted means everyone), `subgroupIds`
+  (comma-separated direct sub-groups whose branches count; omitted means every branch,
+  empty means none), `from` and `to` (inclusive `YYYY-MM-DD` bounds, each optional). It
+  returns the total, the slices (amount and percentage, largest first) and how many
+  sub-groups in the selected branches the caller is not in. See `docs/API.md`.
+- **Sub-group branches are resolved server-side**: each named branch's own descendant
+  ids, unioned, then filtered to the ones the caller belongs to — an id outside the
+  group's own tree is dropped, so it can never pull in another group's transactions.
+- **Participant ids are checked the same way**: an id that is not one of the group's
+  members (current or past, as a transaction can still name them) simply matches nothing.
+- The transaction list (`GET /groups/:groupId/transactions`) no longer takes `scope` or
+  `subgroupIds`: statistics was their only reader, and it now has its own route.
 
 ## UX / UI considerations
 
@@ -471,9 +477,6 @@ amounts are financial data and must not be logged
 
 ## Open questions
 
-- **Pagination.** Deriving the breakdown client-side is correct only while the whole
-  transaction list is loaded. Paginating the list requires moving this to the server;
-  which of the two happens first is not decided.
 - **Named or relative date presets** ("this month", "this year", "last 7 days") on top of
   the two plain bounds — the most likely next step now that the range itself exists.
 - **Per-member breakdown shown side by side** — "who spends on what, member by member" —

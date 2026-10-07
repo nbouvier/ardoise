@@ -493,7 +493,11 @@ shape (overline title, "+ Add" text action at the end — absent when effectivel
 over the transaction list (`TransactionRow` cards). Both sections are the list's own header
 (`TransactionList`), so they scroll away with the rows: however many sub-groups a group has,
 the transactions get the whole screen once scrolled to. Loading, failure and the empty
-state sit in the space below that header. "+ Add", or tapping a row, **swaps the
+state sit in the space below that header. The list loads 30 rows at a time and asks for
+the next page as the end comes near (half a screen before it): while that page is on its
+way a brand spinner sits under the last row, and if it fails, the same place says "We
+couldn't load more transactions." over a secondary "Try again" button, the rows above
+untouched. Nothing sits under the last row once everything is in. "+ Add", or tapping a row, **swaps the
 tab's own content for the add/edit form** — the same in-place pattern as "+ Invite" on the
 Manage tab, not a sheet sliding up over it: the banner and tabs stay, and picking another
 tab leaves it. A suggested reimbursement from the Balances tab opens the same form the same

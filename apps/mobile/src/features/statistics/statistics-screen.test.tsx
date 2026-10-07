@@ -1,13 +1,15 @@
-import type {
-  Transaction,
-  TransactionCategory,
-  TransactionKind,
-  TransactionsListResponse,
+import {
+  categoryBreakdown,
+  type GroupStatisticsResponse,
+  type Transaction,
+  type TransactionCategory,
+  type TransactionKind,
 } from '@ardoise/shared';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
+import type { StatisticsFilter } from '@/lib/api/transactions';
 import { render } from '@/test-utils/render';
 
 import { StatisticsScreen } from './statistics-screen';
@@ -77,10 +79,31 @@ function transaction({
   };
 }
 
-const mockFetchTransactions = jest.fn<() => Promise<TransactionsListResponse>>();
-// Stable across renders, like the real memoised auth context — a fresh object
-// per call would make authorizedFetch a new reference every render, which
-// use-transactions.ts's effect depends on, looping forever.
+/**
+ * The server, faked: the breakdown `categoryBreakdown` gives for these
+ * transactions under the filter asked for — the rule the real route is tested
+ * against — so the screen is checked against figures, not canned answers.
+ */
+let mockServer: { transactions: Transaction[]; excludedSubgroupCount: number } = {
+  transactions: [],
+  excludedSubgroupCount: 0,
+};
+
+function mockAnswer(filter: StatisticsFilter): GroupStatisticsResponse {
+  const inRange = mockServer.transactions.filter(
+    (t) =>
+      (filter.from === null || t.occurredOn >= filter.from) &&
+      (filter.to === null || t.occurredOn <= filter.to),
+  );
+  return {
+    ...categoryBreakdown(inRange, { type: filter.type, participantIds: filter.participantIds }),
+    excludedSubgroupCount: mockServer.excludedSubgroupCount,
+  };
+}
+
+const mockFetchStatistics =
+  jest.fn<(filter: StatisticsFilter) => Promise<GroupStatisticsResponse>>();
+// Stable across renders, like the real memoised auth context.
 const mockAuthContext = { authorizedFetch: jest.fn() };
 
 jest.mock('@/features/auth/use-auth', () => ({
@@ -88,11 +111,16 @@ jest.mock('@/features/auth/use-auth', () => ({
 }));
 
 jest.mock('@/lib/api/transactions', () => ({
-  fetchTransactions: () => mockFetchTransactions(),
+  fetchStatistics: (_fetcher: unknown, _groupId: string, filter: StatisticsFilter) =>
+    mockFetchStatistics(filter),
 }));
 
+/** The filter the last breakdown was asked for with. */
+const lastFilter = () => mockFetchStatistics.mock.lastCall?.[0];
+
 beforeEach(() => {
-  mockFetchTransactions.mockReset();
+  mockServer = { transactions: [], excludedSubgroupCount: 0 };
+  mockFetchStatistics.mockReset().mockImplementation(async (filter) => mockAnswer(filter));
 });
 
 /** Participants, subgroups and the date range live behind the "Filters" button, closed by default. */
@@ -104,7 +132,7 @@ async function renderScreen(
   transactions: Transaction[],
   overrides: Partial<Parameters<typeof StatisticsScreen>[0]> = {},
 ) {
-  mockFetchTransactions.mockResolvedValue({ transactions, excludedSubgroupCount: 0 });
+  mockServer = { transactions, excludedSubgroupCount: 0 };
   return render(
     <StatisticsScreen
       groupId="group-1"
@@ -159,7 +187,10 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Income' }));
 
     expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total income');
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('8.00');
+    await waitFor(() =>
+      expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('8.00'),
+    );
+    expect(lastFilter()?.type).toBe('income');
     expect(screen.queryByTestId('donut-slice-groceries')).toBeNull();
   });
 
@@ -177,7 +208,10 @@ describe('StatisticsScreen', () => {
     await openMoreOptions();
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
+    await waitFor(() =>
+      expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00'),
+    );
+    expect(lastFilter()?.participantIds).toEqual([ada.id]);
   });
 
   it('sums the shares of every selected participant', async () => {
@@ -194,7 +228,11 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+    await waitFor(() =>
+      expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00'),
+    );
+    // Everybody again: asked for as everyone, not as a list of ids.
+    expect(lastFilter()?.participantIds).toBeNull();
   });
 
   it('explains that no participant is selected rather than drawing an empty ring', async () => {
@@ -262,10 +300,7 @@ describe('StatisticsScreen', () => {
     });
 
     it('includes a sub-group created after the screen opened, while all are selected', async () => {
-      mockFetchTransactions.mockResolvedValue({
-        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
-        excludedSubgroupCount: 0,
-      });
+      mockServer.transactions = [transaction({ category: 'groceries', amountCents: 3000 })];
       const { rerender } = await render(
         <StatisticsScreen groupId="group-1" subgroups={[subOne]} members={members} viewerId={ada.id} />,
       );
@@ -277,6 +312,8 @@ describe('StatisticsScreen', () => {
 
       await openMoreOptions();
       expect(screen.getByRole('button', { name: 'Subgroups: All' })).toBeTruthy();
+      // Every branch, so the new one too, without naming any.
+      expect(lastFilter()?.subgroupIds).toBeNull();
     });
   });
 
@@ -368,7 +405,9 @@ describe('StatisticsScreen', () => {
       screen.getByRole('checkbox', { name: 'Grace Hopper' }).props.accessibilityState,
     ).toMatchObject({ checked: false });
 
-    expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
+    await waitFor(() =>
+      expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00'),
+    );
   });
 
   it('shows a selected category in the centre, and deselects on a second tap', async () => {
@@ -420,7 +459,7 @@ describe('StatisticsScreen', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: 'Income' }));
 
-    expect(screen.getByText('Nothing recorded as income yet.')).toBeTruthy();
+    expect(await screen.findByText('Nothing recorded as income yet.')).toBeTruthy();
   });
 
   it('says nothing concerns the selected participant when their own share is nothing', async () => {
@@ -433,25 +472,24 @@ describe('StatisticsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Participants:/ }));
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Grace Hopper' }));
     expect(
-      screen.getByText(/None of this group’s spending concerns the selected participants/),
+      await screen.findByText(/None of this group’s spending concerns the selected participants/),
     ).toBeTruthy();
   });
 
   it('offers a retry when the transactions could not be loaded', async () => {
-    mockFetchTransactions.mockRejectedValue(new Error('offline'));
+    mockFetchStatistics.mockRejectedValueOnce(new Error('offline'));
     await render(
       <StatisticsScreen groupId="group-1" subgroups={[]} members={members} viewerId={ada.id} />,
     );
 
     const retry = await screen.findByRole('button', { name: 'Try again' });
-    mockFetchTransactions.mockResolvedValue({ transactions: [], excludedSubgroupCount: 0 });
     await fireEvent.press(retry);
 
     expect(await screen.findByText(/Nothing spent between members yet/)).toBeTruthy();
   });
 
   it('waits on the transactions rather than showing an empty chart', async () => {
-    mockFetchTransactions.mockReturnValue(new Promise(() => undefined));
+    mockFetchStatistics.mockReturnValue(new Promise(() => undefined));
     await render(
       <StatisticsScreen groupId="group-1" subgroups={[]} members={members} viewerId={ada.id} />,
     );
@@ -462,10 +500,10 @@ describe('StatisticsScreen', () => {
 
   describe('sub-groups', () => {
     it('includes sub-groups by default and offers to exclude them', async () => {
-      mockFetchTransactions.mockResolvedValue({
+      mockServer = {
         transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
         excludedSubgroupCount: 2,
-      });
+      };
 
       await render(
         <StatisticsScreen
@@ -477,6 +515,7 @@ describe('StatisticsScreen', () => {
       );
 
       await screen.findByTestId('statistics-centre-amount');
+      expect(lastFilter()?.subgroupIds).toBeNull();
       await openMoreOptions();
       expect(screen.getByRole('button', { name: 'Subgroups: All' })).toBeTruthy();
       expect(screen.getByText('2 sub-groups you’re not in aren’t included.')).toBeTruthy();
@@ -491,9 +530,12 @@ describe('StatisticsScreen', () => {
     });
 
     it('excludes sub-groups when deselected, and clears any category selection', async () => {
-      mockFetchTransactions.mockResolvedValue({
-        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
-        excludedSubgroupCount: 0,
+      // The group's own spending alone, once no branch is counted.
+      const groceries = transaction({ category: 'groceries', amountCents: 3000 });
+      const travel = transaction({ category: 'travel', amountCents: 500 });
+      mockFetchStatistics.mockImplementation(async (filter) => {
+        mockServer.transactions = filter.subgroupIds?.length === 0 ? [travel] : [groceries];
+        return mockAnswer(filter);
       });
 
       await render(
@@ -507,10 +549,6 @@ describe('StatisticsScreen', () => {
       await screen.findByTestId('statistics-centre-amount');
       await fireEvent.press(screen.getByRole('button', { name: 'Groceries, 30.00, 100%' }));
 
-      mockFetchTransactions.mockResolvedValue({
-        transactions: [transaction({ category: 'travel', amountCents: 500 })],
-        excludedSubgroupCount: 0,
-      });
       await openMoreOptions();
       await fireEvent.press(screen.getByRole('button', { name: 'Subgroups: All' }));
       await fireEvent.press(screen.getByRole('button', { name: 'None' }));
@@ -520,6 +558,7 @@ describe('StatisticsScreen', () => {
       );
       expect(screen.getByTestId('statistics-centre-label')).toHaveTextContent('Total spending');
       expect(screen.getByRole('button', { name: 'Subgroups: None' })).toBeTruthy();
+      expect(lastFilter()?.subgroupIds).toEqual([]);
     });
 
     it('opens the sub-groups as a dropdown too, with All and None presets', async () => {
@@ -544,10 +583,7 @@ describe('StatisticsScreen', () => {
     });
 
     it('narrows to a single named sub-group and its own nested branch', async () => {
-      mockFetchTransactions.mockResolvedValue({
-        transactions: [transaction({ category: 'groceries', amountCents: 3000 })],
-        excludedSubgroupCount: 0,
-      });
+      mockServer.transactions = [transaction({ category: 'groceries', amountCents: 3000 })];
 
       await render(
         <StatisticsScreen
@@ -571,6 +607,7 @@ describe('StatisticsScreen', () => {
       ).toMatchObject({ checked: false });
 
       expect(screen.getByRole('button', { name: 'Subgroups: Ajaccio weekend' })).toBeTruthy();
+      await waitFor(() => expect(lastFilter()?.subgroupIds).toEqual(['sub-1']));
     });
   });
 
@@ -605,7 +642,10 @@ describe('StatisticsScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
 
-      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('20.00');
+      await waitFor(() =>
+        expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('20.00'),
+      );
+      expect(lastFilter()?.from).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Clear from' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'From: Any' })).toBeNull();
     });
@@ -621,7 +661,10 @@ describe('StatisticsScreen', () => {
       await fireEvent.press(screen.getByRole('button', { name: 'To: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
 
-      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('10.00');
+      await waitFor(() =>
+        expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('10.00'),
+      );
+      expect(lastFilter()?.to).not.toBeNull();
     });
 
     it('clearing a bound restores every transaction', async () => {
@@ -634,11 +677,16 @@ describe('StatisticsScreen', () => {
 
       await fireEvent.press(screen.getByRole('button', { name: 'From: Any' }));
       await fireEvent.press(screen.getByRole('button', { name: 'date-picker-mock' }));
-      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('20.00');
+      await waitFor(() =>
+        expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('20.00'),
+      );
 
       await fireEvent.press(screen.getByRole('button', { name: 'Clear from' }));
 
-      expect(await screen.findByTestId('statistics-centre-amount')).toHaveTextContent('30.00');
+      await waitFor(() =>
+        expect(screen.getByTestId('statistics-centre-amount')).toHaveTextContent('30.00'),
+      );
+      expect(lastFilter()?.from).toBeNull();
       expect(screen.getByRole('button', { name: 'From: Any' })).toBeTruthy();
     });
 

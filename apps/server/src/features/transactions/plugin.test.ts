@@ -1,3 +1,5 @@
+import { categoryBreakdown, type StatisticsType, type Transaction } from '@ardoise/shared';
+import { eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -110,26 +112,28 @@ describe('transactions routes', () => {
     return response.json().transaction;
   }
 
+  /** A page of the list; an `undefined` query value is left out. */
   const listTx = (
     user: TestUser,
     groupId: string,
-    scope?: string,
-    subgroupIds?: readonly string[],
-  ) => {
-    const params = new URLSearchParams();
-    if (scope) {
-      params.set('scope', scope);
-    }
-    if (subgroupIds) {
-      params.set('subgroupIds', subgroupIds.join(','));
-    }
-    const query = params.toString();
-    return app.inject({
+    query: Record<string, string | undefined> = {},
+  ) =>
+    app.inject({
       method: 'GET',
-      url: `/groups/${groupId}/transactions${query ? `?${query}` : ''}`,
+      url: `/groups/${groupId}/transactions`,
+      query: Object.fromEntries(
+        Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      ),
       headers: user.headers,
     });
-  };
+
+  const getStatistics = (user: TestUser, groupId: string, query: Record<string, string>) =>
+    app.inject({
+      method: 'GET',
+      url: `/groups/${groupId}/statistics`,
+      query,
+      headers: user.headers,
+    });
 
   /** The group as the caller sees it — carrying their own balance in it. */
   async function getGroupOf(user: TestUser, groupId: string) {
@@ -426,6 +430,22 @@ describe('transactions routes', () => {
   });
 
   describe('GET /groups/:groupId/transactions', () => {
+    const idsOf = (response: { json: () => unknown }) =>
+      (response.json() as { transactions: { id: string }[] }).transactions.map((t) => t.id);
+
+    /** Every page, following `nextCursor` until there is none. */
+    async function everyPage(user: TestUser, groupId: string, limit: number) {
+      const pages: string[][] = [];
+      let cursor: string | undefined;
+      do {
+        const response = await listTx(user, groupId, { limit: String(limit), cursor });
+        expect(response.statusCode).toBe(200);
+        pages.push(idsOf(response));
+        cursor = response.json().nextCursor ?? undefined;
+      } while (cursor);
+      return pages;
+    }
+
     it('lists most recent first, by date then by recording order', async () => {
       const ada = await signIn('ada');
       const group = await createdGroup(ada, 'Trip');
@@ -447,9 +467,98 @@ describe('transactions routes', () => {
       });
 
       const response = await listTx(ada, group.id);
-      const ids = response.json().transactions.map((t: { id: string }) => t.id);
 
-      expect(ids).toEqual([third.id, second.id, first.id]);
+      expect(idsOf(response)).toEqual([third.id, second.id, first.id]);
+      // Everything fits in the first page.
+      expect(response.json().nextCursor).toBeNull();
+    });
+
+    it('pages through the list without repeating or skipping a row', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      for (let day = 1; day <= 7; day += 1) {
+        // Two days share a date, so the order leans on recording order too.
+        await createdTx(ada, group.id, {
+          ...expense(ada.userId, [ada.userId]),
+          occurredOn: `2026-09-0${Math.min(day, 6)}`,
+        });
+      }
+
+      const pages = await everyPage(ada, group.id, 3);
+
+      expect(pages.map((page) => page.length)).toEqual([3, 3, 1]);
+      expect(pages.flat()).toEqual(idsOf(await listTx(ada, group.id)));
+    });
+
+    it('takes 30 to a page by default', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      for (let i = 0; i < 31; i += 1) {
+        await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
+      }
+
+      const first = await listTx(ada, group.id);
+      expect(idsOf(first)).toHaveLength(30);
+      const second = await listTx(ada, group.id, { cursor: first.json().nextCursor });
+      expect(idsOf(second)).toHaveLength(1);
+      expect(second.json().nextCursor).toBeNull();
+    });
+
+    it('keeps rows recorded within the same millisecond apart', async () => {
+      // `created_at` holds microseconds; a cursor rounded to milliseconds
+      // would skip the rows sharing the last one's millisecond.
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      const created = [];
+      for (let i = 0; i < 3; i += 1) {
+        created.push(await createdTx(ada, group.id, expense(ada.userId, [ada.userId])));
+      }
+      for (const [index, transaction] of created.entries()) {
+        await app.db
+          .update(transactions)
+          .set({ createdAt: sql`${`2026-09-11T12:00:00.12340${index}Z`}::timestamptz` })
+          .where(eq(transactions.id, transaction.id));
+      }
+
+      const pages = await everyPage(ada, group.id, 1);
+
+      expect(pages.flat()).toEqual(created.map((transaction) => transaction.id).reverse());
+    });
+
+    it('neither repeats nor skips a row when one is recorded between two pages', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      for (let i = 0; i < 4; i += 1) {
+        await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
+      }
+      const before = idsOf(await listTx(ada, group.id));
+
+      const first = await listTx(ada, group.id, { limit: '2' });
+      await createdTx(ada, group.id, expense(ada.userId, [ada.userId]));
+      const second = await listTx(ada, group.id, { limit: '2', cursor: first.json().nextCursor });
+
+      expect([...idsOf(first), ...idsOf(second)]).toEqual(before);
+    });
+
+    it("leaves sub-groups' transactions out", async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+      await createdTx(ada, sub.id, expense(ada.userId, [ada.userId]));
+
+      expect(idsOf(await listTx(ada, root.id))).toEqual([inRoot.id]);
+    });
+
+    it('refuses a malformed cursor or an unusable page size', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+
+      for (const query of [{ cursor: 'not-a-cursor' }, { limit: '0' }, { limit: '101' }]) {
+        const response = await listTx(ada, group.id, query);
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toBe('invalid_request');
+      }
     });
 
     it('answers a non-member with not found', async () => {
@@ -459,113 +568,262 @@ describe('transactions routes', () => {
 
       expect((await listTx(alan, group.id)).statusCode).toBe(404);
     });
+  });
 
-    describe('scope=subtree', () => {
-      it("adds a sub-group's transactions, with no excluded count", async () => {
-        const ada = await signIn('ada');
-        const root = await createdGroup(ada, 'Corsica 2026');
-        const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
-        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
-        const inSub = await createdTx(ada, sub.id, expense(ada.userId, [ada.userId]));
+  describe('GET /groups/:groupId/statistics', () => {
+    /** An expense of `amount` in `category`, for `participantIds` in equal shares. */
+    const spent = (
+      payerId: string | null,
+      participantIds: string[],
+      amount: number,
+      category = 'groceries',
+      occurredOn = '2026-09-11',
+    ) => ({ ...expense(payerId, participantIds, amount), category, occurredOn });
 
-        const plain = await listTx(ada, root.id);
-        const subtree = await listTx(ada, root.id, 'subtree');
+    async function totalOf(user: TestUser, groupId: string, query: Record<string, string> = {}) {
+      const response = await getStatistics(user, groupId, { type: 'spending', ...query });
+      expect(response.statusCode).toBe(200);
+      return response.json().totalCents as number;
+    }
 
-        expect(plain.json().transactions.map((t: { id: string }) => t.id)).toEqual([
-          inRoot.id,
-        ]);
-        expect(plain.json().excludedSubgroupCount).toBe(0);
+    it('breaks the members’ shares down by category, largest first', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      await createdTx(ada, group.id, spent(ada.userId, [ada.userId], 300, 'groceries'));
+      await createdTx(ada, group.id, spent(ada.userId, [ada.userId], 900, 'restaurant'));
+      await createdTx(ada, group.id, spent(ada.userId, [ada.userId], 300, 'groceries'));
 
-        const subtreeIds = subtree.json().transactions.map((t: { id: string }) => t.id);
-        expect(subtreeIds.sort()).toEqual([inRoot.id, inSub.id].sort());
-        expect(subtree.json().excludedSubgroupCount).toBe(0);
+      const response = await getStatistics(ada, group.id, { type: 'spending' });
+
+      expect(response.json()).toEqual({
+        totalCents: 1500,
+        slices: [
+          { category: 'restaurant', amountCents: 900, percent: 60 },
+          { category: 'groceries', amountCents: 600, percent: 40 },
+        ],
+        excludedSubgroupCount: 0,
+      });
+    });
+
+    it('keeps spending, income and transfers apart, and never counts Others', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+      await createdTx(ada, group.id, {
+        ...spent(ada.userId, [], 6000),
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: grace.userId, amount: 2000 },
+            { userId: null, amount: 4000 },
+          ],
+        },
+      });
+      await createdTx(ada, group.id, { ...spent(ada.userId, [ada.userId], 500), kind: 'income' });
+      await createdTx(ada, group.id, {
+        kind: 'transfer',
+        title: 'Paying back',
+        amount: 700,
+        occurredOn: '2026-09-11',
+        payerId: grace.userId,
+        toUserId: ada.userId,
       });
 
-      it('excludes a sub-group the caller has not joined, and reports it', async () => {
-        const ada = await signIn('ada');
-        const grace = await signIn('grace');
-        await befriend(ada, grace);
-        const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
-        // Ada never joins the sub-group grace creates under the same root.
-        const sub = await createdSubgroup(grace, root.id, 'Just grace');
-        await createdTx(grace, sub.id, expense(grace.userId, [grace.userId]));
-        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
+      expect(await totalOf(ada, group.id)).toBe(2000);
+      expect(await totalOf(ada, group.id, { type: 'income' })).toBe(500);
+    });
 
-        const response = await listTx(ada, root.id, 'subtree');
+    it('counts only the selected participants’ shares', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const group = await createdGroup(ada, 'Trip', [grace.userId]);
+      await createdTx(ada, group.id, spent(ada.userId, [ada.userId, grace.userId], 1000));
+      await createdTx(ada, group.id, spent(ada.userId, [grace.userId], 300));
 
-        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
-          inRoot.id,
-        ]);
-        expect(response.json().excludedSubgroupCount).toBe(1);
-      });
+      expect(await totalOf(ada, group.id, { participantIds: ada.userId })).toBe(500);
+      expect(await totalOf(ada, group.id, { participantIds: grace.userId })).toBe(800);
+      expect(
+        await totalOf(ada, group.id, { participantIds: `${ada.userId},${grace.userId}` }),
+      ).toBe(1300);
+      expect(await totalOf(ada, group.id, { participantIds: '' })).toBe(0);
+    });
 
-      it('rolls up several levels of nesting', async () => {
-        const ada = await signIn('ada');
-        const root = await createdGroup(ada, 'Corsica 2026');
-        const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
-        const grandchild = await createdSubgroup(ada, child.id, 'Beach day');
-        const rootTx = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
-        const childTx = await createdTx(ada, child.id, expense(ada.userId, [ada.userId]));
-        const grandchildTx = await createdTx(
+    it('keeps the date range’s bounds inclusive', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+      for (const [day, amount] of [['01', 1], ['05', 10], ['10', 100], ['15', 1000]] as const) {
+        await createdTx(
           ada,
-          grandchild.id,
-          expense(ada.userId, [ada.userId]),
+          group.id,
+          spent(ada.userId, [ada.userId], amount, 'groceries', `2026-09-${day}`),
         );
+      }
 
-        const response = await listTx(ada, root.id, 'subtree');
+      expect(await totalOf(ada, group.id, { from: '2026-09-05', to: '2026-09-10' })).toBe(110);
+      expect(await totalOf(ada, group.id, { from: '2026-09-10' })).toBe(1100);
+      expect(await totalOf(ada, group.id, { to: '2026-09-05' })).toBe(11);
+    });
 
-        const ids = response.json().transactions.map((t: { id: string }) => t.id);
-        expect(ids.sort()).toEqual([rootTx.id, childTx.id, grandchildTx.id].sort());
+    it('counts every sub-group by default, with no excluded count', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const child = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const grandchild = await createdSubgroup(ada, child.id, 'Beach day');
+      await createdTx(ada, root.id, spent(ada.userId, [ada.userId], 1));
+      await createdTx(ada, child.id, spent(ada.userId, [ada.userId], 10));
+      await createdTx(ada, grandchild.id, spent(ada.userId, [ada.userId], 100));
+
+      const response = await getStatistics(ada, root.id, { type: 'spending' });
+
+      expect(response.json().totalCents).toBe(111);
+      expect(response.json().excludedSubgroupCount).toBe(0);
+    });
+
+    it('leaves out a sub-group the caller has not joined, and reports it', async () => {
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      await befriend(ada, grace);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId]);
+      // Ada never joins the sub-group grace creates under the same root.
+      const sub = await createdSubgroup(grace, root.id, 'Just grace');
+      await createdTx(grace, sub.id, spent(grace.userId, [grace.userId], 10));
+      await createdTx(ada, root.id, spent(ada.userId, [ada.userId], 1));
+
+      const response = await getStatistics(ada, root.id, { type: 'spending' });
+
+      expect(response.json().totalCents).toBe(1);
+      expect(response.json().excludedSubgroupCount).toBe(1);
+    });
+
+    it('narrows to the named branches, each with its own nested sub-groups', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const branchA = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
+      const branchAChild = await createdSubgroup(ada, branchA.id, 'Beach day');
+      const branchB = await createdSubgroup(ada, root.id, 'Bastia weekend');
+      await createdTx(ada, root.id, spent(ada.userId, [ada.userId], 1));
+      await createdTx(ada, branchA.id, spent(ada.userId, [ada.userId], 10));
+      await createdTx(ada, branchAChild.id, spent(ada.userId, [ada.userId], 100));
+      await createdTx(ada, branchB.id, spent(ada.userId, [ada.userId], 1000));
+
+      expect(await totalOf(ada, root.id, { subgroupIds: branchA.id })).toBe(111);
+      // None named: the group's own transactions only.
+      expect(await totalOf(ada, root.id, { subgroupIds: '' })).toBe(1);
+    });
+
+    it('drops an id that is not a descendant of the group', async () => {
+      const ada = await signIn('ada');
+      const root = await createdGroup(ada, 'Corsica 2026');
+      const other = await createdGroup(ada, 'Unrelated');
+      await createdTx(ada, root.id, spent(ada.userId, [ada.userId], 1));
+      await createdTx(ada, other.id, spent(ada.userId, [ada.userId], 10));
+
+      expect(await totalOf(ada, root.id, { subgroupIds: other.id })).toBe(1);
+    });
+
+    it('refuses a malformed query', async () => {
+      const ada = await signIn('ada');
+      const group = await createdGroup(ada, 'Trip');
+
+      const queries: Record<string, string>[] = [
+        {},
+        { type: 'transfer' },
+        { type: 'spending', participantIds: 'x' },
+      ];
+      for (const query of queries) {
+        const response = await getStatistics(ada, group.id, query);
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toBe('invalid_request');
+      }
+    });
+
+    it('answers a non-member with not found', async () => {
+      const ada = await signIn('ada');
+      const alan = await signIn('alan');
+      const group = await createdGroup(ada, 'Trip');
+
+      expect((await getStatistics(alan, group.id, { type: 'spending' })).statusCode).toBe(404);
+    });
+
+    it('agrees with the readable rule it implements', async () => {
+      // The SQL aggregate and `categoryBreakdown` are two statements of the
+      // same rule; this is what stops them drifting apart.
+      const ada = await signIn('ada');
+      const grace = await signIn('grace');
+      const alan = await signIn('alan');
+      await befriend(ada, grace);
+      await befriend(ada, alan);
+      const root = await createdGroup(ada, 'Corsica 2026', [grace.userId, alan.userId]);
+      const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend', [grace.userId]);
+
+      const people = [ada, grace, alan];
+      const categories = ['groceries', 'restaurant', 'travel', 'leisure'];
+      for (let i = 0; i < 24; i += 1) {
+        const groupId = i % 4 === 3 ? sub.id : root.id;
+        const members = groupId === sub.id ? [ada, grace] : people;
+        const payer = members[i % members.length]!;
+        const concerned = members
+          .filter((_, index) => (i + index) % 3 !== 0)
+          .map((person) => person.userId);
+        await createdTx(ada, groupId, {
+          ...spent(
+            i % 5 === 4 ? null : payer.userId,
+            concerned.length > 0 ? concerned : [payer.userId],
+            137 * (i + 1),
+            categories[i % categories.length],
+            `2026-09-${String((i % 20) + 1).padStart(2, '0')}`,
+          ),
+          kind: i % 6 === 5 ? 'income' : 'expense',
+        });
+      }
+      // Others' share, which must never count.
+      await createdTx(ada, root.id, {
+        ...spent(ada.userId, [], 5000, 'travel'),
+        split: {
+          mode: 'amount',
+          participants: [
+            { userId: grace.userId, amount: 1000 },
+            { userId: null, amount: 4000 },
+          ],
+        },
       });
 
-      it('narrows to only the named branches, each with its own nested sub-groups', async () => {
-        const ada = await signIn('ada');
-        const root = await createdGroup(ada, 'Corsica 2026');
-        const branchA = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
-        const branchAChild = await createdSubgroup(ada, branchA.id, 'Beach day');
-        const branchB = await createdSubgroup(ada, root.id, 'Bastia weekend');
-        const rootTx = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
-        const branchATx = await createdTx(ada, branchA.id, expense(ada.userId, [ada.userId]));
-        const branchAChildTx = await createdTx(
-          ada,
-          branchAChild.id,
-          expense(ada.userId, [ada.userId]),
+      const every = [
+        ...(await listTx(ada, root.id, { limit: '100' })).json().transactions,
+        ...(await listTx(ada, sub.id, { limit: '100' })).json().transactions,
+      ] as Transaction[];
+      const filters: {
+        type: StatisticsType;
+        participantIds?: string[];
+        from?: string;
+        to?: string;
+      }[] = [
+        { type: 'spending' },
+        { type: 'income' },
+        { type: 'spending', participantIds: [grace.userId] },
+        { type: 'spending', participantIds: [ada.userId, alan.userId] },
+        { type: 'spending', from: '2026-09-05', to: '2026-09-12' },
+        { type: 'income', participantIds: [alan.userId], from: '2026-09-08' },
+      ];
+
+      for (const { type, participantIds, from, to } of filters) {
+        const inRange = every.filter(
+          (t) => (!from || t.occurredOn >= from) && (!to || t.occurredOn <= to),
         );
-        await createdTx(ada, branchB.id, expense(ada.userId, [ada.userId]));
+        const expected = categoryBreakdown(inRange, { type, participantIds: participantIds ?? null });
+        const query: Record<string, string> = {
+          type,
+          ...(participantIds ? { participantIds: participantIds.join(',') } : {}),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+        };
 
-        const response = await listTx(ada, root.id, 'subtree', [branchA.id]);
+        const response = await getStatistics(ada, root.id, query);
 
-        const ids = response.json().transactions.map((t: { id: string }) => t.id);
-        expect(ids.sort()).toEqual([rootTx.id, branchATx.id, branchAChildTx.id].sort());
-      });
-
-      it('includes only the root group when no branch is named', async () => {
-        const ada = await signIn('ada');
-        const root = await createdGroup(ada, 'Corsica 2026');
-        const sub = await createdSubgroup(ada, root.id, 'Ajaccio weekend');
-        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
-        await createdTx(ada, sub.id, expense(ada.userId, [ada.userId]));
-
-        const response = await listTx(ada, root.id, 'subtree', []);
-
-        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
-          inRoot.id,
-        ]);
-        expect(response.json().excludedSubgroupCount).toBe(0);
-      });
-
-      it('drops an id that is not actually a descendant of the group', async () => {
-        const ada = await signIn('ada');
-        const root = await createdGroup(ada, 'Corsica 2026');
-        const other = await createdGroup(ada, 'Unrelated');
-        const inRoot = await createdTx(ada, root.id, expense(ada.userId, [ada.userId]));
-
-        const response = await listTx(ada, root.id, 'subtree', [other.id]);
-
-        expect(response.json().transactions.map((t: { id: string }) => t.id)).toEqual([
-          inRoot.id,
-        ]);
-      });
+        expect(response.json()).toEqual({ ...expected, excludedSubgroupCount: 0 });
+      }
     });
   });
 
