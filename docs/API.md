@@ -8,8 +8,8 @@ route is added, changed or removed.
 - REST over HTTP, JSON request and response bodies.
 - Request and response shapes are validated with Zod on the server; the schemas are
   shared with the client via `@ardoise/shared`.
-- Authentication: Ardoise issues its own session after verifying a Google ID token.
-  Protected routes require `Authorization: Bearer <accessToken>`. The access token is a
+- Authentication: Ardoise issues its own session after verifying a Google ID token, or
+  an e-mail address and password (`docs/specs/password-sign-in.md`). Protected routes require `Authorization: Bearer <accessToken>`. The access token is a
   short-lived (~15 min) HS256 JWT; the client refreshes it with the rotating refresh
   token. Auth failures return `401` with `{ "error": "<code>" }`; validation failures
   return `400 { "error": "invalid_request" }`. An access token of a deleted account is
@@ -20,8 +20,15 @@ route is added, changed or removed.
   every response carries `X-RateLimit-Limit` / `X-RateLimit-Remaining` /
   `X-RateLimit-Reset`. `GET /health` is never limited. The mobile client should treat
   a `429` as "try again later", not as a failure of the request itself.
-- Every response carries security headers (`docs/DEPLOYMENT.md`). The API sets no CORS
-  headers: it is called by the native app, not from a browser page.
+- Every response carries security headers (`docs/DEPLOYMENT.md`). CORS headers go only
+  to the web app's origins (`WEB_ORIGINS`), with credentials; any other origin gets
+  none.
+- **Web clients** send `X-Ardoise-Client: web` on every `/auth/*` call. For them, every
+  route that returns a session sets the refresh token in the `ardoise_refresh` cookie
+  (`HttpOnly; Secure; SameSite=Strict; Path=/auth`) and leaves `refreshToken` out of the
+  body; `POST /auth/refresh` and `POST /auth/logout` read it from that cookie and take
+  no body. A request with that header from an origin outside `WEB_ORIGINS` gets
+  `403 { "error": "forbidden_origin" }`. See `docs/specs/authentication.md`.
 - Every error body is `{ "error": "<code>" }`. Failures the server did not anticipate
   (any 5xx) always answer `{ "error": "internal_error" }`: the underlying message — which
   may carry a constraint name or a fragment of data — is logged, never sent. Failures
@@ -64,17 +71,97 @@ Response `200`:
   "accessToken": "<jwt>",
   "refreshToken": "<opaque>",
   "accessTokenExpiresAt": "2026-09-09T19:15:00.000Z",
-  "user": { "id": "<uuid>", "email": "a@example.com", "name": "Ada", "picture": null }
+  "user": {
+    "id": "<uuid>",
+    "email": "a@example.com",
+    "name": "Ada",
+    "picture": null,
+    "hasPassword": false
+  }
 }
 ```
 
+This is **the session response**: every route below that signs someone in returns it.
+`hasPassword` says whether the account can sign in with a password.
+
+An account with the same address (case-insensitive) and no Google identity yet gets this
+Google identity linked to it instead of a second account being created.
+
 `401 { "error": "invalid_google_token" }` when the token cannot be verified.
+
+### `POST /auth/signup`
+
+Start creating an account (`docs/specs/password-sign-in.md`). The answer never says
+whether the address already has an account.
+
+Request: `{ "name": "Ada", "email": "a@example.com", "password": "<8 to 128 chars>" }`
+(`name` trimmed, 1 to 60 characters) → Response `202` (no body).
+
+E-mails the address, after the response: a 6-digit code (no account, or an account
+without a password), or a note that an account already exists (an account with a
+password).
+
+`429 { "error": "rate_limited" }` beyond 5 code requests an hour for the address.
+
+### `POST /auth/signup/verify`
+
+Finish creating the account with the code. Creates it, or adds the password to the
+Google-only account with that address (its name unchanged).
+
+Request: `{ "email": "a@example.com", "code": "123456" }` → Response `200`: the session
+response.
+
+`401 { "error": "invalid_code" }` when the code is wrong, expired, used or out of
+attempts (5), or the account gained a password meanwhile.
+
+### `POST /auth/password`
+
+Sign in with an e-mail address and a password.
+
+Request: `{ "email": "a@example.com", "password": "..." }` → Response `200`: the session
+response.
+
+`401 { "error": "invalid_credentials" }` for an unknown address, a wrong password or an
+account without a password alike. `429 { "error": "rate_limited" }` after 10 failures in
+15 minutes for the address.
+
+### `POST /auth/password-reset`
+
+Ask for a code to set a new password. Always the same answer.
+
+Request: `{ "email": "a@example.com" }` → Response `202` (no body). An account with that
+address gets the code by e-mail; an unknown address gets nothing.
+
+`429 { "error": "rate_limited" }` beyond 5 code requests an hour for the address.
+
+### `POST /auth/password-reset/confirm`
+
+Set a new password with the code, and sign in. Every other session of the account is
+revoked.
+
+Request: `{ "email": "a@example.com", "code": "123456", "password": "<8 to 128 chars>" }`
+→ Response `200`: the session response.
+
+`401 { "error": "invalid_code" }` as for `POST /auth/signup/verify`.
+
+### `POST /auth/password/change`
+
+Change the password of the signed-in account. Requires authentication. Every other
+session of the account is revoked; the caller gets a fresh session.
+
+Request: `{ "currentPassword": "...", "newPassword": "<8 to 128 chars>" }` → Response
+`200`: the session response.
+
+`403 { "error": "invalid_password" }` when the current password is wrong or the account
+has none (not `401`, which would make the client refresh its session).
+`429 { "error": "rate_limited" }` as for `POST /auth/password`.
 
 ### `POST /auth/refresh`
 
 Rotate a session. The supplied refresh token is revoked and a new pair is returned.
 
-Request: `{ "refreshToken": "<opaque>" }` → Response `200`: same shape as `POST /auth/google`.
+Request: `{ "refreshToken": "<opaque>" }` (no body for a web client: the cookie) →
+Response `200`: the session response.
 
 `401 { "error": "invalid_refresh_token" }` when the token is unknown, expired, revoked or
 already rotated. A revoked or already rotated token is a theft signal: every session of
@@ -85,13 +172,14 @@ one succeeds and the other is that case.
 
 Revoke a session. Idempotent.
 
-Request: `{ "refreshToken": "<opaque>" }` → Response `204` (no body).
+Request: `{ "refreshToken": "<opaque>" }` (no body for a web client: the cookie, which
+the response clears) → Response `204` (no body).
 
 ### `GET /auth/me`
 
 Current user. Requires `Authorization: Bearer <accessToken>`.
 
-Response `200`: `{ "user": { "id": "<uuid>", "email": "...", "name": "...", "picture": null } }`
+Response `200`: `{ "user": { ... } }`, the `user` of the session response.
 
 `401` when the access token is missing, invalid or expired.
 
