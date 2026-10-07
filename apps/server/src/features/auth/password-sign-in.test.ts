@@ -168,7 +168,10 @@ describe('password sign-in', () => {
 
   describe('the users table', () => {
     it('refuses a second account with the same address in another case', async () => {
-      await createPasswordAccount(context.app, { email: 'ada@example.com', password: 'x'.repeat(8) });
+      await createPasswordAccount(context.app, {
+        email: 'ada@example.com',
+        password: 'x'.repeat(8),
+      });
 
       await expect(
         createPasswordAccount(context.app, { email: 'ADA@example.com', password: 'x'.repeat(8) }),

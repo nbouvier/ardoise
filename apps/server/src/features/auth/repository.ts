@@ -1,7 +1,16 @@
 import { and, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
 
 import type { Database } from '../../db/client.js';
-import { sessions, users, type SessionRow, type UserRow } from '../../db/schema.js';
+import {
+  emailCodes,
+  sessions,
+  users,
+  type EmailCodePurpose,
+  type EmailCodeRow,
+  type NewEmailCodeRow,
+  type SessionRow,
+  type UserRow,
+} from '../../db/schema.js';
 
 export interface GoogleAccountInput {
   googleSub: string;
@@ -53,6 +62,28 @@ export interface AuthRepository {
   /** The account with this address, whatever its case. */
   findAccountByEmail(email: string): Promise<UserRow | undefined>;
   setPasswordHash(userId: string, passwordHash: string): Promise<UserRow>;
+  insertPasswordAccount(input: {
+    email: string;
+    name: string;
+    passwordHash: string;
+  }): Promise<UserRow>;
+  /** Store a code for its address and purpose, replacing the one already there. */
+  saveEmailCode(input: NewEmailCodeRow): Promise<void>;
+  /**
+   * Spend one attempt on the live code for this address and purpose, and
+   * return it to be checked. `undefined` when there is none: never asked
+   * for, entered already, expired, or out of attempts. Concurrent tries each
+   * spend their own attempt, so the limit holds.
+   */
+  claimEmailCodeAttempt(
+    purpose: EmailCodePurpose,
+    email: string,
+    at: Date,
+  ): Promise<EmailCodeRow | undefined>;
+  /** Use a code up; `false` when another request used it first. */
+  deleteEmailCode(id: string): Promise<boolean>;
+  /** Delete the codes expired at `at`; returns how many were. */
+  deleteExpiredEmailCodes(at: Date): Promise<number>;
   insertSession(input: InsertSessionInput): Promise<void>;
   findSessionByHash(refreshTokenHash: string): Promise<SessionRow | undefined>;
   revokeSessionByHash(refreshTokenHash: string, at: Date): Promise<void>;
@@ -134,6 +165,61 @@ export function createAuthRepository(db: Database): AuthRepository {
         .where(eq(users.id, userId))
         .returning();
       return row!;
+    },
+
+    async insertPasswordAccount(input) {
+      const [row] = await db.insert(users).values(input).returning();
+      return row!;
+    },
+
+    async saveEmailCode(input) {
+      await db
+        .insert(emailCodes)
+        .values(input)
+        .onConflictDoUpdate({
+          target: [emailCodes.purpose, emailCodes.email],
+          set: {
+            userId: input.userId ?? null,
+            codeHash: input.codeHash,
+            attemptsLeft: input.attemptsLeft,
+            name: input.name ?? null,
+            passwordHash: input.passwordHash ?? null,
+            expiresAt: input.expiresAt,
+            createdAt: new Date(),
+          },
+        });
+    },
+
+    async claimEmailCodeAttempt(purpose, email, at) {
+      const [row] = await db
+        .update(emailCodes)
+        .set({ attemptsLeft: sql`${emailCodes.attemptsLeft} - 1` })
+        .where(
+          and(
+            eq(emailCodes.purpose, purpose),
+            eq(emailCodes.email, email),
+            gt(emailCodes.attemptsLeft, 0),
+            gt(emailCodes.expiresAt, at),
+          ),
+        )
+        .returning();
+      return row;
+    },
+
+    async deleteEmailCode(id) {
+      const deleted = await db
+        .delete(emailCodes)
+        .where(eq(emailCodes.id, id))
+        .returning({ id: emailCodes.id });
+      return deleted.length > 0;
+    },
+
+    async deleteExpiredEmailCodes(at) {
+      const deleted = await db
+        .delete(emailCodes)
+        .where(lte(emailCodes.expiresAt, at))
+        .returning({ id: emailCodes.id });
+      return deleted.length;
     },
 
     async insertSession(input) {

@@ -98,6 +98,48 @@ export const sessions = pgTable(
   (table) => [index('sessions_user_id_idx').on(table.userId)],
 );
 
+/** What an e-mailed code proves the address for (`docs/specs/password-sign-in.md`). */
+export type EmailCodePurpose = 'signup' | 'password_reset';
+
+/**
+ * A 6-digit code e-mailed to prove control of an address, waiting to be
+ * entered. One per address and purpose: asking again replaces it. Only an
+ * HMAC of the code is stored (`features/auth/codes.ts`), so a database leak
+ * does not reveal live codes.
+ *
+ * A sign-up carries what the account will be created with (`name`,
+ * `password_hash`, already hashed). `user_id` is the account the address had
+ * when the code was asked for, if any: deleting that account deletes its codes.
+ */
+export const emailCodes = pgTable(
+  'email_codes',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    purpose: text('purpose').$type<EmailCodePurpose>().notNull(),
+    /** Lowercased, like every address an account is looked up by. */
+    email: text('email').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    attemptsLeft: integer('attempts_left').notNull(),
+    name: text('name'),
+    passwordHash: text('password_hash'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique('email_codes_purpose_email_unique').on(table.purpose, table.email),
+    index('email_codes_user_id_idx').on(table.userId),
+    check('email_codes_purpose_valid', sql`${table.purpose} in ('signup', 'password_reset')`),
+    check('email_codes_attempts_non_negative', sql`${table.attemptsLeft} >= 0`),
+    check(
+      'email_codes_signup_shape',
+      sql`(${table.purpose} = 'signup') = (${table.name} is not null and ${table.passwordHash} is not null)`,
+    ),
+  ],
+);
+
 /**
  * A symmetric friendship, stored once per pair. The two columns always hold the
  * pair in a canonical order (`user_a_id` < `user_b_id`), so the unique
@@ -386,6 +428,8 @@ export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
+export type EmailCodeRow = typeof emailCodes.$inferSelect;
+export type NewEmailCodeRow = typeof emailCodes.$inferInsert;
 export type FriendshipRow = typeof friendships.$inferSelect;
 export type NewFriendshipRow = typeof friendships.$inferInsert;
 export type GroupRow = typeof groups.$inferSelect;

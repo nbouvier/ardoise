@@ -38,6 +38,21 @@ export const passwordSignInRequestSchema = z.object({
 });
 export type PasswordSignInRequest = z.infer<typeof passwordSignInRequestSchema>;
 
+/** `POST /auth/signup` request. */
+export const signupRequestSchema = z.object({
+  name: accountNameSchema,
+  email: emailAddressSchema,
+  password: passwordSchema,
+});
+export type SignupRequest = z.infer<typeof signupRequestSchema>;
+
+/** `POST /auth/signup/verify` request. */
+export const signupVerifyRequestSchema = z.object({
+  email: emailAddressSchema,
+  code: emailCodeSchema,
+});
+export type SignupVerifyRequest = z.infer<typeof signupVerifyRequestSchema>;
+
 /** `POST /auth/google` request: a Google-issued ID token to verify. */
 export const googleAuthRequestSchema = z.object({
   idToken: z.string().min(1),

@@ -43,6 +43,12 @@ external service), migrated **once per test file**:
 - `createTestDatabase()` / `resetDatabase()` (`src/test/database.ts`) — the handle-level
   building blocks.
 - `signInAs(app, idToken)` (`src/test/auth.ts`) — a signed-in user and their headers.
+- `createPasswordAccount(app, { email, password })` (`src/test/auth.ts`) — a password
+  account put straight into the database. Test apps hash passwords with a cheap scrypt
+  cost (`TEST_SCRYPT_COST`): the real one costs a tenth of a second each.
+- `memoryMailer()` (`src/test/mail.ts`) — an e-mail transport that keeps the messages;
+  pass it as `auth: { mailer }` and read codes with `lastCode(address)`. Pass
+  `auth: { now }` to move the clock of codes and per-address limits.
 
 Close it in `afterAll` (`app.close()` / `handle.close()`). External boundaries such as
 Google token verification are mocked, never contacted.
