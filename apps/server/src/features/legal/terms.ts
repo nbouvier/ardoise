@@ -1,7 +1,7 @@
 /**
  * The terms of use — *conditions générales d'utilisation*
  * (`docs/specs/legal-pages.md`): the rules of use, and what Ardoise does not
- * promise. Accepted by continuing with Google at sign-in.
+ * promise. Accepted by creating an account or signing in.
  */
 
 import { escapeHtml, legalFooter, page } from '../../http/html.js';
@@ -10,7 +10,7 @@ import type { Language } from '../../http/language.js';
 import type { LegalIdentity } from './identity.js';
 
 /** Change it with the text below. */
-export const TERMS_UPDATED_ON = '2026-10-05';
+export const TERMS_UPDATED_ON = '2026-10-07';
 
 export function renderTerms(identity: LegalIdentity, lang: Language): string {
   const name = escapeHtml(identity.publisherName);
@@ -20,8 +20,8 @@ export function renderTerms(identity: LegalIdentity, lang: Language): string {
       ? `<div class="prose">
 <h1>Conditions d’utilisation</h1>
 <p>Ces conditions encadrent l’utilisation d’Ardoise, éditée par ${name} (voir les
-<a href="/legal?lang=fr">mentions légales</a>). En vous connectant avec Google
-(«&nbsp;Continue with Google&nbsp;»), vous les acceptez.</p>
+<a href="/legal?lang=fr">mentions légales</a>). En créant un compte ou en vous connectant,
+avec une adresse e-mail ou avec Google, vous les acceptez.</p>
 <h2>Le service</h2>
 <p>Ardoise permet de suivre des dépenses partagées&nbsp;: qui a payé quoi, qui doit combien
 à qui, et comment rembourser. Ardoise <strong>ne détient ni ne transfère d’argent</strong>&nbsp;:
@@ -30,7 +30,8 @@ l’application. Les soldes et les plans de remboursement sont calculés uniquem
 de ce que les membres saisissent&nbsp;; Ardoise ne garantit pas qu’ils correspondent à la
 réalité.</p>
 <h2>Accès</h2>
-<p>Ardoise est gratuite. Il faut avoir au moins 15 ans et un compte Google.</p>
+<p>Ardoise est gratuite. Il faut avoir au moins 15 ans, et une adresse e-mail ou un compte
+Google.</p>
 <h2>Vos engagements</h2>
 <ul>
 <li>Saisir des informations exactes et licites.</li>
@@ -39,6 +40,8 @@ titres et commentaires.</li>
 <li>N’ajouter une personne par son nom que si elle prend vraiment part aux dépenses du
 groupe, en sachant que les autres membres le verront.</li>
 <li>Ne pas chercher à perturber le service ni à accéder aux données d’autrui.</li>
+<li>Garder votre mot de passe pour vous, et ne créer un compte qu’avec une adresse e-mail
+qui est la vôtre.</li>
 </ul>
 <p>Vous êtes responsable de ce que vous saisissez.</p>
 <h2>Ce qui est partagé</h2>
@@ -70,15 +73,16 @@ loi, y compris, pour un consommateur, ceux de son domicile.</p>
 <h1>Terms of use</h1>
 <p>This English version is a translation; the French version prevails.</p>
 <p>These terms govern the use of Ardoise, published by ${name} (see the
-<a href="/legal?lang=en">legal notice</a>). By signing in with Google (“Continue with
-Google”), you accept them.</p>
+<a href="/legal?lang=en">legal notice</a>). By creating an account or signing in, with an
+e-mail address or with Google, you accept them.</p>
 <h2>The service</h2>
 <p>Ardoise tracks shared expenses: who paid for what, who owes how much to whom, and how to
 pay it back. Ardoise <strong>holds and moves no money</strong>: people pay each other back
 directly, outside the app. Balances and reimbursement plans are computed only from what
 members enter; Ardoise does not guarantee that they match reality.</p>
 <h2>Access</h2>
-<p>Ardoise is free. You must be 15 or older and have a Google account.</p>
+<p>Ardoise is free. You must be 15 or older, and have an e-mail address or a Google
+account.</p>
 <h2>Your commitments</h2>
 <ul>
 <li>Enter accurate, lawful information.</li>
@@ -87,6 +91,8 @@ comments.</li>
 <li>Add a person by name only when they really take part in the group’s expenses, knowing
 the other members will see it.</li>
 <li>Do not try to disrupt the service or to reach other people’s data.</li>
+<li>Keep your password to yourself, and only create an account with an e-mail address that
+is yours.</li>
 </ul>
 <p>You are responsible for what you enter.</p>
 <h2>What is shared</h2>

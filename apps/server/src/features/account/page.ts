@@ -9,7 +9,7 @@ import { escapeHtml, legalFooter, page } from '../../http/html.js';
 import type { Language } from '../../http/language.js';
 
 /** Change it with the text below. */
-export const DELETION_PAGE_UPDATED_ON = '2026-10-05';
+export const DELETION_PAGE_UPDATED_ON = '2026-10-07';
 
 export interface DeletionPageInput {
   /** Where deletion requests made without the app go. Unset, that paragraph is left out. */
@@ -26,9 +26,8 @@ export function renderDeletionPage({ contact, lang }: DeletionPageInput): string
   if (lang === 'fr') {
     const byEmail = address
       ? `<h2>Sans l’application</h2>
-<p>Écrivez à <a href="mailto:${address}">${address}</a> depuis l’adresse e-mail du compte
-Google avec lequel vous vous connectez à Ardoise, en demandant la suppression de votre
-compte. Il est supprimé exactement comme depuis l’application, dans un délai d’un mois, et
+<p>Écrivez à <a href="mailto:${address}">${address}</a> depuis l’adresse e-mail de votre
+compte Ardoise, en demandant la suppression de votre compte. Il est supprimé exactement comme depuis l’application, dans un délai d’un mois, et
 vous recevez une réponse une fois que c’est fait.</p>`
       : '';
     return page(
@@ -41,7 +40,8 @@ que vous perdrez avant de supprimer quoi que ce soit, et demande deux confirmati
 ${byEmail}
 <h2>Ce qui est supprimé</h2>
 <ul>
-<li>Votre profil&nbsp;: nom, adresse e-mail et photo.</li>
+<li>Votre profil&nbsp;: nom, adresse e-mail, photo, et l’empreinte de votre mot de passe si
+vous en aviez un.</li>
 <li>Votre connexion et toutes vos sessions, sur tous vos appareils.</li>
 <li>Votre liste d’amis, et chaque groupe que vous partagez en tête-à-tête avec un ami, avec
 ses sous-groupes et tout ce qu’ils contiennent.</li>
@@ -69,9 +69,8 @@ compte supprimé.</li>
 
   const byEmail = address
     ? `<h2>Without the app</h2>
-<p>Write to <a href="mailto:${address}">${address}</a> from the
-e-mail address of the Google account you sign in to Ardoise with, asking for your account to
-be deleted. It is deleted exactly as from the app, within a month, and you get a reply once it
+<p>Write to <a href="mailto:${address}">${address}</a> from your Ardoise account’s e-mail
+address, asking for your account to be deleted. It is deleted exactly as from the app, within a month, and you get a reply once it
 is done.</p>`
     : '';
   return page(
@@ -84,7 +83,8 @@ will lose before anything is deleted, and asks you to confirm twice.</p>
 ${byEmail}
 <h2>What is deleted</h2>
 <ul>
-<li>Your profile: name, e-mail address and picture.</li>
+<li>Your profile: name, e-mail address, picture, and your password’s fingerprint if you had
+one.</li>
 <li>Your sign-in and every session, on every device.</li>
 <li>Your friend list, and every group you share one-to-one with a friend, with its sub-groups
 and everything in them.</li>

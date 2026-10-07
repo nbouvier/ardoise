@@ -9,7 +9,7 @@ import type { Language } from '../../http/language.js';
 import { mailto, type LegalIdentity } from './identity.js';
 
 /** Change it with the text below. */
-export const PRIVACY_UPDATED_ON = '2026-10-05';
+export const PRIVACY_UPDATED_ON = '2026-10-07';
 
 export interface PrivacyFacts {
   /** How long an unused session lasts (`AUTH_REFRESH_TTL_SECONDS`), in days. */
@@ -44,8 +44,16 @@ ou demande&nbsp;: ${contact}.</p>
 
 <h2>Les données traitées</h2>
 <ul>
-<li><strong>Votre compte Google</strong>, à chaque connexion&nbsp;: nom, adresse e-mail, photo
+<li><strong>Votre compte</strong>&nbsp;: votre nom et votre adresse e-mail.
+<ul>
+<li>Si vous vous connectez avec Google, à chaque connexion&nbsp;: nom, adresse e-mail, photo
 de profil et identifiant Google. Ardoise n’a jamais accès à votre mot de passe Google.</li>
+<li>Si vous choisissez un mot de passe Ardoise, seule une empreinte en est conservée,
+calculée pour qu’on ne puisse pas en retrouver le mot de passe&nbsp;; jamais le mot de passe
+lui-même.</li>
+<li>Les codes à 6 chiffres envoyés par e-mail pour confirmer votre adresse ou définir un
+nouveau mot de passe.</li>
+</ul></li>
 <li><strong>Ce que vous saisissez</strong>&nbsp;: vos groupes et leurs noms&nbsp;; les transactions
 (montant, date, titre, commentaire, catégorie, qui a payé, qui est concerné et pour quelle
 part)&nbsp;; vos amis, vos invitations et vos favoris.</li>
@@ -86,7 +94,9 @@ les <a href="/legal?lang=fr">mentions légales</a>)&nbsp;;</li>
 envoi et illisibles par lui&nbsp;;</li>
 <li>Sentry (Functional Software, Inc.), pour les rapports d’erreur, stockés dans l’Union
 européenne&nbsp;;</li>
-<li>Google, pour la connexion&nbsp;; c’est aussi Google qui fournit les photos de
+<li>Brevo (Sendinblue SAS), en France, qui envoie les e-mails contenant les codes&nbsp;: il
+reçoit votre adresse e-mail et le contenu du message&nbsp;;</li>
+<li>Google, pour la connexion avec Google&nbsp;; c’est aussi Google qui fournit les photos de
 profil&nbsp;;</li>
 <li>Expo (650 Industries, Inc.), qui distribue les mises à jour de l’application.</li>
 </ul></li>
@@ -111,6 +121,7 @@ une restauration supprime à nouveau les comptes supprimés entre-temps.</li>
 <li>Les rapports d’erreur&nbsp;: 30 jours.</li>
 <li>Une session&nbsp;: jusqu’à la déconnexion, et au plus ${sessionDays} jours sans
 utilisation.</li>
+<li>Un code envoyé par e-mail&nbsp;: 15 minutes, ou jusqu’à ce qu’il serve.</li>
 <li>Les journaux du serveur&nbsp;: jusqu’à leur rotation automatique. Ils ne contiennent que
 des identifiants internes.</li>
 </ul>
@@ -118,12 +129,13 @@ des identifiants internes.</li>
 <h2>Vos droits</h2>
 <p>Vous pouvez accéder à vos données, les rectifier, les effacer, en limiter le traitement,
 vous y opposer et les recevoir dans un format réutilisable (portabilité). Écrivez à
-${contact} depuis l’adresse de votre compte Google&nbsp;; la réponse vient dans un délai d’un
+${contact} depuis l’adresse de votre compte&nbsp;; la réponse vient dans un délai d’un
 mois.</p>
 <p>Vous pouvez aussi supprimer votre compte directement dans l’application
-(<strong>Account</strong>, puis <strong>Delete account</strong>). Votre nom et votre photo viennent
-de Google&nbsp;: modifiez-les dans votre compte Google, Ardoise les reprend à la connexion
-suivante.</p>
+(<strong>Account</strong>, puis <strong>Delete account</strong>). Si vous vous connectez avec
+Google, votre nom et votre photo viennent de Google&nbsp;: modifiez-les dans votre compte
+Google, Ardoise les reprend à la connexion suivante. Sinon, demandez la correction de votre
+nom à ${contact}.</p>
 <p>Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une
 réclamation à la CNIL (<a href="https://www.cnil.fr">cnil.fr</a>), ou à l’autorité de
 protection des données du pays où vous résidez.</p>
@@ -137,12 +149,17 @@ vous, ou demander à ${contact} que votre nom soit effacé.</p>
 <p>Ardoise est réservée aux personnes de 15 ans ou plus.</p>
 
 <h2>Sécurité</h2>
-<p>Les échanges avec le serveur sont chiffrés (HTTPS), les sauvegardes sont chiffrées, et
-seul l’éditeur a accès au serveur.</p>
+<p>Les échanges avec le serveur sont chiffrés (HTTPS), les sauvegardes sont chiffrées, les
+mots de passe ne sont conservés que sous forme d’empreinte, et seul l’éditeur a accès au
+serveur.</p>
 
 <h2>Sur votre appareil</h2>
 <p>L’application garde les identifiants de votre session dans le stockage sécurisé du
-système. Ni l’application ni ces pages n’utilisent de cookie.</p>
+système. Dans un navigateur, ils sont dans un cookie réservé à la connexion, que la page
+elle-même ne peut pas lire&nbsp;; indispensable au service, il ne demande pas votre
+consentement. Le navigateur garde aussi votre nom et votre adresse e-mail, pour rouvrir
+l’application sans attendre&nbsp;; la déconnexion les efface. Aucun autre cookie n’est
+utilisé, ni par l’application ni par ces pages.</p>
 
 <h2>Modifications</h2>
 <p>La date de dernière mise à jour figure en bas de cette page. Toute modification
@@ -162,8 +179,14 @@ or request: ${contact}.</p>
 
 <h2>The data processed</h2>
 <ul>
-<li><strong>Your Google account</strong>, at each sign-in: name, e-mail address, profile
-picture and Google identifier. Ardoise never has access to your Google password.</li>
+<li><strong>Your account</strong>: your name and e-mail address.
+<ul>
+<li>If you sign in with Google, at each sign-in: name, e-mail address, profile picture and
+Google identifier. Ardoise never has access to your Google password.</li>
+<li>If you choose an Ardoise password, only a fingerprint of it is kept, computed so that
+the password cannot be worked back from it; never the password itself.</li>
+<li>The 6-digit codes e-mailed to confirm your address or to set a new password.</li>
+</ul></li>
 <li><strong>What you enter</strong>: your groups and their names; transactions (amount, date,
 title, comment, category, who paid, who it concerns and for what share); your friends,
 invitations and favorites.</li>
@@ -201,7 +224,9 @@ the <a href="/legal?lang=en">legal notice</a>);</li>
 and unreadable by it;</li>
 <li>Sentry (Functional Software, Inc.), for error reports, stored in the European
 Union;</li>
-<li>Google, for sign-in; Google also serves profile pictures;</li>
+<li>Brevo (Sendinblue SAS), in France, which sends the e-mails carrying the codes: it
+receives your e-mail address and the message;</li>
+<li>Google, for signing in with Google; Google also serves profile pictures;</li>
 <li>Expo (650 Industries, Inc.), which delivers the app’s updates.</li>
 </ul></li>
 </ul>
@@ -222,17 +247,19 @@ part becomes “Others” (people outside the group), with no link to you.</li>
 deletes again the accounts deleted in the meantime.</li>
 <li>Error reports: 30 days.</li>
 <li>A session: until you sign out, and at most ${sessionDays} days without use.</li>
+<li>An e-mailed code: 15 minutes, or until it is used.</li>
 <li>Server logs: until they are automatically rotated. They hold only internal
 identifiers.</li>
 </ul>
 
 <h2>Your rights</h2>
 <p>You can access your data, correct it, erase it, restrict or object to its processing,
-and receive it in a reusable format (portability). Write to ${contact} from your Google
+and receive it in a reusable format (portability). Write to ${contact} from your
 account’s address; you will get an answer within one month.</p>
 <p>You can also delete your account directly in the app (<strong>Account</strong>, then
-<strong>Delete account</strong>). Your name and picture come from Google: change them in your
-Google account, and Ardoise picks them up at your next sign-in.</p>
+<strong>Delete account</strong>). If you sign in with Google, your name and picture come from
+Google: change them in your Google account, and Ardoise picks them up at your next sign-in.
+Otherwise, ask ${contact} to correct your name.</p>
 <p>If you believe your rights are not respected, you can complain to the CNIL, the French
 data protection authority (<a href="https://www.cnil.fr">cnil.fr</a>), or to the authority of
 the country where you live.</p>
@@ -246,12 +273,15 @@ name.</p>
 <p>Ardoise is for people aged 15 or over.</p>
 
 <h2>Security</h2>
-<p>Exchanges with the server are encrypted (HTTPS), backups are encrypted, and only the
-publisher has access to the server.</p>
+<p>Exchanges with the server are encrypted (HTTPS), backups are encrypted, passwords are
+only kept as fingerprints, and only the publisher has access to the server.</p>
 
 <h2>On your device</h2>
-<p>The app keeps your session credentials in the system’s secure storage. Neither the app
-nor these pages use cookies.</p>
+<p>The app keeps your session credentials in the system’s secure storage. In a browser,
+they are in a cookie used only for signing in, which the page itself cannot read; being
+strictly necessary to the service, it needs no consent. The browser also keeps your name and
+e-mail address, to reopen the app without waiting; signing out erases them. No other cookie
+is used, by the app or by these pages.</p>
 
 <h2>Changes</h2>
 <p>The date of the last update is at the bottom of this page. Any material change will be

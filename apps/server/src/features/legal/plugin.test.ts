@@ -94,6 +94,7 @@ describe('legal pages', () => {
       'Pourquoi, et sur quelle base',
       'Qui voit vos données',
       'Sentry',
+      'Brevo',
       'Expo',
       'Google',
       'Transferts hors de l’Union européenne',
